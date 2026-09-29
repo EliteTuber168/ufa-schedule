@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFA Draft</title>
+<meta name="description" content="UFA server-wide draft — live pick order, clock, rosters and available players.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}
+/* Live draft board: on-the-clock hero, then tabs for board, rosters, players, pick feed. Dark only, matches the schedule site. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;
+  --num:"Bebas Neue",Impact,"Arial Narrow",sans-serif;--body:"Rajdhani",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;font-weight:500;line-height:1.4}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 35% at 20% -5%,rgba(232,66,74,.22),transparent 70%),radial-gradient(ellipse 60% 35% at 80% -5%,rgba(61,123,255,.22),transparent 70%)}
+a{color:inherit}
+.wrap{position:relative;max-width:1100px;margin:0 auto;padding:24px 16px 64px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
+.eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(48px,9vw,84px);line-height:.95;letter-spacing:.04em}
+h1 span{color:var(--red)} h1 b{color:var(--blue);font-weight:400}
+h2{margin:0;font-family:var(--num);font-weight:400;font-size:30px;letter-spacing:.06em;line-height:1}
+h3{margin:0;font-size:13px;letter-spacing:.2em;color:var(--gold);font-weight:700;text-transform:uppercase}
+.sub{color:var(--mute);font-size:15px}
+nav{position:sticky;top:0;z-index:5;margin-inline:-16px;padding:10px 16px;background:rgba(7,11,22,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;align-items:center}
+nav a{flex:none;text-decoration:none;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:7px 14px}
+nav a[aria-current=page]{color:#fff;background:var(--red);border-color:var(--red)}
+nav .upd{margin-left:auto;flex:none;font-size:12px;color:var(--mute);display:flex;gap:8px;align-items:center}
+nav button{font:inherit;font-size:12px;font-weight:700;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.clock{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;border-color:var(--red);background:linear-gradient(135deg,rgba(232,66,74,.14),rgba(61,123,255,.1))}
+@media (max-width:640px){.clock{grid-template-columns:auto 1fr}.clock .timer{grid-column:1/-1;text-align:left}}
+.clock .big{width:84px;height:84px;border-radius:16px;font-size:34px}
+.clock .who .lbl{font-size:12px;letter-spacing:.24em;color:var(--red);font-weight:700}
+.clock .who .tn{font-family:var(--num);font-size:40px;line-height:1;letter-spacing:.03em}
+.clock .who small{color:var(--mute);font-size:15px}
+.timer{text-align:right}
+.timer b{display:block;font-family:var(--num);font-size:48px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums}
+.timer span{font-size:12px;letter-spacing:.16em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.timer.low b{color:var(--red)}
+.next{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:14px;color:var(--mute)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 4px;color:var(--fg);font-weight:700;font-size:13px}
+.badge{flex:none;width:40px;height:40px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--num);font-size:18px;letter-spacing:.04em;color:#fff;border:2px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.6);padding-top:2px}
+.badge.s{width:28px;height:24px;font-size:13px;border-radius:6px;border-width:1px}
+.status{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.16em;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--mute);text-transform:uppercase}
+.status.live{border-color:var(--good);color:var(--good)} .status.done{border-color:var(--gold);color:var(--gold)}
+.round{display:flex;flex-direction:column;gap:8px}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.pk{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;min-width:0}
+.pk .n{font-family:var(--num);font-size:18px;color:var(--mute);min-width:26px;text-align:center}
+.pk .p{min-width:0;line-height:1.15;text-align:left;flex:1}
+.pk .p b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk .p small{color:var(--mute);font-size:12px;font-weight:600}
+.pk.now{border-color:var(--red);box-shadow:0 0 0 1px var(--red) inset;background:rgba(232,66,74,.1)}
+.pk.empty .p b{color:var(--mute);font-weight:600}
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.tc{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.tc .hd{display:flex;align-items:center;gap:10px}
+.tc .hd b{display:block;line-height:1.1}
+.tc .hd small{color:var(--mute);font-size:13px}
+.tc ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:2px;font-size:15px}
+.tc ol li span{color:var(--mute);font-size:12px;font-weight:700;margin-left:4px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input,select{font:inherit;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px}
+.pl{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.pl b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pos{margin-left:auto;flex:none;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.pl.gone{opacity:.45}
+.feed{display:flex;flex-direction:column;gap:6px}
+.feed div{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.feed .ov{font-family:var(--num);font-size:20px;color:var(--mute);min-width:36px}
+.note{font-size:14px;color:var(--mute)}
+.empty{padding:22px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
+footer{text-align:center;color:var(--mute);font-size:13px;letter-spacing:.1em}
+footer a{color:var(--mute)}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SERVER-WIDE DRAFT</div>
+    <h1><span>UFA</span> <b>DRAFT</b></h1>
+    <div class="sub" id="sub">Loading…</div>
+  </header>
+  <nav aria-label="Sections"><a href="#/">Board</a><a href="#/teams">Teams</a><a href="#/players">Players</a><a href="#/picks">Pick Feed</a><span class="upd"><span id="upd"></span><button id="refresh">Refresh</button></span></nav>
+  <main id="view" style="display:flex;flex-direction:column;gap:18px"></main>
+  <footer><a href="./">League schedule</a> · <a href="draftroom.html">Draft room</a></footer>
+</div>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const h = location.hostname, parts = location.pathname.split("/").filter(Boolean);
+  const OWNER = h.endsWith(".github.io") ? h.split(".")[0] : "EliteTuber168";
+  const REPO = h.endsWith(".github.io") ? (parts[0] || h) : "ufa-schedule";
+  let D = null, S = null, TM = {}, q = "", pf = "";
+  const team = a => TM[a] || {name:a, abbr:a, color:"#445"};
+  const badge = (a, cls="badge") => `<span class="${cls}" style="background:${esc(team(a).color)}">${esc(a)}</span>`;
+  const order = () => D.teams.filter(t=>t.in).map(t=>t.abbr);
+  const foOf = a => (D.teams.find(t=>t.abbr===a) || {}).fo || "";
+  const total = () => order().length * D.rounds;
+  function slot(n){ const O = order(), T = O.length, r = Math.floor(n/T), i = n%T; return {round:r+1, pick:i+1, overall:n+1, team: O[D.snake && r%2 ? T-1-i : i]}; }
+  const P = id => D.pool.find(p=>p.id===id) || {name:"?", pos:[]};
+  const posTxt = p => (p.pos||[]).join("/");
+
+  async function load(){
+    try{
+      const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/draft.json?t=${Date.now()}`, {cache:"no-store", headers:{Accept:"application/vnd.github.raw"}});
+      if (!r.ok) throw 0; D = await r.json();
+    }catch{ D = await (await fetch("draft.json?t=" + Date.now(), {cache:"no-store"})).json(); }
+    if (!S){ S = await (await fetch("schedule.json", {cache:"no-store"})).json(); TM = Object.fromEntries(S.teams.map(t=>[t.abbr,t])); }
+    $("#upd").textContent = "Updated " + new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+    render();
+  }
+
+  function clockCard(){
+    const n = D.picks.length;
+    if (D.status === "setup") return `<section class="panel"><h2>Draft hasn't started yet</h2><div class="note">${order().length} teams · ${D.rounds} rounds · ${D.pool.length} players in the pool so far.</div></section>`;
+    if (D.status === "done" || n >= total()) return `<section class="panel" style="border-color:var(--gold)"><h2>The draft is complete</h2><div class="note">${n} picks made. Check the Teams tab for every roster.</div></section>`;
+    const s = slot(n), nx = [1,2,3,4,5].map(k=>n+k<total() ? slot(n+k) : null).filter(Boolean);
+    return `<section class="panel clock"><span class="badge big" style="background:${esc(team(s.team).color)}">${esc(s.team)}</span>
+      <div class="who"><div class="lbl">ON THE CLOCK${D.status==="paused"?" · PAUSED":""}</div><div class="tn">${esc(team(s.team).name)}</div><small>${esc(foOf(s.team) ? "FO " + foOf(s.team) : "")} · Round ${s.round}, pick ${s.pick} · #${s.overall} overall</small></div>
+      <div class="timer" id="timer"></div>
+      <div class="next" style="grid-column:1/-1">Up next: ${nx.map(x=>`<span class="chip">${badge(x.team,"badge s")}${esc(team(x.team).name)}</span>`).join("")}</div></section>`;
+  }
+  function tick(){
+    const el = $("#timer"); if (!el || !D || D.status !== "live" || !D.pickMinutes || !D.clockStart) { if (el) el.innerHTML = ""; return; }
+    const left = Math.round((D.clockStart + D.pickMinutes*60000 - Date.now())/1000);
+    const a = Math.abs(left), txt = a >= 3600 ? `${Math.floor(a/3600)}h ${String(Math.floor(a%3600/60)).padStart(2,"0")}m` : `${Math.floor(a/60)}:${String(a%60).padStart(2,"0")}`;
+    el.className = "timer" + (left < 60 ? " low" : "");
+    el.innerHTML = left >= 0 ? `<b>${txt}</b><span>Time left</span>` : `<b>-${txt}</b><span>Over time</span>`;
+  }
+  setInterval(tick, 1000);
+
+  function vBoard(){
+    const T = order().length; if (!T) return `<div class="empty">No teams in the draft yet.</div>`;
+    const n = D.picks.length; let out = "";
+    for (let r=0; r<D.rounds; r++){
+      const cards = [];
+      for (let i=0;i<T;i++){ const k = r*T+i, s = slot(k), pk = D.picks[k];
+        cards.push(`<div class="pk ${k===n && D.status!=="setup"?"now":""} ${pk?"":"empty"}"><span class="n">${s.pick}</span>${badge(s.team,"badge s")}<div class="p"><b>${pk ? esc(P(pk.player).name) : k===n && D.status==="live" ? "On the clock" : "—"}</b><small>${pk ? esc(posTxt(P(pk.player))) + " · " : ""}${esc(team(s.team).name)}</small></div></div>`); }
+      out += `<section class="panel round"><h2>Round ${r+1}${D.snake && r%2 ? ` <span class="note" style="font-family:var(--body)">(snake — order reversed)</span>` : ""}</h2><div class="picks">${cards.join("")}</div></section>`;
+    }
+    return out;
+  }
+  function vTeams(){
+    return `<section class="panel"><h2>Teams</h2><div class="teams">${order().map(a=>{ const mine = D.picks.map((p,k)=>({...p, s:slot(k)})).filter(p=>p.s.team===a);
+      return `<div class="tc"><div class="hd">${badge(a)}<div><b>${esc(team(a).name)}</b><small>${esc(foOf(a) ? "FO " + foOf(a) : "No FO yet")}</small></div></div>
+        ${mine.length ? `<ol>${mine.map(p=>`<li>${esc(P(p.player).name)}<span>${esc(posTxt(P(p.player)))} · R${p.s.round}</span></li>`).join("")}</ol>` : `<div class="note">No picks yet.</div>`}</div>`; }).join("")}</div></section>`;
+  }
+  function vPlayers(){
+    const taken = new Map(D.picks.map((p,k)=>[p.player, slot(k).team]));
+    const list = D.pool.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!pf || (p.pos||[]).includes(pf))).sort((x,y)=>(taken.has(x.id)-taken.has(y.id)) || x.name.localeCompare(y.name));
+    const avail = D.pool.filter(p=>!taken.has(p.id)).length;
+    return `<section class="panel"><div class="row" style="justify-content:space-between"><h2>Players</h2><span class="note">${avail} available of ${D.pool.length}</span></div>
+      <div class="row"><input id="q" type="search" placeholder="Search players" value="${esc(q)}" aria-label="Search players" style="flex:1 1 200px"><select id="pf" aria-label="Position"><option value="">All positions</option>${D.positions.map(p=>`<option ${p===pf?"selected":""}>${esc(p)}</option>`).join("")}</select></div>
+      <div class="plist">${list.map(p=>{ const t = taken.get(p.id); return `<div class="pl ${t?"gone":""}">${t ? badge(t,"badge s") : ""}<b>${esc(p.name)}</b><span class="pos">${esc(posTxt(p))}</span></div>`; }).join("") || `<div class="empty">No players match.</div>`}</div></section>`;
+  }
+  function vFeed(){
+    return `<section class="panel"><h2>Pick feed</h2><div class="feed">${D.picks.map((p,k)=>({p, s:slot(k)})).reverse().map(({p,s})=>`<div><span class="ov">#${s.overall}</span>${badge(s.team,"badge s")}<span><b>${esc(team(s.team).name)}</b> select <b>${esc(P(p.player).name)}</b> <span class="note">${esc(posTxt(P(p.player)))} · Round ${s.round}, pick ${s.pick}</span></span></div>`).join("") || `<div class="note">No picks yet.</div>`}</div></section>`;
+  }
+  function render(){
+    const key = location.hash.replace(/^#\/?/,"");
+    document.querySelectorAll("nav a").forEach(a => { const k = a.getAttribute("href").replace(/^#\/?/,""); if (k === key) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+    if (!D) return;
+    const st = D.status === "live" ? "live" : D.status === "done" ? "done" : "";
+    $("#sub").innerHTML = `<span class="status ${st}">${esc({setup:"Not started",live:"Live",paused:"Paused",done:"Complete"}[D.status] || D.status)}</span> &nbsp;${D.picks.length} / ${total()} picks · ${order().length} teams · ${D.rounds} rounds${D.snake?" · snake":""}`;
+    const ann = (D.announcement||"").trim();
+    const body = key === "teams" ? vTeams() : key === "players" ? vPlayers() : key === "picks" ? vFeed() : vBoard();
+    const focus = document.activeElement?.id;
+    $("#view").innerHTML = (ann ? `<section class="panel" style="border-color:var(--gold);background:rgba(255,198,47,.08)"><div style="white-space:pre-line">${esc(ann)}</div></section>` : "") + clockCard() + body;
+    tick();
+    const qi = $("#q"); if (qi){ qi.oninput = e => { q = e.target.value.toLowerCase(); render(); }; if (focus === "q"){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } }
+    const pi = $("#pf"); if (pi) pi.onchange = e => { pf = e.target.value; render(); };
+  }
+  window.addEventListener("hashchange", render);
+  $("#refresh").onclick = load;
+  load().catch(()=>{ $("#sub").textContent = "Couldn't load the draft. Refresh to try again."; });
+  setInterval(() => { if (!document.hidden) load().catch(()=>{}); }, 60000);
+})();
+</script>
+</body></html>

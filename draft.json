@@ -1,0 +1,184 @@
+{
+ "status": "setup",
+ "rounds": 8,
+ "snake": true,
+ "pickMinutes": 0,
+ "clockStart": null,
+ "teams": [
+  {
+   "abbr": "ARI",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "ATL",
+   "fo": "彼女は嫌っている CLAMPS",
+   "in": true
+  },
+  {
+   "abbr": "BAL",
+   "fo": "350aj",
+   "in": true
+  },
+  {
+   "abbr": "BUF",
+   "fo": "KA1♠️",
+   "in": true
+  },
+  {
+   "abbr": "CAR",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "CHI",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "CIN",
+   "fo": "Georgerussel",
+   "in": true
+  },
+  {
+   "abbr": "CLE",
+   "fo": "Jace",
+   "in": true
+  },
+  {
+   "abbr": "DAL",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "DEN",
+   "fo": "SensicJ",
+   "in": true
+  },
+  {
+   "abbr": "DET",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "GB",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "HOU",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "IND",
+   "fo": "Rivon",
+   "in": true
+  },
+  {
+   "abbr": "JAX",
+   "fo": "3B_Knzxo",
+   "in": true
+  },
+  {
+   "abbr": "KC",
+   "fo": "𝑩𝑨𝑳𝑬𝑵𝑪𝑰𝑨𝑮𝑨",
+   "in": true
+  },
+  {
+   "abbr": "LV",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "LAC",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "LAR",
+   "fo": "ccrick1044",
+   "in": true
+  },
+  {
+   "abbr": "MIA",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "MIN",
+   "fo": "CrazyAndrew",
+   "in": true
+  },
+  {
+   "abbr": "NE",
+   "fo": "wtf u want",
+   "in": true
+  },
+  {
+   "abbr": "NO",
+   "fo": "MYMY022509",
+   "in": true
+  },
+  {
+   "abbr": "NYG",
+   "fo": "Kjxtocold",
+   "in": true
+  },
+  {
+   "abbr": "NYJ",
+   "fo": "Skib",
+   "in": true
+  },
+  {
+   "abbr": "PHI",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "PIT",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "SF",
+   "fo": "|DJ",
+   "in": true
+  },
+  {
+   "abbr": "SEA",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "TB",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "TEN",
+   "fo": "",
+   "in": true
+  },
+  {
+   "abbr": "WAS",
+   "fo": "Just_benn10",
+   "in": true
+  }
+ ],
+ "positions": [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "OL",
+  "DE",
+  "LB",
+  "CB",
+  "S",
+  "K/P"
+ ],
+ "pool": [],
+ "picks": [],
+ "announcement": ""
+}
