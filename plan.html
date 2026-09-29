@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan a Week</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}
+/* Step-by-step week planner: one question card at a time, progress rail on top, review + publish at the end. Dark only. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;--warn:#ffa24a;
+  --num:"Bebas Neue",Impact,sans-serif;--body:"Rajdhani",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;font-weight:500;line-height:1.4}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 35% at 20% -5%,rgba(232,66,74,.18),transparent 70%),radial-gradient(ellipse 60% 35% at 80% -5%,rgba(61,123,255,.18),transparent 70%)}
+a{color:var(--gold)}
+.wrap{position:relative;max-width:760px;margin:0 auto;padding:24px 16px 64px;display:flex;flex-direction:column;gap:18px}
+header{text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center}
+.eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(44px,8vw,68px);line-height:.95;letter-spacing:.04em}
+h1 span{color:var(--red)} h1 b{color:var(--blue);font-weight:400}
+.links{display:flex;gap:16px;font-size:14px;font-weight:700}
+.rail{display:flex;gap:4px}
+.rail i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.rail i.on{background:var(--red)} .rail i.done{background:var(--blue)}
+.step{font-size:13px;letter-spacing:.2em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.q{margin:0;font-family:var(--num);font-weight:400;font-size:36px;letter-spacing:.04em;line-height:1.05}
+.help{font-size:15px;color:var(--mute);margin-top:-6px}
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.opt{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel2);cursor:pointer;font-weight:700;min-width:0}
+.opt small{display:block;font-weight:600;color:var(--mute);font-size:13px}
+.opt.on{border-color:var(--red);background:rgba(232,66,74,.12)}
+.opt input{accent-color:var(--red);width:18px;height:18px;flex:none}
+.big{display:flex;flex-direction:column;gap:8px}
+.big .opt{padding:14px 16px;font-size:18px}
+.badge{flex:none;display:inline-flex;width:36px;height:30px;border-radius:7px;align-items:center;justify-content:center;font-family:var(--num);font-size:16px;color:#fff;padding-top:2px}
+.nav{display:flex;justify-content:space-between;gap:10px}
+.btn{font:inherit;font-weight:700;letter-spacing:.08em;font-size:15px;border-radius:10px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#1a1300}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+select,input[type=date],input[type=text],textarea{font:inherit;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;font-weight:500}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) 26px minmax(0,1fr) auto;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px}
+.pair select{width:100%}
+.pair .vs{font-family:var(--num);color:var(--mute);text-align:center}
+.warn{grid-column:1/-1;font-size:13px;font-weight:700;color:var(--warn)}
+.note{font-size:14px;color:var(--mute)}
+.msg{font-size:14px;font-weight:700}.msg.ok{color:var(--good)}.msg.err{color:var(--red)}
+.game{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;flex-wrap:wrap}
+.game .nm{font-weight:700}
+.game .vs{font-family:var(--num);color:var(--mute)}
+.game .tag{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.14em;border-radius:999px;padding:2px 8px;background:var(--gold);color:#1a1300}
+.game .tag.lock{background:var(--blue);color:#fff}
+.game.w{border-color:var(--warn)}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.sum div{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px}
+.sum b{display:block;font-family:var(--num);font-size:28px;font-weight:400;line-height:1}
+.sum span{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.hide{display:none!important}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">LEAGUE SCHEDULER</div>
+    <h1><span>PLAN</span> <b>A WEEK</b></h1>
+    <div class="links"><a href="admin.html">← Admin</a><a href="./">Public schedule</a></div>
+  </header>
+  <div class="rail" id="rail"></div>
+  <div class="step" id="stepno"></div>
+  <section class="card" id="card"><div class="note">Loading…</div></section>
+  <div class="nav"><button class="btn" id="back">← Back</button><button class="btn red" id="next">Next →</button></div>
+</div>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const h = location.hostname, parts = location.pathname.split("/").filter(Boolean);
+  const OWNER = h.endsWith(".github.io") ? h.split(".")[0] : "EliteTuber168";
+  const REPO = h.endsWith(".github.io") ? (parts[0] || h) : "ufa-schedule";
+  const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/schedule.json`;
+  let TOKEN = ""; try{ TOKEN = localStorage.getItem("vk_token") || ""; }catch{}
+  const b64e = s => { const b = new TextEncoder().encode(s); let o = ""; for (let i=0;i<b.length;i+=0x8000) o += String.fromCharCode(...b.subarray(i,i+0x8000)); return btoa(o); };
+  const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c => c.charCodeAt(0)));
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = s => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return `${MON[m-1]} ${d}`; };
+  const iso = d => d.toLocaleDateString("en-CA");
+  const pk = (a,b) => [a,b].sort().join("|");
+  let D = null, sha = null, canSave = false;
+  const T = a => D.teams.find(t=>t.abbr===a) || {name:a, abbr:a, color:"#445"};
+  const badge = a => `<span class="badge" style="background:${esc(T(a).color)}">${esc(a)}</span>`;
+
+  // ---------- answers ----------
+  const S = {week:null, mode:"fill", teams:[], fixed:[], catchups:[], deadline:"", noRematch:"avoid", cuPlay:true, cuAuto:true, cuMax:1, autoCu:[], closePrev:true, games:null, bye:[]};
+  const priorGames = a => { const ti = isNew() ? D.weeks.length : targetIdx(); return D.weeks.slice(0, ti).reduce((s,w)=>s + w.games.filter(g=>g.a===a||g.b===a).length, 0); };
+  const targetIdx = () => D.weeks.findIndex(w => w.week === S.week);
+  const isNew = () => targetIdx() < 0;
+
+  // ---------- history ----------
+  function history(){
+    const meet = {}, last = {}, played = {}, bye = {}, ti = isNew() ? D.weeks.length : targetIdx();
+    const act = new Set(D.teams.filter(t=>t.active).map(t=>t.abbr));
+    D.weeks.forEach((w, wi) => {
+      if (wi >= ti) return;
+      const inW = new Set();
+      for (const g of w.games){ if (!g.a || !g.b) continue; const k = pk(g.a,g.b); meet[k] = (meet[k]||0)+1; last[k] = Math.max(last[k]||0, w.week); played[g.a]=(played[g.a]||0)+1; played[g.b]=(played[g.b]||0)+1; if (!g.catchup){ inW.add(g.a); inW.add(g.b); } }
+      for (const a of act) if (!inW.has(a)) bye[a] = (bye[a]||0)+1;
+    });
+    return {meet, last, played, bye};
+  }
+  function pendingGames(){ // unplayed games from the 2 weeks before this one, not already re-scheduled later
+    const ti = isNew() ? D.weeks.length : targetIdx(), out = [];
+    const later = new Set(D.weeks.slice(ti).flatMap(w => w.games.filter(g=>g.catchup).map(g=>pk(g.a,g.b))));
+    D.weeks.slice(Math.max(0, ti-2), ti).forEach(w => w.games.forEach(g => {
+      if (g.a && g.b && !String(g.result||"").trim() && !later.has(pk(g.a,g.b)) && T(g.a).active && T(g.b).active) out.push({a:g.a, b:g.b, from:w.week});
+    }));
+    return out;
+  }
+
+  // ---------- generator ----------
+  function generate(){
+    const H = history(), wk = S.week;
+    const busy = new Set();
+    S.fixed.forEach(g => { busy.add(g.a); busy.add(g.b); });
+    if (!S.cuPlay) S.catchups.forEach(g => { busy.add(g.a); busy.add(g.b); });
+    let list = S.teams.filter(a => !busy.has(a));
+    const cost = (a,b) => { const k = pk(a,b), m = H.meet[k]||0, l = H.last[k]||0; return (S.noRematch === "never" && m ? 1000 : 0) + m*10 + (l && wk-l <= 1 ? 25 : l && wk-l <= 2 ? 8 : 0); };
+    const bye = [];
+    if (list.length % 2){ const r = list.map(a=>({a, s:-priorGames(a)*100 + (H.bye[a]||0)*10 + Math.random()})).sort((x,y)=>x.s-y.s); bye.push(r[0].a); list = list.filter(a=>a!==r[0].a); }
+    let bestC = Infinity, ties = [];
+    for (let it=0; it<800; it++){
+      const L = list.slice().sort(()=>Math.random()-.5), out = []; let c = 0;
+      while (L.length){ const a = L.shift(); let bi = 0, bc = Infinity; L.forEach((b,i)=>{ const x = cost(a,b)+Math.random()*.5; if (x<bc){ bc=x; bi=i; } }); const b = L.splice(bi,1)[0]; out.push({a,b,result:""}); c += cost(a,b); }
+      if (c < bestC){ bestC = c; ties = [out]; } else if (c === bestC && ties.length < 50) ties.push(out);
+    }
+    S.games = ties.length ? ties[Math.floor(Math.random()*ties.length)] : []; S.bye = bye;
+    genCatchups();
+  }
+  function owedAfter(a, extra=[]){
+    const reg = [...S.fixed, ...(S.games||[])].some(g=>g.a===a||g.b===a) ? 1 : 0;
+    const cu = [...S.catchups, ...extra].filter(g=>g.a===a||g.b===a).length;
+    return Math.max(0, S.week - priorGames(a) - reg - cu);
+  }
+  function genCatchups(){
+    S.autoCu = []; if (!S.cuAuto) return;
+    const H = history(), wk = S.week;
+    const thisWeek = [...S.fixed, ...(S.games||[]), ...S.catchups];
+    const slots0 = {}; S.teams.forEach(a => { const o = Math.min(owedAfter(a), S.cuMax); if (o > 0) slots0[a] = o; });
+    const cost = (a,b) => { const k = pk(a,b), m = H.meet[k]||0, l = H.last[k]||0; return (S.noRematch === "never" && m ? 1000 : 0) + m*10 + (l && wk-l <= 1 ? 25 : 0); };
+    let best = null, bestS = Infinity;
+    for (let it=0; it<500; it++){
+      const sl = {...slots0}, used = new Set(thisWeek.map(g=>pk(g.a,g.b))), out = []; let c = 0, left = 0;
+      while (true){
+        const ready = Object.keys(sl).filter(a=>sl[a]>0); if (!ready.length) break;
+        const maxS = Math.max(...ready.map(a=>sl[a])); const top = ready.filter(a=>sl[a]===maxS); const a = top[Math.floor(Math.random()*top.length)];
+        const cand = ready.filter(b=>b!==a && !used.has(pk(a,b)));
+        if (!cand.length){ left += sl[a]; sl[a] = 0; continue; }
+        let bb = null, bc = Infinity; cand.forEach(b=>{ const x = cost(a,b) + Math.random()*.5 - sl[b]*.1; if (x < bc){ bc = x; bb = b; } });
+        out.push({a, b:bb, result:"", catchup:true, auto:true}); used.add(pk(a,bb)); c += cost(a,bb); sl[a]--; sl[bb]--;
+      }
+      const sc = left*1000 + c; if (sc < bestS){ bestS = sc; best = out; }
+    }
+    S.autoCu = best || [];
+  }
+
+  // ---------- steps ----------
+  const STEPS = [
+    { id:"week", q:"What week are you planning?", help:"Pick a week to redo it, or start the next one.", render(){
+      const nxt = (D.weeks[D.weeks.length-1]?.week || 0) + 1;
+      const opts = D.weeks.map(w=>({v:w.week, t:`Week ${w.week}`, s:`${w.games.filter(g=>!g.catchup).length} games${w.done?"":" · current"}`})).concat([{v:nxt, t:`Week ${nxt}`, s:"New week"}]);
+      if (S.week == null) S.week = nxt;
+      return `<div class="opts">${opts.map(o=>`<label class="opt ${S.week===o.v?"on":""}"><input type="radio" name="wk" value="${o.v}" ${S.week===o.v?"checked":""}><span>${o.t}<small>${esc(o.s)}</small></span></label>`).join("")}</div>
+        ${!isNew() ? `<div class="big" style="margin-top:6px"><div class="step">This week already has games. What do you want to do?</div>
+          <label class="opt ${S.mode==="fill"?"on":""}"><input type="radio" name="mode" value="fill" ${S.mode==="fill"?"checked":""}><span>Keep what's there and fill in the rest</span></label>
+          <label class="opt ${S.mode==="remake"?"on":""}"><input type="radio" name="mode" value="remake" ${S.mode==="remake"?"checked":""}><span>Remake the whole week from scratch<small>You can still keep specific games on a later step</small></span></label></div>` : ""}`;
+    }, bind(){
+      document.querySelectorAll("input[name=wk]").forEach(r => r.onchange = () => { S.week = +r.value; S.teams = []; S.fixed = null; S.catchups = null; S.deadline = ""; draw(); });
+      document.querySelectorAll("input[name=mode]").forEach(r => r.onchange = () => { S.mode = r.value; S.fixed = null; draw(); });
+    }},
+    { id:"teams", q:"Which teams are playing?", help:"Active teams are ticked. Untick anyone who can't play this week — this only affects this week.", render(){
+      if (!S.teams.length) S.teams = D.teams.filter(t=>t.active).map(t=>t.abbr);
+      const list = D.teams.slice().sort((x,y)=>(y.active-x.active)||x.name.localeCompare(y.name));
+      return `<div class="row"><button class="btn sm" id="all">Tick all active</button><button class="btn sm" id="none">Untick all</button><span class="note" id="cnt"></span></div>
+        <div class="opts">${list.map(t=>`<label class="opt ${S.teams.includes(t.abbr)?"on":""}"><input type="checkbox" value="${t.abbr}" ${S.teams.includes(t.abbr)?"checked":""}>${badge(t.abbr)}<span>${esc(t.name)}<small>${t.players ?? 0} players${t.active?"":" · inactive"}</small></span></label>`).join("")}</div>`;
+    }, bind(){
+      const upd = () => { $("#cnt").textContent = `${S.teams.length} teams${S.teams.length % 2 ? " — odd number, one team gets a bye" : ""}`; };
+      document.querySelectorAll(".opts input").forEach(c => c.onchange = () => { S.teams = [...document.querySelectorAll(".opts input:checked")].map(x=>x.value); c.closest(".opt").classList.toggle("on", c.checked); upd(); });
+      $("#all").onclick = () => { S.teams = D.teams.filter(t=>t.active).map(t=>t.abbr); draw(); };
+      $("#none").onclick = () => { S.teams = []; draw(); };
+      upd();
+    }, valid(){ return S.teams.length >= 2 || "Pick at least 2 teams."; }},
+    { id:"fixed", q:"Any games already set?", help:"Matchups that have to happen this week (agreed rematches, games you already announced). The rest gets auto-scheduled.", render(){
+      if (S.fixed == null){ const w = D.weeks[targetIdx()]; S.fixed = w && S.mode === "fill" ? w.games.filter(g=>!g.catchup).map(g=>({a:g.a,b:g.b,result:g.result||""})) : []; }
+      const existing = !isNew() && S.mode === "remake" ? D.weeks[targetIdx()].games.filter(g=>!g.catchup) : [];
+      return `${existing.length ? `<div class="step">Currently posted for week ${S.week} — tick any to keep</div><div class="big">${existing.map((g,i)=>{ const on = S.fixed.some(f=>pk(f.a,f.b)===pk(g.a,g.b)); return `<label class="opt ${on?"on":""}"><input type="checkbox" data-keep="${i}" ${on?"checked":""}>${badge(g.a)} ${esc(T(g.a).name)} <span class="note">vs</span> ${badge(g.b)} ${esc(T(g.b).name)}</label>`; }).join("")}</div>` : ""}
+        <div class="step">${existing.length ? "Other set games" : "Set games"}</div>
+        <div id="pairs" style="display:flex;flex-direction:column;gap:8px">${S.fixed.map((g,i)=> existing.some(e=>pk(e.a,e.b)===pk(g.a,g.b)) ? "" : pairRow(g,i)).join("")}</div>
+        <div><button class="btn sm" id="addp">+ Add a set game</button></div>
+        ${!S.fixed.length ? `<div class="note">None? Just hit Next.</div>` : ""}`;
+    }, bind(){
+      document.querySelectorAll("[data-keep]").forEach(c => c.onchange = () => { const g = D.weeks[targetIdx()].games.filter(g=>!g.catchup)[+c.dataset.keep]; if (c.checked) S.fixed.push({a:g.a,b:g.b,result:g.result||""}); else S.fixed = S.fixed.filter(f=>pk(f.a,f.b)!==pk(g.a,g.b)); draw(); });
+      bindPairs(S.fixed);
+      $("#addp").onclick = () => { S.fixed.push({a:"",b:"",result:""}); draw(); };
+    }, valid(){ S.fixed = S.fixed.filter(g=>g.a||g.b); if (S.fixed.some(g=>!g.a||!g.b||g.a===g.b)) return "Finish or remove the incomplete set game."; const c = {}; for (const g of S.fixed){ c[g.a]=(c[g.a]||0)+1; c[g.b]=(c[g.b]||0)+1; } if (Object.values(c).some(v=>v>1)) return "A team is in two set games."; return true; }},
+    { id:"catchup", q:"Catch-up games", help:"By week N every team should have N games. Teams that joined late (or had byes) are behind, so they get extra catch-up games against other teams that are behind — on top of their regular game.", render(){
+      if (S.catchups == null){ const w = D.weeks[targetIdx()]; S.catchups = w && S.mode === "fill" ? w.games.filter(g=>g.catchup).map(g=>({a:g.a,b:g.b,result:g.result||"",catchup:true})) : []; }
+      const rows = S.teams.map(a=>({a, prior:priorGames(a), man:S.catchups.filter(g=>g.a===a||g.b===a).length})).map(r=>({...r, owed: Math.max(0, S.week - r.prior - 1 - r.man)})).sort((x,y)=>y.owed-x.owed || T(x.a).name.localeCompare(T(y.a).name));
+      const behind = rows.filter(r=>r.owed>0);
+      return `<div class="sum"><div><b>${behind.length}</b><span>Teams behind</span></div><div><b>${behind.reduce((s,r)=>s+r.owed,0)}</b><span>Games owed total</span></div></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px">
+          <thead><tr><th style="text-align:left;padding:6px;font-size:12px;letter-spacing:.14em;color:var(--mute)">TEAM</th><th style="padding:6px;font-size:12px;letter-spacing:.14em;color:var(--mute)">GAMES BEFORE WK ${S.week}</th><th style="padding:6px;font-size:12px;letter-spacing:.14em;color:var(--mute)">NEEDS BY WK ${S.week}</th><th style="padding:6px;font-size:12px;letter-spacing:.14em;color:var(--mute)">OWED AFTER REG. GAME</th></tr></thead>
+          <tbody>${rows.map(r=>`<tr style="border-top:1px solid var(--line)"><td style="padding:6px;display:flex;align-items:center;gap:8px">${badge(r.a)}<b>${esc(T(r.a).name)}</b></td><td style="text-align:center">${r.prior}</td><td style="text-align:center">${S.week}</td><td style="text-align:center;font-weight:700;color:${r.owed?"var(--gold)":"var(--mute)"}">${r.owed || "—"}</td></tr>`).join("")}</tbody></table></div>
+        <label class="opt ${S.cuAuto?"on":""}"><input type="checkbox" id="cuauto" ${S.cuAuto?"checked":""}><span>Auto-schedule catch-up games for teams that are behind</span></label>
+        <div class="row ${S.cuAuto?"":"hide"}"><span class="note">Max catch-up games per team this week:</span>${[1,2].map(n=>`<button class="btn sm ${S.cuMax===n?"red":""}" data-max="${n}">${n}</button>`).join("")}</div>
+        <div class="step">Catch-up games you want to set yourself (optional)</div>
+        <div id="pairs" style="display:flex;flex-direction:column;gap:8px">${S.catchups.map((g,i)=>pairRow(g,i)).join("")}</div>
+        <div><button class="btn sm" id="addp">+ Add a catch-up game</button></div>`;
+    }, bind(){
+      bindPairs(S.catchups, true);
+      $("#addp").onclick = () => { S.catchups.push({a:"",b:"",result:"",catchup:true}); draw(); };
+      $("#cuauto").onchange = e => { S.cuAuto = e.target.checked; draw(); };
+      document.querySelectorAll("[data-max]").forEach(b => b.onclick = () => { S.cuMax = +b.dataset.max; draw(); });
+    }, valid(){ S.catchups = S.catchups.filter(g=>g.a||g.b); return S.catchups.some(g=>!g.a||!g.b||g.a===g.b) ? "Finish or remove the incomplete catch-up game." : true; }},
+    { id:"rules", q:"How strict on rematches?", help:"The scheduler always avoids last week's opponent when it can.", render(){
+      return `<div class="big">
+        <label class="opt ${S.noRematch==="avoid"?"on":""}"><input type="radio" name="rm" value="avoid" ${S.noRematch==="avoid"?"checked":""}><span>Try to avoid rematches<small>Allows one only if there's no other way</small></span></label>
+        <label class="opt ${S.noRematch==="never"?"on":""}"><input type="radio" name="rm" value="never" ${S.noRematch==="never"?"checked":""}><span>No rematches at all<small>Strongly prefers brand-new matchups</small></span></label>
+        <label class="opt ${S.noRematch==="allow"?"on":""}"><input type="radio" name="rm" value="allow" ${S.noRematch==="allow"?"checked":""}><span>Don't care<small>Still avoids last week's opponent</small></span></label></div>`;
+    }, bind(){ document.querySelectorAll("input[name=rm]").forEach(r => r.onchange = () => { S.noRematch = r.value; draw(); }); }},
+    { id:"deadline", q:"When's the deadline?", help:"When all of this week's games need to be played.", render(){
+      if (!S.deadline){ const w = D.weeks[targetIdx()]; if (w?.deadline && S.mode === "fill") S.deadline = w.deadline; else { const d = new Date(); d.setDate(d.getDate()+4); S.deadline = iso(d); } }
+      const q = [3,4,5,7].map(n=>{ const d = new Date(); d.setDate(d.getDate()+n); return {n, v:iso(d)}; });
+      return `<div class="row">${q.map(x=>`<button class="btn ${S.deadline===x.v?"red":""}" data-d="${x.v}">${x.n === 7 ? "1 week" : x.n + " days"}<br><small>${fmtDate(x.v)}</small></button>`).join("")}</div>
+        <div class="row"><span class="note">Or pick a date:</span><input type="date" id="dl" value="${esc(S.deadline)}"></div>
+        ${isNew() && D.weeks.length && !D.weeks[D.weeks.length-1].done ? `<label class="opt ${S.closePrev?"on":""}"><input type="checkbox" id="close" ${S.closePrev?"checked":""}><span>Mark week ${D.weeks[D.weeks.length-1].week} as finished</span></label>` : ""}`;
+    }, bind(){
+      document.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { S.deadline = b.dataset.d; draw(); });
+      $("#dl").onchange = e => { S.deadline = e.target.value; draw(); };
+      const c = $("#close"); if (c) c.onchange = () => { S.closePrev = c.checked; c.closest(".opt").classList.toggle("on", S.closePrev); };
+    }, valid(){ return S.deadline ? true : "Pick a deadline."; }},
+    { id:"review", q:"Here's your week", help:"Reroll for a different mix, or change any matchup by hand. Nothing is published until you hit Publish.", render(){
+      if (!S.games) generate();
+      const H = history(), all = [...S.fixed.map(g=>({...g, lock:true})), ...S.games];
+      const wr = g => { const m = H.meet[pk(g.a,g.b)]; return m ? `Rematch — scheduled ${m}× before (last week ${H.last[pk(g.a,g.b)]})` : ""; };
+      return `<div class="sum"><div><b>${all.length}</b><span>Games</span></div><div><b>${S.catchups.length + S.autoCu.length}</b><span>Catch-ups</span></div><div><b>${S.bye.length ? esc(S.bye.join(", ")) : "None"}</b><span>Bye</span></div><div><b>${esc(fmtDate(S.deadline))}</b><span>Deadline</span></div></div>
+        <div class="step">Week ${S.week} matchups</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${all.map((g,i)=> g.lock ? `<div class="game ${wr(g)?"w":""}">${badge(g.a)}<span class="nm">${esc(T(g.a).name)}</span><span class="vs">VS</span>${badge(g.b)}<span class="nm">${esc(T(g.b).name)}</span><span class="tag lock">SET</span>${wr(g)?`<div class="warn" style="width:100%">${esc(wr(g))}</div>`:""}</div>`
+          : pairRow(g, i - S.fixed.length, wr(g), true)).join("") || `<div class="note">No games.</div>`}</div>
+        ${S.catchups.length + S.autoCu.length ? `<div class="step">Catch-up games (extra games for teams that are behind)</div>${[...S.catchups, ...S.autoCu].map(g=>`<div class="game ${wr(g)?"w":""}">${badge(g.a)}<span class="nm">${esc(T(g.a).name)}</span><span class="vs">VS</span>${badge(g.b)}<span class="nm">${esc(T(g.b).name)}</span><span class="tag">${g.auto?"AUTO ":""}CATCH-UP</span>${wr(g)?`<div class="warn" style="width:100%">${esc(wr(g))}</div>`:""}</div>`).join("")}` : ""}
+        ${(() => { const still = S.teams.map(a=>({a, o:owedAfter(a, S.autoCu)})).filter(x=>x.o>0); return still.length ? `<div class="note">Still behind after this week: ${still.map(x=>`<b>${esc(T(x.a).name)}</b> (${x.o})`).join(", ")}</div>` : `<div class="note">After this week every playing team is caught up.</div>`; })()}
+        <div class="row"><button class="btn blue" id="reroll">↻ Reroll</button></div>
+        <div class="step" style="margin-top:6px">Discord post</div>
+        <textarea id="post" rows="12" aria-label="Discord post">${esc(post())}</textarea>
+        <div class="row"><button class="btn gold" id="copy">Copy post</button><button class="btn red" id="publish">Publish week ${S.week}</button><span class="msg" id="pmsg"></span></div>
+        ${canSave ? "" : `<div class="note">You're not signed in, so Publish is off. Sign in on the admin page first, or just copy the post.</div>`}`;
+    }, bind(){
+      $("#reroll").onclick = () => { generate(); draw(); };
+      bindPairs(S.games, false, true);
+      $("#copy").onclick = async () => { try{ await navigator.clipboard.writeText($("#post").value); msg("Copied — paste it in Discord."); }catch{ $("#post").select(); msg("Press Ctrl+C to copy.", false); } };
+      $("#publish").disabled = !canSave;
+      $("#publish").onclick = publish;
+    }},
+  ];
+  const TEAMOPTS = sel => `<option value="">—</option>` + D.teams.slice().sort((x,y)=>(y.active-x.active)||x.name.localeCompare(y.name)).map(t=>`<option value="${t.abbr}" ${t.abbr===sel?"selected":""}>${esc(t.name)}</option>`).join("");
+  function pairRow(g, i, warn="", review=false){
+    return `<div class="pair" data-i="${i}"><select data-f="a" aria-label="Team 1">${TEAMOPTS(g.a)}</select><span class="vs">VS</span><select data-f="b" aria-label="Team 2">${TEAMOPTS(g.b)}</select>
+      ${review ? `<span></span>` : `<button class="btn sm" data-rm="${i}" aria-label="Remove">✕</button>`}${warn ? `<div class="warn">${esc(warn)}</div>` : ""}</div>`;
+  }
+  function bindPairs(arr, cu, review){
+    document.querySelectorAll(".pair").forEach(el => {
+      const g = arr[+el.dataset.i]; if (!g) return;
+      el.querySelectorAll("select").forEach(s => s.onchange = () => {
+        const old = g[s.dataset.f], nv = s.value;
+        if (review){ const other = arr.find(x => x !== g && (x.a === nv || x.b === nv)); if (other){ if (other.a === nv) other.a = old; else other.b = old; } else if (S.bye.includes(nv)) S.bye = S.bye.map(b => b === nv ? old : b); }
+        g[s.dataset.f] = nv; draw();
+      });
+      const rm = el.querySelector("[data-rm]"); if (rm) rm.onclick = () => { arr.splice(+rm.dataset.rm,1); draw(); };
+    });
+  }
+  const msg = (t, ok=true) => { const m = $("#pmsg"); if (m){ m.textContent = t; m.className = "msg " + (ok?"ok":"err"); } };
+
+  // ---------- Discord post ----------
+  const mention = a => { const t = T(a); return t.role ? `<@&${t.role}>` : `@${t.name}`; };
+  const owners = () => { const o = (D.roles?.owners || "Franchise owner").trim(); return /^\d{6,}$/.test(o) ? `<@&${o}>` : `@${o}`; };
+  function post(){
+    const all = [...S.fixed, ...(S.games||[])], dl = `Deadline ${fmtDate(S.deadline)}`, out = [`WEEK ${S.week}`, ""];
+    all.forEach(g => out.push(`${mention(g.a)} vs ${mention(g.b)}`, ""));
+    if (S.bye.length) out.push(`Bye: ${S.bye.map(mention).join(", ")}`, "");
+    out.push(dl, owners());
+    const CU = [...S.catchups, ...S.autoCu];
+    if (CU.length){ out.push("", "Catch up games"); CU.forEach(g => out.push(`${mention(g.a)} vs ${mention(g.b)}`)); out.push(`${dl} ${owners()} @everyone`); }
+    else out[out.length-1] += " @everyone";
+    return out.join("\n");
+  }
+
+  // ---------- publish ----------
+  async function publish(){
+    const btn = $("#publish"); btn.disabled = true; msg("Publishing…");
+    try{
+      const r0 = await fetch(API + "?t=" + Date.now(), {cache:"no-store", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json"}});
+      if (!r0.ok) throw new Error("Couldn't read the schedule (" + r0.status + ")");
+      const f = await r0.json(), cur = JSON.parse(b64d(f.content));
+      const games = [...S.fixed.map(g=>({a:g.a,b:g.b,result:g.result||""})), ...S.games.map(g=>({a:g.a,b:g.b,result:""})), ...S.catchups.map(g=>({a:g.a,b:g.b,result:g.result||"",catchup:true})), ...S.autoCu.map(g=>({a:g.a,b:g.b,result:"",catchup:true}))];
+      let w = cur.weeks.find(x => x.week === S.week);
+      if (!w){ if (S.closePrev) cur.weeks.forEach(x => x.done = true); w = {week:S.week, deadline:S.deadline, done:false, games:[]}; cur.weeks.push(w); cur.weeks.sort((a,b)=>a.week-b.week); }
+      w.games = games; w.deadline = S.deadline; w.done = false;
+      const r = await fetch(API, {method:"PUT", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
+        body:JSON.stringify({message:`Plan week ${S.week}`, content:b64e(JSON.stringify(cur,null,1)+"\n"), sha:f.sha})});
+      if (!r.ok){ let m = r.status; try{ m = (await r.json()).message; }catch{} throw new Error(m); }
+      D = cur; msg(`Week ${S.week} published. The public page updates in about a minute.`);
+    }catch(e){ msg("Couldn't publish: " + e.message, false); btn.disabled = false; }
+  }
+
+  // ---------- flow ----------
+  let step = 0;
+  function draw(){
+    const s = STEPS[step];
+    $("#rail").innerHTML = STEPS.map((_,i)=>`<i class="${i<step?"done":i===step?"on":""}"></i>`).join("");
+    $("#stepno").textContent = `Step ${step+1} of ${STEPS.length}`;
+    $("#card").innerHTML = `<h2 class="q">${s.q}</h2><div class="help">${s.help}</div>${s.render()}<div class="msg err" id="verr"></div>`;
+    s.bind && s.bind();
+    $("#back").disabled = step === 0;
+    $("#next").classList.toggle("hide", step === STEPS.length-1);
+  }
+  $("#next").onclick = () => {
+    const v = STEPS[step].valid ? STEPS[step].valid() : true;
+    if (v !== true){ $("#verr").textContent = v; return; }
+    step++; if (STEPS[step].id === "review") S.games = null; draw(); window.scrollTo({top:0});
+  };
+  $("#back").onclick = () => { if (step){ step--; draw(); window.scrollTo({top:0}); } };
+
+  (async () => {
+    try{
+      if (TOKEN){
+        const r = await fetch(API + "?t=" + Date.now(), {cache:"no-store", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json"}});
+        if (r.ok){ const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content)); canSave = true; }
+      }
+      if (!D) D = await (await fetch("schedule.json", {cache:"no-store"})).json();
+      draw();
+    }catch{ $("#card").innerHTML = `<div class="msg err">Couldn't load the schedule. Refresh to try again.</div>`; }
+  })();
+})();
+</script>
+</body></html>

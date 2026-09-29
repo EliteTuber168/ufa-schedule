@@ -108,12 +108,13 @@ footer a{color:var(--mute)}
     return D.weeks.slice().reverse().map((w,i)=>`<details class="week" ${i===0?"open":""}><summary><h2>Week ${w.week}</h2><span class="pill ${w.done?"":"live"}">${w.done ? `${w.games.length} games` : "Current"}</span></summary>${weekBlock(w, !w.done)}</details>`).join("") || `<div class="empty">No weeks yet.</div>`;
   }
   function vTeams(){
+    const cw = current()?.week || 0;
     const rows = D.teams.filter(t=>t.active || D.weeks.some(w=>w.games.some(g=>g.a===t.abbr||g.b===t.abbr))).map(t=>{
       const gs = D.weeks.flatMap(w=>w.games.filter(g=>g.a===t.abbr||g.b===t.abbr).map(g=>({w:w.week, opp:g.a===t.abbr?g.b:g.a, r:g.result})));
       return {t, gs};
     }).sort((x,y)=>(y.t.active-x.t.active) || x.t.name.localeCompare(y.t.name));
-    return `<section class="panel"><h2>Teams</h2><div class="note">Every matchup each team has been scheduled this season.</div><div class="tscroll"><table><thead><tr><th>Team</th><th>FO</th><th class="n">Players</th><th class="n">Games</th><th>Opponents (by week)</th></tr></thead><tbody>${
-      rows.map(({t,gs})=>`<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${badge(t.abbr,"badge mini")}<b>${esc(t.name)}</b>${t.active?"":` <span class="pill">inactive</span>`}</span></td><td>${esc(t.fo||"—")}</td><td class="n">${t.players ?? "–"}</td><td class="n">${gs.length}</td><td><div class="opps">${gs.map(g=>`<span style="background:${esc(team(g.opp).color)}" title="Week ${g.w}${g.r?": "+esc(g.r):""}">W${g.w} ${esc(g.opp)}</span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div></section>`;
+    return `<section class="panel"><h2>Teams</h2><div class="note">Every matchup each team has been scheduled this season. <b>Behind</b> = games short of one per week (made up with catch-up games).</div><div class="tscroll"><table><thead><tr><th>Team</th><th>FO</th><th class="n">Players</th><th class="n">Games</th><th class="n">Behind</th><th>Opponents (by week)</th></tr></thead><tbody>${
+      rows.map(({t,gs})=>`<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${badge(t.abbr,"badge mini")}<b>${esc(t.name)}</b>${t.active?"":` <span class="pill">inactive</span>`}</span></td><td>${esc(t.fo||"—")}</td><td class="n">${t.players ?? "–"}</td><td class="n">${gs.length}</td><td class="n" style="color:${t.active && cw - gs.length > 0 ? "var(--gold)" : "var(--mute)"};font-weight:700">${t.active ? Math.max(0, cw - gs.length) || "—" : "—"}</td><td><div class="opps">${gs.map(g=>`<span style="background:${esc(team(g.opp).color)}" title="Week ${g.w}${g.r?": "+esc(g.r):""}">W${g.w} ${esc(g.opp)}</span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div></section>`;
   }
   function render(){
     const key = location.hash.replace(/^#\/?/,"");

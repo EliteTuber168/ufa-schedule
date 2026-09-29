@@ -61,7 +61,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   <header>
     <div class="eyebrow">LEAGUE SCHEDULER</div>
     <h1><span>UFA</span> <b>ADMIN</b></h1>
-    <div><a href="./">← Public schedule</a></div>
+    <div style="display:flex;gap:16px;font-weight:700"><a href="./">← Public schedule</a><a href="plan.html">Plan a week →</a></div>
   </header>
 
   <section class="panel gate" id="gate">
@@ -78,6 +78,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
 
   <div id="app" class="hide" style="display:flex;flex-direction:column;gap:20px">
     <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn" id="signout">Sign out</button></div>
+    <a class="btn red" href="plan.html" style="text-decoration:none;align-self:flex-start">Plan a week (step by step) →</a>
     <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button></div>
 
     <div id="tab-week" style="display:flex;flex-direction:column;gap:20px">
