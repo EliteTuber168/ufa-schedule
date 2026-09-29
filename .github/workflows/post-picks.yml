@@ -1,0 +1,20 @@
+name: Post draft picks to Discord
+on:
+  push:
+    branches: [main]
+    paths: [draft.json]
+concurrency:
+  group: post-picks
+  cancel-in-progress: false
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Post new picks
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DRAFT_CHANNEL_ID: ${{ secrets.DRAFT_CHANNEL_ID }}
+        run: python scripts/post_picks.py
