@@ -178,7 +178,26 @@
   "S",
   "K/P"
  ],
- "pool": [],
+ "pool": [
+  {
+   "id": 1,
+   "name": "CrazyAndrew",
+   "pos": [],
+   "discord": "296046630619054090"
+  },
+  {
+   "id": 2,
+   "name": "Scare",
+   "pos": [],
+   "discord": "910199909435736075"
+  },
+  {
+   "id": 3,
+   "name": "Rivon",
+   "pos": [],
+   "discord": "1455465653761736930"
+  }
+ ],
  "picks": [],
  "announcement": ""
 }
