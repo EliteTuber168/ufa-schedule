@@ -70,6 +70,36 @@ input,select{font:inherit;font-size:16px;font-weight:600;color:var(--fg);backgro
 .feed div{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line)}
 .feed .ov{font-family:var(--num);font-size:20px;color:var(--mute);min-width:36px}
 .note{font-size:14px;color:var(--mute)}
+.av{flex:none;border-radius:50%;object-fit:cover;background:var(--panel2);display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:var(--mute);border:1px solid var(--line)}
+.av.s{width:26px;height:26px;font-size:12px} .av.m{width:40px;height:40px;font-size:16px}
+.lastpk{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.lbl2{font-size:11px;letter-spacing:.2em;color:var(--mute);font-weight:700;margin-right:4px}
+.best{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.bp{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.bp div{min-width:0;line-height:1.15} .bp b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .bp small{color:var(--mute);font-size:12px;font-weight:600}
+.rk{font-family:var(--num);color:var(--gold);font-size:16px;margin-right:6px}
+.gridwrap{overflow:auto;max-height:78vh;border-radius:10px;border:1px solid var(--line)}
+table.grid{border-collapse:separate;border-spacing:0;min-width:max-content}
+table.grid th,table.grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px;vertical-align:top;background:var(--panel)}
+table.grid thead th, table.grid tr:first-child th{position:sticky;top:0;z-index:2;background:#101a30;text-align:center}
+table.grid tr:first-child th small{display:block;font-size:10px;color:var(--mute);font-weight:700;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:3px auto 0}
+table.grid th.rd{position:sticky;left:0;z-index:1;background:#101a30;font-family:var(--num);font-size:20px;color:var(--mute);min-width:38px;text-align:center}
+table.grid tr:first-child th.rd{z-index:3}
+table.grid th.rd small{display:block;font-size:12px;font-family:var(--body)}
+table.grid td{width:104px;min-width:104px;max-width:104px;height:78px;position:relative;text-align:center}
+table.grid td .ov{position:absolute;top:3px;left:5px;font-size:10px;color:var(--mute);font-weight:700}
+table.grid td .av{margin:8px auto 2px;display:flex}
+table.grid td b{display:block;font-size:12px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.grid td small{display:block;font-size:10px;color:var(--gold);font-weight:700;letter-spacing:.06em}
+table.grid td.open{background:var(--bg)}
+table.grid td.now{background:rgba(232,66,74,.16);box-shadow:inset 0 0 0 2px var(--red)}
+table.grid td .oc{color:var(--red);font-size:11px;letter-spacing:.12em;margin-top:22px}
+.tier{flex:none;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;color:#0b0f1a;background:var(--mute)}
+.tier.t1{background:var(--gold)} .tier.t2{background:#7cc4ff} .tier.t3{background:var(--good)} .tier.t4{background:#c9a0ff}
+.pnote{flex-basis:100%;font-size:12px;color:var(--mute);margin-top:2px}
+.pl{flex-wrap:wrap}
+ol.ros{list-style:none;padding:0} ol.ros li{display:flex;align-items:center;gap:8px}
+ol.ros li b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .empty{padding:22px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
 footer{text-align:center;color:var(--mute);font-size:13px;letter-spacing:.1em}
 footer a{color:var(--mute)}
@@ -111,15 +141,25 @@ footer a{color:var(--mute)}
     render();
   }
 
+  const av = (p, cls="av") => p && p.avatar ? `<img class="${cls}" src="${esc(p.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls} ini',textContent:'${esc((p.name||'?')[0]).toUpperCase()}'}))">` : `<span class="${cls} ini">${esc(((p&&p.name)||"?")[0].toUpperCase())}</span>`;
+  const byRank = (x,y) => (x.rank ?? 1e9) - (y.rank ?? 1e9) || x.name.localeCompare(y.name);
   function clockCard(){
     const n = D.picks.length;
-    if (D.status === "setup") return `<section class="panel"><h2>Draft hasn't started yet</h2><div class="note">${order().length} teams · ${D.rounds} rounds · ${D.pool.length} players in the pool so far.</div></section>`;
+    if (D.status === "setup") return `<section class="panel"><h2>Draft hasn't started yet</h2><div class="note">${order().length} teams · ${D.rounds} rounds · ${D.pool.length} players in the pool so far.</div></section>` + bestAvail();
     if (D.status === "done" || n >= total()) return `<section class="panel" style="border-color:var(--gold)"><h2>The draft is complete</h2><div class="note">${n} picks made. Check the Teams tab for every roster.</div></section>`;
     const s = slot(n), nx = [1,2,3,4,5].map(k=>n+k<total() ? slot(n+k) : null).filter(Boolean);
+    const last = n ? {s:slot(n-1), p:P(D.picks[n-1].player)} : null;
     return `<section class="panel clock"><span class="badge big" style="background:${esc(team(s.team).color)}">${esc(s.team)}</span>
       <div class="who"><div class="lbl">ON THE CLOCK${D.status==="paused"?" · PAUSED":""}</div><div class="tn">${esc(team(s.team).name)}</div><small>${esc(foOf(s.team) ? "FO " + foOf(s.team) : "")} · Round ${s.round}, pick ${s.pick} · #${s.overall} overall</small></div>
       <div class="timer" id="timer"></div>
-      <div class="next" style="grid-column:1/-1">Up next: ${nx.map(x=>`<span class="chip">${badge(x.team,"badge s")}${esc(team(x.team).name)}</span>`).join("")}</div></section>`;
+      <div class="next" style="grid-column:1/-1">Up next: ${nx.map(x=>`<span class="chip">${badge(x.team,"badge s")}${esc(team(x.team).name)}</span>`).join("")}</div>
+      ${last ? `<div class="lastpk" style="grid-column:1/-1"><span class="lbl2">LAST PICK</span>${av(last.p,"av m")}<span><b>${esc(last.p.name)}</b> <span class="note">${esc(posTxt(last.p))}</span><br><small class="note">#${last.s.overall} · ${esc(team(last.s.team).name)}</small></span></div>` : ""}</section>` + bestAvail();
+  }
+  function bestAvail(){
+    const taken = new Set(D.picks.map(p=>p.player)), list = D.pool.filter(p=>!taken.has(p.id)).sort(byRank).slice(0,8);
+    if (!list.length || D.status === "done") return "";
+    return `<section class="panel"><div class="row" style="justify-content:space-between"><h2>Best available</h2><a href="#/players" class="note">All players →</a></div>
+      <div class="best">${list.map((p,k)=>`<div class="bp">${av(p,"av m")}<div>${p.rank ? `<span class="rk">#${p.rank}</span>` : ""}<b>${esc(p.name)}</b><small>${esc(posTxt(p) || "—")}${p.tier ? ` · Tier ${p.tier}` : ""}</small></div></div>`).join("")}</div></section>`;
   }
   function tick(){
     const el = $("#timer"); if (!el || !D || D.status !== "live" || !D.pickMinutes || !D.clockStart) { if (el) el.innerHTML = ""; return; }
@@ -131,31 +171,34 @@ footer a{color:var(--mute)}
   setInterval(tick, 1000);
 
   function vBoard(){
-    const T = order().length; if (!T) return `<div class="empty">No teams in the draft yet.</div>`;
-    const n = D.picks.length; let out = "";
+    const O = order(), T = O.length; if (!T) return `<div class="empty">No teams in the draft yet.</div>`;
+    const n = D.picks.length;
+    const head = `<tr><th class="rd">RD</th>${O.map(a=>`<th><span class="badge s" style="background:${esc(team(a).color)}">${esc(a)}</span><small>${esc(foOf(a) || "")}</small></th>`).join("")}</tr>`;
+    let rows = "";
     for (let r=0; r<D.rounds; r++){
-      const cards = [];
-      for (let i=0;i<T;i++){ const k = r*T+i, s = slot(k), pk = D.picks[k];
-        cards.push(`<div class="pk ${k===n && D.status!=="setup"?"now":""} ${pk?"":"empty"}"><span class="n">${s.pick}</span>${badge(s.team,"badge s")}<div class="p"><b>${pk ? esc(P(pk.player).name) : k===n && D.status==="live" ? "On the clock" : "—"}</b><small>${pk ? esc(posTxt(P(pk.player))) + " · " : ""}${esc(team(s.team).name)}</small></div></div>`); }
-      out += `<section class="panel round"><h2>Round ${r+1}${D.snake && r%2 ? ` <span class="note" style="font-family:var(--body)">(snake — order reversed)</span>` : ""}</h2><div class="picks">${cards.join("")}</div></section>`;
+      rows += `<tr><th class="rd">${r+1}${D.snake && r%2 ? "<small>↩</small>" : ""}</th>` + O.map((a, c) => {
+        const i = D.snake && r%2 ? T-1-c : c, k = r*T+i, pk = D.picks[k], pl = pk ? P(pk.player) : null, now = k === n && (D.status === "live" || D.status === "paused");
+        return `<td class="${now ? "now" : ""} ${pl ? "" : "open"}"><span class="ov">${k+1}</span>${pl ? `${av(pl,"av s")}<b>${esc(pl.name)}</b><small>${esc(posTxt(pl))}</small>` : now ? `<b class="oc">ON THE<br>CLOCK</b>` : ""}</td>`;
+      }).join("") + `</tr>`;
     }
-    return out;
+    return `<section class="panel" style="padding:12px"><div class="row" style="justify-content:space-between"><h2>Draft board</h2><span class="note">${D.snake ? "Snake: order flips every round (↩)" : "Same order every round"} · scroll sideways →</span></div>
+      <div class="gridwrap"><table class="grid">${head}${rows}</table></div></section>`;
   }
   function vTeams(){
     return `<section class="panel"><h2>Teams</h2><div class="teams">${order().map(a=>{ const mine = D.picks.map((p,k)=>({...p, s:slot(k)})).filter(p=>p.s.team===a);
       return `<div class="tc"><div class="hd">${badge(a)}<div><b>${esc(team(a).name)}</b><small>${esc(foOf(a) ? "FO " + foOf(a) : "No FO yet")}</small></div></div>
-        ${mine.length ? `<ol>${mine.map(p=>`<li>${esc(P(p.player).name)}<span>${esc(posTxt(P(p.player)))} · R${p.s.round}</span></li>`).join("")}</ol>` : `<div class="note">No picks yet.</div>`}</div>`; }).join("")}</div></section>`;
+        ${mine.length ? `<ol class="ros">${mine.map(p=>`<li>${av(P(p.player),"av s")}<b>${esc(P(p.player).name)}</b><span>${esc(posTxt(P(p.player)))} · R${p.s.round}</span></li>`).join("")}</ol>` : `<div class="note">No picks yet.</div>`}</div>`; }).join("")}</div></section>`;
   }
   function vPlayers(){
     const taken = new Map(D.picks.map((p,k)=>[p.player, slot(k).team]));
-    const list = D.pool.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!pf || (p.pos||[]).includes(pf))).sort((x,y)=>(taken.has(x.id)-taken.has(y.id)) || x.name.localeCompare(y.name));
+    const list = D.pool.filter(p => (!q || p.name.toLowerCase().includes(q)) && (!pf || (p.pos||[]).includes(pf))).sort((x,y)=>(taken.has(x.id)-taken.has(y.id)) || byRank(x,y));
     const avail = D.pool.filter(p=>!taken.has(p.id)).length;
     return `<section class="panel"><div class="row" style="justify-content:space-between"><h2>Players</h2><span class="note">${avail} available of ${D.pool.length}</span></div>
       <div class="row"><input id="q" type="search" placeholder="Search players" value="${esc(q)}" aria-label="Search players" style="flex:1 1 200px"><select id="pf" aria-label="Position"><option value="">All positions</option>${D.positions.map(p=>`<option ${p===pf?"selected":""}>${esc(p)}</option>`).join("")}</select></div>
-      <div class="plist">${list.map(p=>{ const t = taken.get(p.id); return `<div class="pl ${t?"gone":""}">${t ? badge(t,"badge s") : ""}<b>${esc(p.name)}</b><span class="pos">${esc(posTxt(p))}</span></div>`; }).join("") || `<div class="empty">No players match.</div>`}</div></section>`;
+      <div class="plist">${list.map(p=>{ const t = taken.get(p.id); return `<div class="pl ${t?"gone":""}" title="${esc(p.note||"")}">${p.rank ? `<span class="rk">#${p.rank}</span>` : ""}${av(p,"av s")}<b>${esc(p.name)}</b>${p.tier ? `<span class="tier t${esc(p.tier)}">T${esc(p.tier)}</span>` : ""}<span class="pos">${esc(posTxt(p))}</span>${t ? badge(t,"badge s") : ""}${p.note ? `<div class="pnote">${esc(p.note)}</div>` : ""}</div>`; }).join("") || `<div class="empty">No players match.</div>`}</div></section>`;
   }
   function vFeed(){
-    return `<section class="panel"><h2>Pick feed</h2><div class="feed">${D.picks.map((p,k)=>({p, s:slot(k)})).reverse().map(({p,s})=>`<div><span class="ov">#${s.overall}</span>${badge(s.team,"badge s")}<span><b>${esc(team(s.team).name)}</b> select <b>${esc(P(p.player).name)}</b> <span class="note">${esc(posTxt(P(p.player)))} · Round ${s.round}, pick ${s.pick}</span></span></div>`).join("") || `<div class="note">No picks yet.</div>`}</div></section>`;
+    return `<section class="panel"><h2>Pick feed</h2><div class="feed">${D.picks.map((p,k)=>({p, s:slot(k)})).reverse().map(({p,s})=>`<div><span class="ov">#${s.overall}</span>${badge(s.team,"badge s")}${av(P(p.player),"av s")}<span><b>${esc(team(s.team).name)}</b> select <b>${esc(P(p.player).name)}</b> <span class="note">${esc(posTxt(P(p.player)))} · Round ${s.round}, pick ${s.pick}</span></span></div>`).join("") || `<div class="note">No picks yet.</div>`}</div></section>`;
   }
   function render(){
     const key = location.hash.replace(/^#\/?/,"");
