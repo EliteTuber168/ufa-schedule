@@ -19,7 +19,7 @@
    "name": "Atlanta Falcons",
    "abbr": "ATL",
    "color": "#A71930",
-   "active": true,
+   "active": false,
    "role": "",
    "players": 3,
    "fo": "彼女は嫌っている CLAMPS"
@@ -136,7 +136,7 @@
    "name": "Jacksonville Jaguars",
    "abbr": "JAX",
    "color": "#006778",
-   "active": true,
+   "active": false,
    "role": "",
    "players": 3,
    "fo": "3B_Knzxo"
@@ -172,7 +172,7 @@
    "name": "Los Angeles Rams",
    "abbr": "LAR",
    "color": "#003594",
-   "active": true,
+   "active": false,
    "role": "",
    "players": 4,
    "fo": "ccrick1044"
@@ -289,7 +289,7 @@
    "name": "Washington Commanders",
    "abbr": "WAS",
    "color": "#5A1414",
-   "active": true,
+   "active": false,
    "role": "",
    "players": 2,
    "fo": "Just_benn10"
@@ -473,5 +473,14 @@
     }
    ]
   }
- ]
+ ],
+ "settings": {
+  "minPlayers": 5,
+  "requireFO": true,
+  "deadlineDays": 4,
+  "maxCatchup": 1,
+  "rematch": "avoid",
+  "pingEveryone": true,
+  "announcement": ""
+ }
 }
