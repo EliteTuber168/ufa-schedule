@@ -79,7 +79,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   <div id="app" class="hide" style="display:flex;flex-direction:column;gap:20px">
     <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn" id="signout">Sign out</button></div>
     <a class="btn red" href="plan.html" style="text-decoration:none;align-self:flex-start">Plan a week (step by step) →</a>
-    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button></div>
+    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button><button role="tab" data-tab="settings" aria-selected="false">Settings</button></div>
 
     <div id="tab-week" style="display:flex;flex-direction:column;gap:20px">
       <section class="panel">
@@ -120,16 +120,44 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     <div id="tab-teams" class="hide" style="display:flex;flex-direction:column;gap:20px">
       <section class="panel">
         <h2>Teams</h2>
-        <div class="note">Only <b>active</b> teams get auto-scheduled. <b>Discord role ID</b>: turn on Developer Mode in Discord, right-click the team role, then Copy Role ID. With an ID, the post pings the role for real.</div>
-        <div class="tscroll"><table><thead><tr><th>Active</th><th></th><th>Team</th><th>Players</th><th>FO</th><th>Discord role ID</th><th>Color</th></tr></thead><tbody id="tbody"></tbody></table></div>
+        <div class="note">Status <b>Auto</b> follows the rules in Settings; <b>Always</b>/<b>Never</b> overrides them. Only active teams get scheduled. <b>Discord role ID</b>: turn on Developer Mode in Discord, right-click the team role, then Copy Role ID. With an ID, the post pings the role for real.</div>
+        <div class="tscroll"><table><thead><tr><th>Status</th><th></th><th>Team</th><th>Players</th><th>FO</th><th>Discord role ID</th><th>Color</th></tr></thead><tbody id="tbody"></tbody></table></div>
+      </section>
+    </div>
+
+    <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:20px">
+      <section class="panel">
+        <h2>Who counts as active</h2>
+        <div class="note">Teams set to <b>Auto</b> (in Teams &amp; roles) are active only if they meet these rules. Only active teams get scheduled. You can still force any team on or off.</div>
+        <div class="row">
+          <label class="f" style="flex:0 1 220px">Minimum players to be active<input type="number" min="1" max="25" id="sMin"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFO"> Must have a franchise owner</label>
+        </div>
+        <div class="note" id="sPrev"></div>
+      </section>
+      <section class="panel">
+        <h2>Scheduling defaults</h2>
+        <div class="note">Used as the starting answers in Plan a Week. You can still change them each week.</div>
+        <div class="row">
+          <label class="f">Deadline (days after posting)<input type="number" min="1" max="21" id="sDays"></label>
+          <label class="f">Max catch-up games per team, per week<select id="sCu"><option value="0">0 (no auto catch-ups)</option><option value="1">1</option><option value="2">2</option></select></label>
+          <label class="f">Rematches<select id="sRm"><option value="avoid">Try to avoid</option><option value="never">Never</option><option value="allow">Don't care</option></select></label>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Discord post</h2>
+        <div class="row">
+          <label class="f">Owners role (name or role ID)<input type="text" id="lowners"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sEvery"> Ping @everyone at the end</label>
+        </div>
       </section>
       <section class="panel">
         <h2>League</h2>
         <div class="row">
           <label class="f">League name<input type="text" id="lname"></label>
           <label class="f">Season<input type="text" id="lseason"></label>
-          <label class="f">Owners role (name or role ID)<input type="text" id="lowners"></label>
         </div>
+        <label class="f">Announcement banner on the public page (optional)<textarea id="sAnn" rows="2" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="e.g. Week 6 posted — deadline Oct 8. Screenshots of scores go in #results"></textarea></label>
       </section>
     </div>
   </div>
@@ -161,11 +189,12 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
       const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content)); canSave = true;
     } else { D = await (await fetch("schedule.json", {cache:"no-store"})).json(); canSave = false; }
     D.weeks.forEach(w => w.games.forEach(g => delete g.auto));
+    const fresh = !D.settings; D.settings = {...SET_DEF, ...(D.settings||{})}; D.__fresh = fresh;
     W = Math.max(0, D.weeks.findIndex(w=>!w.done)); if (D.weeks[W]?.done) W = D.weeks.length-1;
   }
   $("#save").onclick = async () => {
     if (!canSave) return msg($("#smsg"), "Sign in to save. You can still copy the Discord post.", false);
-    const out = JSON.parse(JSON.stringify(D)); out.weeks.forEach(w => w.games.forEach(g => delete g.auto));
+    const out = JSON.parse(JSON.stringify(D)); delete out.__fresh; out.weeks.forEach(w => w.games.forEach(g => delete g.auto));
     $("#save").disabled = true; msg($("#smsg"), "Saving…");
     try{
       const r = await fetch(API, {method:"PUT", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
@@ -276,8 +305,9 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     const P = pool(); if ($("#pbye").checked && P.length && !w.done) out.push(`Bye: ${P.map(mention).join(", ")}`, "");
     if ($("#pnotdone").checked) out.push("NOT DONE");
     if (dl) out.push(dl); out.push(owners());
-    if (cu.length){ out.push("", "Catch up games"); cu.forEach(g => out.push(line(g))); out.push(`${dl} ${owners()} @everyone`.trim()); }
-    else out[out.length-1] += " @everyone";
+    const ev = D.settings?.pingEveryone === false ? "" : " @everyone";
+    if (cu.length){ out.push("", "Catch up games"); cu.forEach(g => out.push(line(g))); out.push(`${dl} ${owners()}${ev}`.trim()); }
+    else out[out.length-1] += ev;
     $("#post").value = out.join("\n");
   }
   ["#pres","#pbye","#pnotdone"].forEach(s => $(s).onchange = renderPost);
@@ -285,25 +315,50 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
 
   // ---------- teams ----------
   function renderTeams(){
-    $("#tbody").innerHTML = D.teams.map((t,i)=>`<tr data-i="${i}"><td><input type="checkbox" data-f="active" ${t.active?"checked":""} aria-label="${esc(t.name)} active"></td>
+    $("#tbody").innerHTML = D.teams.map((t,i)=>`<tr data-i="${i}"><td style="white-space:nowrap"><select data-f="mode" aria-label="${esc(t.name)} status">${[["auto","Auto"],["on","Always"],["off","Never"]].map(([v,l])=>`<option value="${v}" ${(t.mode||"auto")===v?"selected":""}>${l}</option>`).join("")}</select> <span class="st" style="font-size:12px;font-weight:700;letter-spacing:.1em;color:${t.active?"var(--good)":"var(--mute)"}">${t.active?"ACTIVE":"OUT"}</span></td>
       <td><span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span></td><td><b>${esc(t.name)}</b></td>
       <td style="width:80px"><input type="number" min="0" max="25" data-f="players" value="${esc(t.players ?? 0)}" aria-label="Players"></td>
       <td><input type="text" data-f="fo" value="${esc(t.fo||"")}" aria-label="FO"></td>
       <td><input type="text" data-f="role" value="${esc(t.role||"")}" placeholder="optional" aria-label="Role ID" inputmode="numeric"></td>
       <td style="width:60px"><input type="color" data-f="color" value="${esc(t.color)}" aria-label="Color" style="width:44px;height:34px;padding:2px"></td></tr>`).join("");
-    $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
   }
+  function renderSettings(){
+    const s = D.settings;
+    $("#sMin").value = s.minPlayers; $("#sFO").checked = s.requireFO; $("#sDays").value = s.deadlineDays; $("#sCu").value = String(s.maxCatchup); $("#sRm").value = s.rematch;
+    $("#sEvery").checked = s.pingEveryone; $("#sAnn").value = s.announcement || "";
+    $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
+    renderPrev();
+  }
+  function renderPrev(){
+    const act = D.teams.filter(t=>t.active), out = D.teams.filter(t=>!t.active && (t.players||0) > 0);
+    $("#sPrev").innerHTML = `<b style="color:var(--good)">${act.length} active:</b> ${act.map(t=>`${esc(t.name)} (${t.players})`).join(", ") || "none"}<br><b>Left out:</b> ${out.map(t=>`${esc(t.name)} (${t.players}${t.fo?"":", no FO"})`).join(", ") || "none"}`;
+  }
+  const SET_DEF = {minPlayers:5, requireFO:true, deadlineDays:4, maxCatchup:1, rematch:"avoid", pingEveryone:true, announcement:""};
+  function applyRules(){
+    const s = D.settings;
+    D.teams.forEach(t => { const m = t.mode || "auto"; t.active = m === "on" ? true : m === "off" ? false : (t.players||0) >= s.minPlayers && (!s.requireFO || !!(t.fo||"").trim()); });
+  }
+  const setS = (k, v) => { D.settings[k] = v; if (k === "minPlayers" || k === "requireFO") { applyRules(); renderPrev(); } setDirty(true); renderPost(); };
+  $("#sMin").oninput = e => { const v = parseInt(e.target.value); if (v > 0) setS("minPlayers", v); };
+  $("#sFO").onchange = e => setS("requireFO", e.target.checked);
+  $("#sDays").oninput = e => { const v = parseInt(e.target.value); if (v > 0) setS("deadlineDays", v); };
+  $("#sCu").onchange = e => setS("maxCatchup", +e.target.value);
+  $("#sRm").onchange = e => setS("rematch", e.target.value);
+  $("#sEvery").onchange = e => setS("pingEveryone", e.target.checked);
+  $("#sAnn").oninput = e => setS("announcement", e.target.value);
   $("#tbody").addEventListener("input", e => { const tr = e.target.closest("tr"), f = e.target.dataset.f; if (!tr || !f) return; const t = D.teams[+tr.dataset.i];
-    t[f] = f === "active" ? e.target.checked : f === "players" ? +e.target.value : e.target.value.trim(); setDirty(true); });
-  $("#tbody").addEventListener("change", e => { if (e.target.dataset.f === "active"){ D.teams[+e.target.closest("tr").dataset.i].active = e.target.checked; setDirty(true); } });
+    if (f === "mode") return; t[f] = f === "players" ? +e.target.value : e.target.value.trim();
+    if (f === "players" || f === "fo"){ applyRules(); const st = tr.querySelector(".st"); st.textContent = t.active ? "ACTIVE" : "OUT"; st.style.color = t.active ? "var(--good)" : "var(--mute)"; }
+    setDirty(true); });
+  $("#tbody").addEventListener("change", e => { if (e.target.dataset.f === "mode"){ const t = D.teams[+e.target.closest("tr").dataset.i]; t.mode = e.target.value; if (t.mode === "auto") delete t.mode; applyRules(); renderTeams(); setDirty(true); } });
   $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
   $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
   $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); renderPost(); };
 
   document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b) return;
     document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
-    $("#tab-week").classList.toggle("hide", b.dataset.tab !== "week"); $("#tab-teams").classList.toggle("hide", b.dataset.tab !== "teams");
-    if (b.dataset.tab === "week") renderWeek(); else renderTeams(); });
+    ["week","teams","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", b.dataset.tab !== k));
+    if (b.dataset.tab === "week") renderWeek(); else if (b.dataset.tab === "teams") renderTeams(); else renderSettings(); });
 
   // ---------- boot ----------
   async function boot(){
@@ -311,6 +366,8 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
       $("#gate").classList.add("hide"); $("#app").classList.remove("hide"); $("#bar").classList.remove("hide");
       $("#who").textContent = canSave ? `Signed in · editing ${OWNER}/${REPO}` : "Not signed in — you can build and copy, but not save.";
       renderWeek(); setDirty(false);
+      if (D.__fresh){ const before = D.teams.filter(t=>t.active).map(t=>t.abbr).join(); applyRules(); if (D.teams.filter(t=>t.active).map(t=>t.abbr).join() !== before){ setDirty(true); renderWeek(); msg($("#smsg"), "New Settings applied (5+ players and an FO = active). Check the Settings tab, then Save.", true); } }
+      delete D.__fresh;
     }catch(e){ msg($("#gmsg"), e.message, false); }
   }
   $("#signin").onclick = () => { TOKEN = $("#tok").value.trim(); if (!TOKEN) return; try{ localStorage.setItem("vk_token", TOKEN); }catch{} boot(); };

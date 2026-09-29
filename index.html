@@ -121,7 +121,8 @@ footer a{color:var(--mute)}
     document.querySelectorAll("nav a").forEach(a => { const k = a.getAttribute("href").replace(/^#\/?/,""); if (k === key) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
     if (!D) return;
     const w = current(); $("#sub").textContent = `${D.league} ${D.season} · Week ${w?.week ?? "–"} · ${D.teams.filter(t=>t.active).length} active teams`;
-    $("#view").innerHTML = key === "weeks" ? vWeeks() : key === "teams" ? vTeams() : vWeek();
+    const ann = (D.settings?.announcement || "").trim();
+    $("#view").innerHTML = (ann ? `<div class="panel" style="border-color:var(--gold);background:rgba(255,198,47,.08);flex-direction:row;align-items:center;gap:12px"><span style="font-family:var(--num);font-size:22px;color:var(--gold);letter-spacing:.08em">NOTICE</span><span style="white-space:pre-line">${esc(ann)}</span></div>` : "") + (key === "weeks" ? vWeeks() : key === "teams" ? vTeams() : vWeek());
   }
   window.addEventListener("hashchange", render);
   (async () => {

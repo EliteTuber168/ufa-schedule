@@ -230,7 +230,7 @@ textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;f
         <label class="opt ${S.noRematch==="allow"?"on":""}"><input type="radio" name="rm" value="allow" ${S.noRematch==="allow"?"checked":""}><span>Don't care<small>Still avoids last week's opponent</small></span></label></div>`;
     }, bind(){ document.querySelectorAll("input[name=rm]").forEach(r => r.onchange = () => { S.noRematch = r.value; draw(); }); }},
     { id:"deadline", q:"When's the deadline?", help:"When all of this week's games need to be played.", render(){
-      if (!S.deadline){ const w = D.weeks[targetIdx()]; if (w?.deadline && S.mode === "fill") S.deadline = w.deadline; else { const d = new Date(); d.setDate(d.getDate()+4); S.deadline = iso(d); } }
+      if (!S.deadline){ const w = D.weeks[targetIdx()]; if (w?.deadline && S.mode === "fill") S.deadline = w.deadline; else { const d = new Date(); d.setDate(d.getDate()+(D.settings?.deadlineDays || 4)); S.deadline = iso(d); } }
       const q = [3,4,5,7].map(n=>{ const d = new Date(); d.setDate(d.getDate()+n); return {n, v:iso(d)}; });
       return `<div class="row">${q.map(x=>`<button class="btn ${S.deadline===x.v?"red":""}" data-d="${x.v}">${x.n === 7 ? "1 week" : x.n + " days"}<br><small>${fmtDate(x.v)}</small></button>`).join("")}</div>
         <div class="row"><span class="note">Or pick a date:</span><input type="date" id="dl" value="${esc(S.deadline)}"></div>
@@ -290,8 +290,9 @@ textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;f
     if (S.bye.length) out.push(`Bye: ${S.bye.map(mention).join(", ")}`, "");
     out.push(dl, owners());
     const CU = [...S.catchups, ...S.autoCu];
-    if (CU.length){ out.push("", "Catch up games"); CU.forEach(g => out.push(`${mention(g.a)} vs ${mention(g.b)}`)); out.push(`${dl} ${owners()} @everyone`); }
-    else out[out.length-1] += " @everyone";
+    const ev = D.settings?.pingEveryone === false ? "" : " @everyone";
+    if (CU.length){ out.push("", "Catch up games"); CU.forEach(g => out.push(`${mention(g.a)} vs ${mention(g.b)}`)); out.push(`${dl} ${owners()}${ev}`); }
+    else out[out.length-1] += ev;
     return out.join("\n");
   }
 
@@ -338,6 +339,7 @@ textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;f
         if (r.ok){ const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content)); canSave = true; }
       }
       if (!D) D = await (await fetch("schedule.json", {cache:"no-store"})).json();
+      const st = D.settings || {}; if (st.rematch) S.noRematch = st.rematch; if (st.maxCatchup != null){ S.cuMax = Math.max(1, st.maxCatchup); S.cuAuto = st.maxCatchup > 0; }
       draw();
     }catch{ $("#card").innerHTML = `<div class="msg err">Couldn't load the schedule. Refresh to try again.</div>`; }
   })();
