@@ -3,7 +3,7 @@
  "rounds": 8,
  "snake": true,
  "pickMinutes": 0,
- "clockStart": 1790724550619,
+ "clockStart": 1790724615126,
  "teams": [
   {
    "abbr": "MIN",
@@ -198,6 +198,11 @@
    "discord": "1455465653761736930"
   }
  ],
- "picks": [],
+ "picks": [
+  {
+   "player": 1,
+   "at": 1790724615126
+  }
+ ],
  "announcement": ""
 }
