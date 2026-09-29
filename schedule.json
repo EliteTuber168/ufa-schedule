@@ -1,0 +1,477 @@
+{
+ "league": "UFA",
+ "season": "2026",
+ "roles": {
+  "owners": "Franchise owner",
+  "everyone": "@everyone"
+ },
+ "teams": [
+  {
+   "name": "Arizona Cardinals",
+   "abbr": "ARI",
+   "color": "#97233F",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Atlanta Falcons",
+   "abbr": "ATL",
+   "color": "#A71930",
+   "active": true,
+   "role": "",
+   "players": 3,
+   "fo": "彼女は嫌っている CLAMPS"
+  },
+  {
+   "name": "Baltimore Ravens",
+   "abbr": "BAL",
+   "color": "#241773",
+   "active": true,
+   "role": "",
+   "players": 5,
+   "fo": "350aj"
+  },
+  {
+   "name": "Buffalo Bills",
+   "abbr": "BUF",
+   "color": "#00338D",
+   "active": true,
+   "role": "",
+   "players": 12,
+   "fo": "KA1♠️"
+  },
+  {
+   "name": "Carolina Panthers",
+   "abbr": "CAR",
+   "color": "#0085CA",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Chicago Bears",
+   "abbr": "CHI",
+   "color": "#C83803",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Cincinnati Bengals",
+   "abbr": "CIN",
+   "color": "#FB4F14",
+   "active": true,
+   "role": "",
+   "players": 10,
+   "fo": "Georgerussel"
+  },
+  {
+   "name": "Cleveland Browns",
+   "abbr": "CLE",
+   "color": "#FF3C00",
+   "active": true,
+   "role": "",
+   "players": 5,
+   "fo": "Jace"
+  },
+  {
+   "name": "Dallas Cowboys",
+   "abbr": "DAL",
+   "color": "#003594",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Denver Broncos",
+   "abbr": "DEN",
+   "color": "#FB4F14",
+   "active": true,
+   "role": "",
+   "players": 5,
+   "fo": "SensicJ"
+  },
+  {
+   "name": "Detroit Lions",
+   "abbr": "DET",
+   "color": "#0076B6",
+   "active": false,
+   "role": "",
+   "players": 4,
+   "fo": ""
+  },
+  {
+   "name": "Green Bay Packers",
+   "abbr": "GB",
+   "color": "#203731",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Houston Texans",
+   "abbr": "HOU",
+   "color": "#A71930",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Indianapolis Colts",
+   "abbr": "IND",
+   "color": "#002C5F",
+   "active": true,
+   "role": "",
+   "players": 12,
+   "fo": "Rivon"
+  },
+  {
+   "name": "Jacksonville Jaguars",
+   "abbr": "JAX",
+   "color": "#006778",
+   "active": true,
+   "role": "",
+   "players": 3,
+   "fo": "3B_Knzxo"
+  },
+  {
+   "name": "Kansas City Chiefs",
+   "abbr": "KC",
+   "color": "#E31837",
+   "active": true,
+   "role": "",
+   "players": 14,
+   "fo": "𝑩𝑨𝑳𝑬𝑵𝑪𝑰𝑨𝑮𝑨"
+  },
+  {
+   "name": "Las Vegas Raiders",
+   "abbr": "LV",
+   "color": "#A5ACAF",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Los Angeles Chargers",
+   "abbr": "LAC",
+   "color": "#0080C6",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Los Angeles Rams",
+   "abbr": "LAR",
+   "color": "#003594",
+   "active": true,
+   "role": "",
+   "players": 4,
+   "fo": "ccrick1044"
+  },
+  {
+   "name": "Miami Dolphins",
+   "abbr": "MIA",
+   "color": "#008E97",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Minnesota Vikings",
+   "abbr": "MIN",
+   "color": "#4F2683",
+   "active": true,
+   "role": "",
+   "players": 11,
+   "fo": "CrazyAndrew"
+  },
+  {
+   "name": "New England Patriots",
+   "abbr": "NE",
+   "color": "#002244",
+   "active": false,
+   "role": "",
+   "players": 1,
+   "fo": "wtf u want"
+  },
+  {
+   "name": "New Orleans Saints",
+   "abbr": "NO",
+   "color": "#D3BC8D",
+   "active": true,
+   "role": "",
+   "players": 8,
+   "fo": "MYMY022509"
+  },
+  {
+   "name": "New York Giants",
+   "abbr": "NYG",
+   "color": "#0B2265",
+   "active": false,
+   "role": "",
+   "players": 1,
+   "fo": "Kjxtocold"
+  },
+  {
+   "name": "New York Jets",
+   "abbr": "NYJ",
+   "color": "#125740",
+   "active": true,
+   "role": "",
+   "players": 21,
+   "fo": "Skib"
+  },
+  {
+   "name": "Philadelphia Eagles",
+   "abbr": "PHI",
+   "color": "#004C54",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Pittsburgh Steelers",
+   "abbr": "PIT",
+   "color": "#FFB612",
+   "active": false,
+   "role": "",
+   "players": 1,
+   "fo": ""
+  },
+  {
+   "name": "San Francisco 49ers",
+   "abbr": "SF",
+   "color": "#AA0000",
+   "active": true,
+   "role": "",
+   "players": 7,
+   "fo": "|DJ"
+  },
+  {
+   "name": "Seattle Seahawks",
+   "abbr": "SEA",
+   "color": "#69BE28",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Tampa Bay Buccaneers",
+   "abbr": "TB",
+   "color": "#D50A0A",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Tennessee Titans",
+   "abbr": "TEN",
+   "color": "#4B92DB",
+   "active": false,
+   "role": "",
+   "players": 0,
+   "fo": ""
+  },
+  {
+   "name": "Washington Commanders",
+   "abbr": "WAS",
+   "color": "#5A1414",
+   "active": true,
+   "role": "",
+   "players": 2,
+   "fo": "Just_benn10"
+  }
+ ],
+ "weeks": [
+  {
+   "week": 1,
+   "deadline": "2026-09-20",
+   "done": true,
+   "games": [
+    {
+     "a": "BAL",
+     "b": "LV",
+     "result": ""
+    },
+    {
+     "a": "WAS",
+     "b": "NE",
+     "result": ""
+    },
+    {
+     "a": "CLE",
+     "b": "NO",
+     "result": ""
+    },
+    {
+     "a": "BUF",
+     "b": "CHI",
+     "result": ""
+    }
+   ]
+  },
+  {
+   "week": 2,
+   "deadline": "2026-09-21",
+   "done": true,
+   "games": [
+    {
+     "a": "KC",
+     "b": "SEA",
+     "result": ""
+    },
+    {
+     "a": "CLE",
+     "b": "BAL",
+     "result": ""
+    },
+    {
+     "a": "NO",
+     "b": "BUF",
+     "result": ""
+    },
+    {
+     "a": "CHI",
+     "b": "WAS",
+     "result": ""
+    },
+    {
+     "a": "NE",
+     "b": "PIT",
+     "result": ""
+    },
+    {
+     "a": "SF",
+     "b": "NYG",
+     "result": ""
+    }
+   ]
+  },
+  {
+   "week": 3,
+   "deadline": "2026-09-27",
+   "done": true,
+   "games": [
+    {
+     "a": "SF",
+     "b": "KC",
+     "result": ""
+    },
+    {
+     "a": "CIN",
+     "b": "MIN",
+     "result": ""
+    },
+    {
+     "a": "WAS",
+     "b": "BUF",
+     "result": "Commanders 45-44"
+    },
+    {
+     "a": "LAR",
+     "b": "TB",
+     "result": "FFW Buccaneers"
+    },
+    {
+     "a": "LAC",
+     "b": "NYJ",
+     "result": "FFW Jets"
+    },
+    {
+     "a": "CLE",
+     "b": "SEA",
+     "result": "FFW Browns"
+    }
+   ]
+  },
+  {
+   "week": 4,
+   "deadline": "2026-10-01",
+   "done": true,
+   "games": [
+    {
+     "a": "IND",
+     "b": "CLE",
+     "result": "Colts win"
+    },
+    {
+     "a": "DEN",
+     "b": "NYJ",
+     "result": ""
+    },
+    {
+     "a": "SF",
+     "b": "BUF",
+     "result": ""
+    },
+    {
+     "a": "MIN",
+     "b": "CIN",
+     "result": "FFW Vikings"
+    },
+    {
+     "a": "ATL",
+     "b": "BAL",
+     "result": "FFW Falcons"
+    },
+    {
+     "a": "NO",
+     "b": "NE",
+     "result": "FFW Saints"
+    },
+    {
+     "a": "KC",
+     "b": "JAX",
+     "result": "FFW Chiefs"
+    }
+   ]
+  },
+  {
+   "week": 5,
+   "deadline": "2026-10-03",
+   "done": false,
+   "games": [
+    {
+     "a": "MIN",
+     "b": "IND",
+     "result": ""
+    },
+    {
+     "a": "NYJ",
+     "b": "BUF",
+     "result": ""
+    },
+    {
+     "a": "CLE",
+     "b": "KC",
+     "result": ""
+    },
+    {
+     "a": "NYG",
+     "b": "LAR",
+     "result": "",
+     "catchup": true
+    },
+    {
+     "a": "CIN",
+     "b": "JAX",
+     "result": "",
+     "catchup": true
+    }
+   ]
+  }
+ ]
+}

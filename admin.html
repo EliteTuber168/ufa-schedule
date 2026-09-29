@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFA Scheduler</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}
+/* Scheduler admin: week editor with generator, teams table, Discord post builder. Dark only, matches the public page. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;--warn:#ffa24a;
+  --num:"Bebas Neue",Impact,sans-serif;--body:"Rajdhani",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;font-weight:500;line-height:1.4}
+a{color:var(--gold)}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 16px 96px;display:flex;flex-direction:column;gap:20px}
+header{text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center}
+.eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(44px,8vw,72px);line-height:.95;letter-spacing:.04em}
+h1 span{color:var(--red)} h1 b{color:var(--blue);font-weight:400}
+h2{margin:0;font-family:var(--num);font-weight:400;font-size:28px;letter-spacing:.06em;line-height:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.panel>label.f{flex:none}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase;min-width:0;flex:1 1 140px}
+label.c{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;cursor:pointer}
+input,select,textarea{font:inherit;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+label.f input,label.f select{width:100%}
+input[type=checkbox]{accent-color:var(--red);width:18px;height:18px;padding:0}
+textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;font-weight:500;resize:vertical}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.btn{font:inherit;font-weight:700;letter-spacing:.08em;font-size:14px;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#1a1300}
+.btn.x{padding:6px 10px;color:var(--red);border-color:rgba(232,66,74,.5)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{font:inherit;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);background:transparent;border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+.tabs button[aria-selected=true]{color:#fff;background:var(--red);border-color:var(--red)}
+.note{font-size:14px;color:var(--mute)}
+.msg{font-size:14px;font-weight:700}.msg.ok{color:var(--good)}.msg.err{color:var(--red)}
+.games{display:flex;flex-direction:column;gap:8px}
+.g{display:grid;grid-template-columns:minmax(0,1fr) 26px minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px}
+.g.auto{border-color:var(--blue);background:rgba(61,123,255,.08)}
+.g .vs{font-family:var(--num);color:var(--mute);text-align:center}
+.g select,.g input[type=text]{width:100%}
+.warn{grid-column:1/-1;font-size:13px;font-weight:700;color:var(--warn)}
+@media (max-width:720px){.g{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}.g input[type=text]{grid-column:1/-1}}
+.sticky{position:fixed;left:0;right:0;bottom:0;z-index:10;background:rgba(7,11,22,.95);border-top:1px solid var(--line);padding:10px 16px;display:flex;justify-content:center;gap:10px;align-items:center}
+.sticky .dirty{color:var(--gold);font-weight:700;font-size:14px}
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th,td{padding:6px 6px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
+td input[type=text],td input[type=number]{width:100%}
+.badge{display:inline-flex;width:36px;height:30px;border-radius:7px;align-items:center;justify-content:center;font-family:var(--num);font-size:16px;color:#fff;padding-top:2px}
+.hide{display:none!important}
+.gate{max-width:560px;margin:0 auto}
+ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:column;gap:4px} ol b{color:var(--fg)}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">LEAGUE SCHEDULER</div>
+    <h1><span>UFA</span> <b>ADMIN</b></h1>
+    <div><a href="./">← Public schedule</a></div>
+  </header>
+
+  <section class="panel gate" id="gate">
+    <h2>Sign in</h2>
+    <div class="note">Saving needs a GitHub token that can write to the <b>ufa-schedule</b> repo. You can still build matchups and copy Discord posts without signing in.</div>
+    <ol>
+      <li>Open <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener">your GitHub tokens</a> and edit your token (or make a new one).</li>
+      <li><b>Repository access</b> → Only select repositories → add <b>ufa-schedule</b>.</li>
+      <li><b>Permissions</b> → Repositories → <b>Contents: Read and write</b>. Save.</li>
+    </ol>
+    <label class="f">Access token<input type="password" id="tok" autocomplete="off" placeholder="github_pat_…"></label>
+    <div class="row"><button class="btn gold" id="signin">Sign in</button><button class="btn" id="skip">Continue without saving</button><span class="msg" id="gmsg"></span></div>
+  </section>
+
+  <div id="app" class="hide" style="display:flex;flex-direction:column;gap:20px">
+    <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn" id="signout">Sign out</button></div>
+    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button></div>
+
+    <div id="tab-week" style="display:flex;flex-direction:column;gap:20px">
+      <section class="panel">
+        <div class="row">
+          <label class="f" style="flex:0 1 160px">Week<select id="wsel"></select></label>
+          <button class="btn" id="newweek">+ New week</button>
+          <label class="f" style="flex:0 1 180px">Deadline<input type="date" id="wdl"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="wdone"> Week finished</label>
+        </div>
+        <label class="f">Note on public page (optional)<input type="text" id="wnote" placeholder="e.g. Playoff race heating up"></label>
+      </section>
+
+      <section class="panel">
+        <div class="row" style="justify-content:space-between"><h2 id="gtitle">Matchups</h2><button class="btn" id="addgame">+ Add game</button></div>
+        <div class="games" id="games"></div>
+        <div class="note" id="byes"></div>
+        <div class="panel" style="background:var(--panel2);gap:10px">
+          <h2 style="font-size:22px">Auto-schedule</h2>
+          <div class="note">Fills the rest of the week with active teams that don't have a game yet. It avoids rematches (especially last week's), and if there's an odd number it gives the bye to whoever has had the fewest. Suggested games show in blue until you save.</div>
+          <label class="c"><input type="checkbox" id="cuplay" checked> Teams in catch-up games still get a regular game</label>
+          <div class="row"><button class="btn blue" id="fill">Fill rest of week</button><button class="btn" id="reroll">Reroll suggestions</button><button class="btn" id="clearauto">Remove suggestions</button></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row" style="justify-content:space-between"><h2>Discord post</h2><button class="btn gold" id="copy">Copy post</button></div>
+        <div class="row">
+          <label class="c"><input type="checkbox" id="pres" checked> Include results</label>
+          <label class="c"><input type="checkbox" id="pbye" checked> List byes</label>
+          <label class="c"><input type="checkbox" id="pnotdone"> Add "NOT DONE"</label>
+        </div>
+        <textarea id="post" rows="14" aria-label="Discord post"></textarea>
+        <div class="note">Team names only ping in Discord if you add role IDs in <b>Teams &amp; roles</b>. Otherwise they post as plain text like "@Minnesota Vikings".</div>
+        <span class="msg" id="cmsg"></span>
+      </section>
+    </div>
+
+    <div id="tab-teams" class="hide" style="display:flex;flex-direction:column;gap:20px">
+      <section class="panel">
+        <h2>Teams</h2>
+        <div class="note">Only <b>active</b> teams get auto-scheduled. <b>Discord role ID</b>: turn on Developer Mode in Discord, right-click the team role, then Copy Role ID. With an ID, the post pings the role for real.</div>
+        <div class="tscroll"><table><thead><tr><th>Active</th><th></th><th>Team</th><th>Players</th><th>FO</th><th>Discord role ID</th><th>Color</th></tr></thead><tbody id="tbody"></tbody></table></div>
+      </section>
+      <section class="panel">
+        <h2>League</h2>
+        <div class="row">
+          <label class="f">League name<input type="text" id="lname"></label>
+          <label class="f">Season<input type="text" id="lseason"></label>
+          <label class="f">Owners role (name or role ID)<input type="text" id="lowners"></label>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="sticky hide" id="bar"><span class="dirty" id="dirty"></span><button class="btn red" id="save">Save &amp; publish</button><span class="msg" id="smsg"></span></div>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const h = location.hostname, parts = location.pathname.split("/").filter(Boolean);
+  const OWNER = h.endsWith(".github.io") ? h.split(".")[0] : "EliteTuber168";
+  const REPO = h.endsWith(".github.io") ? (parts[0] || h) : "ufa-schedule";
+  const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/schedule.json`;
+  let TOKEN = ""; try{ TOKEN = localStorage.getItem("vk_token") || ""; }catch{}
+  let D = null, sha = null, W = 0, dirty = false, canSave = false;
+  const b64e = s => { const b = new TextEncoder().encode(s); let o = ""; for (let i=0;i<b.length;i+=0x8000) o += String.fromCharCode(...b.subarray(i,i+0x8000)); return btoa(o); };
+  const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c => c.charCodeAt(0)));
+  const msg = (el, t, ok=true) => { el.textContent = t; el.className = "msg " + (ok?"ok":"err"); };
+  const T = a => D.teams.find(t=>t.abbr===a) || {name:a, abbr:a, color:"#445"};
+  const setDirty = v => { dirty = v; $("#dirty").textContent = v ? "Unsaved changes" : ""; };
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = s => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return `${MON[m-1]} ${d}`; };
+
+  // ---------- load / save ----------
+  async function load(){
+    if (TOKEN){
+      const r = await fetch(API + "?t=" + Date.now(), {cache:"no-store", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json"}});
+      if (!r.ok){ const e = new Error(r.status === 401 ? "That token didn't work." : r.status === 404 ? "That token can't see the ufa-schedule repo — add it to the token." : "GitHub error " + r.status); throw e; }
+      const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content)); canSave = true;
+    } else { D = await (await fetch("schedule.json", {cache:"no-store"})).json(); canSave = false; }
+    D.weeks.forEach(w => w.games.forEach(g => delete g.auto));
+    W = Math.max(0, D.weeks.findIndex(w=>!w.done)); if (D.weeks[W]?.done) W = D.weeks.length-1;
+  }
+  $("#save").onclick = async () => {
+    if (!canSave) return msg($("#smsg"), "Sign in to save. You can still copy the Discord post.", false);
+    const out = JSON.parse(JSON.stringify(D)); out.weeks.forEach(w => w.games.forEach(g => delete g.auto));
+    $("#save").disabled = true; msg($("#smsg"), "Saving…");
+    try{
+      const r = await fetch(API, {method:"PUT", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
+        body:JSON.stringify({message:`Update schedule (week ${D.weeks[W]?.week ?? ""})`, content:b64e(JSON.stringify(out,null,1)+"\n"), sha})});
+      if (!r.ok){ let m = r.status; try{ m = (await r.json()).message; }catch{} throw new Error(r.status === 409 ? "Someone else saved first — reload the page." : m); }
+      sha = (await r.json()).content.sha; D.weeks.forEach(w => w.games.forEach(g => delete g.auto)); setDirty(false); renderWeek();
+      msg($("#smsg"), "Published. The public page updates in about a minute.");
+    }catch(e){ msg($("#smsg"), "Couldn't save: " + e.message, false); }
+    $("#save").disabled = false;
+  };
+  window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
+
+  // ---------- history helpers ----------
+  function history(exceptWeek){
+    const meet = {}, last = {}, played = {}, bye = {};
+    const act = new Set(D.teams.filter(t=>t.active).map(t=>t.abbr));
+    D.weeks.forEach((w, wi) => {
+      if (wi === exceptWeek) return;
+      const inW = new Set();
+      for (const g of w.games){ const k = [g.a,g.b].sort().join("|"); meet[k] = (meet[k]||0) + 1; last[k] = Math.max(last[k]||0, w.week); played[g.a] = (played[g.a]||0)+1; played[g.b] = (played[g.b]||0)+1; if (!g.catchup){ inW.add(g.a); inW.add(g.b); } }
+      if (wi < exceptWeek) for (const a of act) if (!inW.has(a)) bye[a] = (bye[a]||0) + 1;
+    });
+    return {meet, last, played, bye};
+  }
+  const pairKey = (a,b) => [a,b].sort().join("|");
+
+  // ---------- generator ----------
+  function pool(){
+    const w = D.weeks[W], busy = new Set();
+    for (const g of w.games){ if (!g.catchup || !$("#cuplay").checked){ busy.add(g.a); busy.add(g.b); } }
+    return D.teams.filter(t=>t.active && !busy.has(t.abbr)).map(t=>t.abbr);
+  }
+  function generate(){
+    const w = D.weeks[W], H = history(W), P = pool();
+    if (P.length < 2) return {games:[], bye:P[0] || null};
+    const cost = (a,b) => { const k = pairKey(a,b), m = H.meet[k] || 0, l = H.last[k] || 0; return m*10 + (l && w.week - l <= 1 ? 25 : l && w.week - l <= 2 ? 8 : 0); };
+    let byeTeam = null, list = P.slice();
+    if (list.length % 2){
+      const r = list.map(a=>({a, s:(H.bye[a]||0)*100 - (H.played[a]||0) + Math.random()})).sort((x,y)=>x.s-y.s);
+      byeTeam = r[0].a; list = list.filter(a=>a!==byeTeam);
+    }
+    let best = null, bestCost = Infinity, ties = [];
+    for (let it=0; it<600; it++){
+      const L = list.slice().sort(()=>Math.random()-.5), out = []; let c = 0;
+      while (L.length){ const a = L.shift(); let bi = 0, bc = Infinity; L.forEach((b,i)=>{ const x = cost(a,b) + Math.random()*.5; if (x < bc){ bc = x; bi = i; } }); const b = L.splice(bi,1)[0]; out.push([a,b]); c += cost(a,b); }
+      if (c < bestCost){ bestCost = c; ties = [out]; } else if (c === bestCost && ties.length < 40) ties.push(out);
+    }
+    best = ties[Math.floor(Math.random()*ties.length)];
+    return {games: best.map(([a,b])=>({a, b, result:"", auto:true})), bye:byeTeam};
+  }
+  $("#fill").onclick = () => { const r = generate(); D.weeks[W].games.push(...r.games); setDirty(true); renderWeek(); };
+  $("#reroll").onclick = () => { D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); $("#fill").onclick(); };
+  $("#clearauto").onclick = () => { D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); setDirty(true); renderWeek(); };
+
+  // ---------- week editor ----------
+  function renderWeekSel(){ $("#wsel").innerHTML = D.weeks.map((w,i)=>`<option value="${i}" ${i===W?"selected":""}>Week ${w.week}${w.done?"":" (current)"}</option>`).join(""); }
+  function teamOpts(sel){ return `<option value="">—</option>` + D.teams.slice().sort((x,y)=>(y.active-x.active)||x.name.localeCompare(y.name)).map(t=>`<option value="${t.abbr}" ${t.abbr===sel?"selected":""}>${esc(t.name)}${t.active?"":" (inactive)"}</option>`).join(""); }
+  function renderWeek(){
+    const w = D.weeks[W]; if (!w) return;
+    renderWeekSel(); $("#wdl").value = w.deadline || ""; $("#wdone").checked = !!w.done; $("#wnote").value = w.note || "";
+    $("#gtitle").textContent = `Week ${w.week} matchups`;
+    const H = history(W), count = {};
+    w.games.forEach(g => { if (!g.catchup){ count[g.a] = (count[g.a]||0)+1; count[g.b] = (count[g.b]||0)+1; } });
+    $("#games").innerHTML = w.games.map((g,i)=>{
+      const warn = [];
+      if (g.a && g.a === g.b) warn.push("Same team on both sides");
+      const m = H.meet[pairKey(g.a,g.b)]; if (g.a && g.b && m) warn.push(`Rematch — they've already been scheduled ${m}× (last in week ${H.last[pairKey(g.a,g.b)]})`);
+      if (!g.catchup && (count[g.a] > 1 || count[g.b] > 1)) warn.push("A team is in two games this week");
+      if ((g.a && !T(g.a).active) || (g.b && !T(g.b).active)) warn.push("Includes an inactive team");
+      return `<div class="g ${g.auto?"auto":""}" data-i="${i}"><select data-f="a" aria-label="Team 1">${teamOpts(g.a)}</select><span class="vs">VS</span><select data-f="b" aria-label="Team 2">${teamOpts(g.b)}</select>
+        <input type="text" data-f="result" value="${esc(g.result)}" placeholder="Result (e.g. 45-44, FFW Jets)" aria-label="Result">
+        <label class="c" title="Catch-up game from an earlier week"><input type="checkbox" data-f="catchup" ${g.catchup?"checked":""}> Catch-up</label>
+        <button class="btn x" data-rm="${i}" aria-label="Remove game">✕</button>${warn.length ? `<div class="warn">${warn.map(esc).join(" · ")}</div>` : ""}</div>`;
+    }).join("") || `<div class="note">No games yet. Add them by hand or hit "Fill rest of week".</div>`;
+    const P = pool(); $("#byes").innerHTML = P.length ? `Active teams without a game this week: <b>${P.map(a=>esc(T(a).name)).join(", ")}</b>` : "Every active team has a game this week.";
+    renderPost();
+  }
+  $("#games").addEventListener("change", e => {
+    const el = e.target.closest(".g"); if (!el) return; const g = D.weeks[W].games[+el.dataset.i], f = e.target.dataset.f;
+    if (f === "catchup") g.catchup = e.target.checked || undefined; else if (f) g[f] = e.target.value;
+    if (!g.catchup) delete g.catchup; setDirty(true); renderWeek();
+  });
+  $("#games").addEventListener("input", e => { if (e.target.dataset.f === "result"){ const el = e.target.closest(".g"); D.weeks[W].games[+el.dataset.i].result = e.target.value; setDirty(true); renderPost(); } });
+  $("#games").addEventListener("click", e => { const b = e.target.closest("[data-rm]"); if (b){ D.weeks[W].games.splice(+b.dataset.rm,1); setDirty(true); renderWeek(); } });
+  $("#addgame").onclick = () => { D.weeks[W].games.push({a:"", b:"", result:""}); setDirty(true); renderWeek(); };
+  $("#wsel").onchange = e => { W = +e.target.value; renderWeek(); };
+  $("#wdl").onchange = e => { D.weeks[W].deadline = e.target.value; setDirty(true); renderPost(); };
+  $("#wdone").onchange = e => { D.weeks[W].done = e.target.checked; setDirty(true); renderWeekSel(); };
+  $("#wnote").oninput = e => { D.weeks[W].note = e.target.value || undefined; if (!D.weeks[W].note) delete D.weeks[W].note; setDirty(true); };
+  $("#newweek").onclick = () => {
+    const last = D.weeks[D.weeks.length-1]; const d = new Date(); d.setDate(d.getDate()+5);
+    D.weeks.forEach(w => { if (w !== last) w.done = true; });
+    D.weeks.push({week:(last?.week||0)+1, deadline:d.toLocaleDateString("en-CA"), done:false, games:[]});
+    W = D.weeks.length-1; setDirty(true); renderWeek();
+  };
+  $("#cuplay").onchange = renderWeek;
+
+  // ---------- Discord post ----------
+  const mention = a => { const t = T(a); return t.role ? `<@&${t.role}>` : `@${t.name}`; };
+  const owners = () => { const o = (D.roles?.owners || "Franchise owner").trim(); return /^\d{6,}$/.test(o) ? `<@&${o}>` : `@${o}`; };
+  function renderPost(){
+    const w = D.weeks[W]; if (!w) return;
+    const line = g => `${g.a ? mention(g.a) : "TBD"} vs ${g.b ? mention(g.b) : "TBD"}${$("#pres").checked && g.result ? ` — ${g.result}` : ""}`;
+    const reg = w.games.filter(g=>!g.catchup && (g.a||g.b)), cu = w.games.filter(g=>g.catchup && (g.a||g.b));
+    const dl = w.deadline ? `Deadline ${fmtDate(w.deadline)}` : "";
+    const out = [`WEEK ${w.week}`, ""];
+    reg.forEach(g => out.push(line(g), ""));
+    const P = pool(); if ($("#pbye").checked && P.length && !w.done) out.push(`Bye: ${P.map(mention).join(", ")}`, "");
+    if ($("#pnotdone").checked) out.push("NOT DONE");
+    if (dl) out.push(dl); out.push(owners());
+    if (cu.length){ out.push("", "Catch up games"); cu.forEach(g => out.push(line(g))); out.push(`${dl} ${owners()} @everyone`.trim()); }
+    else out[out.length-1] += " @everyone";
+    $("#post").value = out.join("\n");
+  }
+  ["#pres","#pbye","#pnotdone"].forEach(s => $(s).onchange = renderPost);
+  $("#copy").onclick = async () => { try{ await navigator.clipboard.writeText($("#post").value); msg($("#cmsg"), "Copied — paste it in Discord."); }catch{ $("#post").select(); msg($("#cmsg"), "Press Ctrl+C to copy.", false); } };
+
+  // ---------- teams ----------
+  function renderTeams(){
+    $("#tbody").innerHTML = D.teams.map((t,i)=>`<tr data-i="${i}"><td><input type="checkbox" data-f="active" ${t.active?"checked":""} aria-label="${esc(t.name)} active"></td>
+      <td><span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span></td><td><b>${esc(t.name)}</b></td>
+      <td style="width:80px"><input type="number" min="0" max="25" data-f="players" value="${esc(t.players ?? 0)}" aria-label="Players"></td>
+      <td><input type="text" data-f="fo" value="${esc(t.fo||"")}" aria-label="FO"></td>
+      <td><input type="text" data-f="role" value="${esc(t.role||"")}" placeholder="optional" aria-label="Role ID" inputmode="numeric"></td>
+      <td style="width:60px"><input type="color" data-f="color" value="${esc(t.color)}" aria-label="Color" style="width:44px;height:34px;padding:2px"></td></tr>`).join("");
+    $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
+  }
+  $("#tbody").addEventListener("input", e => { const tr = e.target.closest("tr"), f = e.target.dataset.f; if (!tr || !f) return; const t = D.teams[+tr.dataset.i];
+    t[f] = f === "active" ? e.target.checked : f === "players" ? +e.target.value : e.target.value.trim(); setDirty(true); });
+  $("#tbody").addEventListener("change", e => { if (e.target.dataset.f === "active"){ D.teams[+e.target.closest("tr").dataset.i].active = e.target.checked; setDirty(true); } });
+  $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
+  $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
+  $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); renderPost(); };
+
+  document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b) return;
+    document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
+    $("#tab-week").classList.toggle("hide", b.dataset.tab !== "week"); $("#tab-teams").classList.toggle("hide", b.dataset.tab !== "teams");
+    if (b.dataset.tab === "week") renderWeek(); else renderTeams(); });
+
+  // ---------- boot ----------
+  async function boot(){
+    try{ msg($("#gmsg"), "Loading…"); await load();
+      $("#gate").classList.add("hide"); $("#app").classList.remove("hide"); $("#bar").classList.remove("hide");
+      $("#who").textContent = canSave ? `Signed in · editing ${OWNER}/${REPO}` : "Not signed in — you can build and copy, but not save.";
+      renderWeek(); setDirty(false);
+    }catch(e){ msg($("#gmsg"), e.message, false); }
+  }
+  $("#signin").onclick = () => { TOKEN = $("#tok").value.trim(); if (!TOKEN) return; try{ localStorage.setItem("vk_token", TOKEN); }catch{} boot(); };
+  $("#tok").onkeydown = e => { if (e.key === "Enter") $("#signin").click(); };
+  $("#skip").onclick = () => { TOKEN = ""; boot(); };
+  $("#signout").onclick = () => { try{ localStorage.removeItem("vk_token"); }catch{} location.reload(); };
+  if (TOKEN) boot();
+})();
+</script>
+</body></html>

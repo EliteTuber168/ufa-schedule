@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFA Schedule</title>
+<meta name="description" content="Official UFA league schedule — this week's matchups, deadlines and every past week.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}
+/* League schedule: navy stadium look, current week up top, tabs for weeks and teams. Dark only by choice. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;
+  --num:"Bebas Neue",Impact,"Arial Narrow",sans-serif;--body:"Rajdhani",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;font-weight:500;line-height:1.4}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 60% 35% at 20% -5%,rgba(232,66,74,.22),transparent 70%),radial-gradient(ellipse 60% 35% at 80% -5%,rgba(61,123,255,.22),transparent 70%)}
+a{color:inherit}
+.wrap{position:relative;max-width:1000px;margin:0 auto;padding:24px 16px 64px;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
+.eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(48px,9vw,84px);line-height:.95;letter-spacing:.04em}
+h1 span{color:var(--red)} h1 b{color:var(--blue);font-weight:400}
+h2{margin:0;font-family:var(--num);font-weight:400;font-size:32px;letter-spacing:.06em;line-height:1}
+h3{margin:0;font-size:13px;letter-spacing:.2em;color:var(--gold);font-weight:700;text-transform:uppercase}
+.sub{color:var(--mute);font-size:15px}
+nav{position:sticky;top:0;z-index:5;margin-inline:-16px;padding:10px 16px;background:rgba(7,11,22,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+nav a{flex:none;text-decoration:none;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:7px 14px}
+nav a[aria-current=page]{color:#fff;background:var(--red);border-color:var(--red)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.whead{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+.dl{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.dl b{font-family:var(--num);font-size:26px;font-weight:400;line-height:1;letter-spacing:.04em}
+.dl span{font-size:12px;letter-spacing:.16em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.dl.soon b{color:var(--gold)} .dl.late b{color:var(--red)}
+.games{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.game{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px 12px 10px;display:flex;flex-direction:column;gap:6px;position:relative;min-width:0}
+.team{display:flex;align-items:center;gap:8px;min-width:0}
+.team .fo{margin-left:auto;font-size:12px;color:var(--mute);font-weight:600;text-align:right;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{flex:none;width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--num);font-size:19px;letter-spacing:.04em;color:#fff;border:2px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.6);padding-top:2px}
+.tn{font-weight:700;font-size:17px;line-height:1.15;min-width:0}
+.tn small{display:block;color:var(--mute);font-size:12px;font-weight:600}
+.vs{font-family:var(--num);font-size:16px;color:var(--mute);display:flex;align-items:center;gap:8px;letter-spacing:.1em}.vs::before,.vs::after{content:"";flex:1;height:1px;background:var(--line)}
+.res{text-align:center;margin-top:2px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--good);border-top:1px solid var(--line);padding-top:8px}
+.res.pending{color:var(--mute)}
+.tag{position:absolute;top:-9px;left:12px;font-size:11px;font-weight:700;letter-spacing:.14em;background:var(--gold);color:#1a1300;border-radius:999px;padding:1px 8px}
+.bye{font-size:14px;color:var(--mute)} .bye b{color:var(--fg)}
+.note{font-size:14px;color:var(--mute)}
+.pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;border-radius:999px;padding:2px 9px;border:1px solid var(--line);color:var(--mute)}
+.pill.live{border-color:var(--good);color:var(--good)}
+details.week{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+details.week summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;list-style:none}
+details.week summary::-webkit-details-marker{display:none}
+details.week summary h2{font-size:26px}
+details.week[open] summary{margin-bottom:12px}
+.tscroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:560px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
+td.n{text-align:center}
+.mini{width:30px;height:30px;font-size:14px;border-radius:7px;display:inline-flex}
+.opps{display:flex;flex-wrap:wrap;gap:4px}
+.opps span{font-size:12px;font-weight:700;border-radius:6px;padding:2px 6px;color:#fff;border:1px solid rgba(255,255,255,.15)}
+.empty{padding:22px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
+footer{text-align:center;color:var(--mute);font-size:13px;letter-spacing:.1em}
+footer a{color:var(--mute)}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">OFFICIAL LEAGUE SCHEDULE</div>
+    <h1><span>UFA</span> <b>SCHEDULE</b></h1>
+    <div class="sub" id="sub">Loading…</div>
+  </header>
+  <nav aria-label="Sections"><a href="#/">This Week</a><a href="#/weeks">All Weeks</a><a href="#/teams">Teams</a></nav>
+  <main id="view" style="display:flex;flex-direction:column;gap:18px"></main>
+  <footer>Schedule posted by the league scheduler · <a href="admin.html">Admin</a></footer>
+</div>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let D = null, T = {};
+  const team = a => T[a] || {name:a, abbr:a, color:"#445"};
+  const badge = (a, cls="badge") => `<span class="${cls}" style="background:${esc(team(a).color)}">${esc(a)}</span>`;
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = s => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return `${MON[m-1]} ${d}`; };
+  function deadlineInfo(s){
+    if (!s) return {txt:"No deadline", cls:""};
+    const [y,m,d] = s.split("-").map(Number), end = new Date(y, m-1, d, 23, 59, 59), now = new Date();
+    const days = Math.ceil((end - now) / 864e5);
+    if (end < now) return {txt:`${fmtDate(s)} · passed`, cls:"late"};
+    return {txt: days <= 1 ? `${fmtDate(s)} · today` : `${fmtDate(s)} · ${days} days left`, cls: days <= 2 ? "soon" : ""};
+  }
+  const gameCard = g => `<div class="game">${g.catchup ? `<span class="tag">CATCH-UP</span>` : ""}
+    <div class="team">${badge(g.a)}<div class="tn">${esc(team(g.a).name)}</div><span class="fo">${esc(team(g.a).fo || "")}</span></div>
+    <div class="vs">VS</div>
+    <div class="team">${badge(g.b)}<div class="tn">${esc(team(g.b).name)}</div><span class="fo">${esc(team(g.b).fo || "")}</span></div>
+    <div class="res ${g.result ? "" : "pending"}">${esc(g.result || "Not played yet")}</div></div>`;
+  const byes = w => { const inW = new Set(w.games.filter(g=>!g.catchup).flatMap(g=>[g.a,g.b])); return w.done ? [] : D.teams.filter(t=>t.active && !inW.has(t.abbr)).map(t=>t.abbr); };
+  function weekBlock(w, open){
+    const reg = w.games.filter(g=>!g.catchup), cu = w.games.filter(g=>g.catchup), dl = deadlineInfo(w.deadline), by = byes(w);
+    return `<div class="whead"><div><h2>Week ${w.week}</h2>${w.note ? `<div class="note">${esc(w.note)}</div>` : ""}</div>
+      <div class="dl ${w.done ? "" : dl.cls}"><span>Deadline</span><b>${esc(w.done ? fmtDate(w.deadline) : dl.txt)}</b></div></div>
+      ${reg.length ? `<div class="games">${reg.map(gameCard).join("")}</div>` : `<div class="empty">Matchups coming soon.</div>`}
+      ${by.length && open ? `<div class="bye">No game yet this week: <b>${by.map(a=>esc(team(a).name)).join(", ")}</b></div>` : ""}
+      ${cu.length ? `<h3>Catch-up games</h3><div class="games">${cu.map(gameCard).join("")}</div>` : ""}`;
+  }
+  const current = () => D.weeks.find(w=>!w.done) || D.weeks[D.weeks.length-1];
+  function vWeek(){ const w = current(); return w ? `<section class="panel">${weekBlock(w, true)}</section>` : `<div class="empty">No weeks posted yet.</div>`; }
+  function vWeeks(){
+    return D.weeks.slice().reverse().map((w,i)=>`<details class="week" ${i===0?"open":""}><summary><h2>Week ${w.week}</h2><span class="pill ${w.done?"":"live"}">${w.done ? `${w.games.length} games` : "Current"}</span></summary>${weekBlock(w, !w.done)}</details>`).join("") || `<div class="empty">No weeks yet.</div>`;
+  }
+  function vTeams(){
+    const rows = D.teams.filter(t=>t.active || D.weeks.some(w=>w.games.some(g=>g.a===t.abbr||g.b===t.abbr))).map(t=>{
+      const gs = D.weeks.flatMap(w=>w.games.filter(g=>g.a===t.abbr||g.b===t.abbr).map(g=>({w:w.week, opp:g.a===t.abbr?g.b:g.a, r:g.result})));
+      return {t, gs};
+    }).sort((x,y)=>(y.t.active-x.t.active) || x.t.name.localeCompare(y.t.name));
+    return `<section class="panel"><h2>Teams</h2><div class="note">Every matchup each team has been scheduled this season.</div><div class="tscroll"><table><thead><tr><th>Team</th><th>FO</th><th class="n">Players</th><th class="n">Games</th><th>Opponents (by week)</th></tr></thead><tbody>${
+      rows.map(({t,gs})=>`<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${badge(t.abbr,"badge mini")}<b>${esc(t.name)}</b>${t.active?"":` <span class="pill">inactive</span>`}</span></td><td>${esc(t.fo||"—")}</td><td class="n">${t.players ?? "–"}</td><td class="n">${gs.length}</td><td><div class="opps">${gs.map(g=>`<span style="background:${esc(team(g.opp).color)}" title="Week ${g.w}${g.r?": "+esc(g.r):""}">W${g.w} ${esc(g.opp)}</span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div></section>`;
+  }
+  function render(){
+    const key = location.hash.replace(/^#\/?/,"");
+    document.querySelectorAll("nav a").forEach(a => { const k = a.getAttribute("href").replace(/^#\/?/,""); if (k === key) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+    if (!D) return;
+    const w = current(); $("#sub").textContent = `${D.league} ${D.season} · Week ${w?.week ?? "–"} · ${D.teams.filter(t=>t.active).length} active teams`;
+    $("#view").innerHTML = key === "weeks" ? vWeeks() : key === "teams" ? vTeams() : vWeek();
+  }
+  window.addEventListener("hashchange", render);
+  (async () => {
+    try{ D = await (await fetch("schedule.json", {cache:"no-store"})).json(); T = Object.fromEntries(D.teams.map(t=>[t.abbr,t])); render(); }
+    catch{ $("#sub").textContent = "Couldn't load the schedule. Refresh to try again."; }
+  })();
+  render();
+})();
+</script>
+</body></html>
