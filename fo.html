@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UFA Front Office</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0}
+/* FO portal: log in with Discord or a team password, then manage the roster (offers, releases, promotions, trades). Dark only, matches admin. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;--warn:#ffa24a;--team:#3d7bff;
+  --num:"Bebas Neue",Impact,sans-serif;--body:"Rajdhani",system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;font-weight:500;line-height:1.4}
+a{color:var(--gold)}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 80px;display:flex;flex-direction:column;gap:18px}
+header{text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center}
+.eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(40px,8vw,68px);line-height:.95;letter-spacing:.04em}
+h1 span{color:var(--red)}
+h2{margin:0;font-family:var(--num);font-weight:400;font-size:26px;letter-spacing:.06em;line-height:1}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.note{font-size:14px;color:var(--mute)}
+input,select,textarea{font:inherit;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+textarea{width:100%;resize:vertical}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase;flex:1 1 160px;min-width:0}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.btn{font:inherit;font-weight:700;letter-spacing:.06em;font-size:14px;border-radius:10px;padding:8px 13px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg);white-space:nowrap}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#1a1300}
+.btn.good{background:var(--good);border-color:var(--good);color:#04200f}
+.btn.ghost{color:var(--mute)}
+.btn.sm{padding:5px 9px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.discord{background:#5865f2;border-color:#5865f2;color:#fff;font-size:16px;padding:12px 18px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{font:inherit;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);background:transparent;border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+.tabs button[aria-selected=true]{color:#fff;background:var(--team);border-color:var(--team)}
+.hide{display:none!important}
+.gate{max-width:520px;margin:0 auto;width:100%}
+.or{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:13px;letter-spacing:.2em}.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.teamhead{flex-direction:row;gap:14px;align-items:center;flex-wrap:wrap;border-left:6px solid var(--team)}
+.teamhead .tn{font-family:var(--num);font-size:38px;letter-spacing:.04em;line-height:1}
+.meter{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;flex:1 1 140px;min-width:120px}.meter i{display:block;height:100%;background:var(--team)}
+.banner{background:rgba(255,162,74,.12);border:1px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 14px;font-weight:700}
+.list{display:flex;flex-direction:column;gap:6px}
+.p{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.p img{width:34px;height:34px;border-radius:50%;flex:none;background:#223}
+.p .nm{font-weight:700;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;border-radius:6px;padding:2px 7px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.tag.fo{color:var(--gold);border-color:var(--gold)}.tag.gm{color:var(--blue);border-color:var(--blue)}.tag.hc{color:var(--good);border-color:var(--good)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}.p{flex-wrap:wrap}.p .acts{width:100%;justify-content:flex-start}}
+.pick{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer}.pick:hover{background:var(--panel2)}
+.pick input{accent-color:var(--team);width:18px;height:18px}
+.tx{border-left:3px solid var(--line);padding:4px 10px}.tx b{display:block}.tx small{color:var(--mute)}
+.msg{font-weight:700;font-size:14px;min-height:1.2em}.msg.ok{color:var(--good)}.msg.err{color:var(--red)}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:16px;padding:18px;width:min(460px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:20;max-width:calc(100vw - 32px)}
+</style></head><body>
+<div class="wrap">
+  <header><div class="eyebrow">UFA LEAGUE</div><h1><span>FRONT</span> OFFICE</h1></header>
+
+  <section class="panel gate hide" id="gate">
+    <h2>Log in</h2>
+    <div class="note">Franchise owners, GMs and head coaches can manage their team here. Players can see their team and request to leave.</div>
+    <button class="btn discord" id="dlogin">Log in with Discord</button>
+    <div class="or">OR</div>
+    <div class="note">Got a team password from the commissioner?</div>
+    <div class="row">
+      <label class="f">Team<select id="pteam"></select></label>
+      <label class="f">Password<input type="password" id="ppw" autocomplete="current-password"></label>
+    </div>
+    <div class="row"><button class="btn gold" id="plogin">Log in with password</button><span class="msg" id="gmsg"></span></div>
+  </section>
+
+  <div id="app" class="hide" style="display:flex;flex-direction:column;gap:18px">
+    <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn ghost" id="logout">Log out</button></div>
+    <div class="banner hide" id="frozen"></div>
+    <section class="panel teamhead" id="thead"></section>
+    <div class="tabs" role="tablist" id="tabs"></div>
+
+    <section class="panel" data-tab="roster"><div class="row" style="justify-content:space-between"><h2>Roster</h2><span class="note" id="rcount"></span></div><div class="list" id="roster"></div></section>
+
+    <section class="panel" data-tab="sign">
+      <h2>Sign free agents</h2>
+      <div class="note">Players not on any team. They get a DM with Accept / Decline and have 24 hours to answer.</div>
+      <input type="search" id="fq" placeholder="Search by name…" aria-label="Search free agents">
+      <div class="list" id="fas"></div>
+      <h2 style="font-size:22px;margin-top:6px">Pending offers</h2>
+      <div class="list" id="offers"></div>
+    </section>
+
+    <section class="panel" data-tab="trade">
+      <h2>Trades</h2>
+      <div id="incoming" class="list"></div>
+      <label class="f" style="flex:none">Trade with<select id="tteam"></select></label>
+      <div class="grid2">
+        <div class="panel" style="background:var(--panel2)"><b>You send</b><div id="tgive"></div></div>
+        <div class="panel" style="background:var(--panel2)"><b id="tgetl">You get</b><div id="tget"></div></div>
+      </div>
+      <div class="row"><button class="btn red" id="tsend">Propose trade</button><span class="note">The other team accepts, then staff approve.</span></div>
+    </section>
+
+    <section class="panel" data-tab="requests"><h2>Waiting on staff</h2><div class="list" id="reqs"></div></section>
+
+    <section class="panel" data-tab="leave"><h2>Leave your team</h2>
+      <div class="note">Your request goes to staff. They approve or deny it with a reason, and you get a DM.</div>
+      <textarea id="dreason" rows="3" placeholder="Why do you want to leave? (optional)"></textarea>
+      <div class="row"><button class="btn red" id="dsend">Request to leave</button></div>
+    </section>
+
+    <section class="panel" data-tab="tx"><h2>League transactions</h2><div class="list" id="txs"></div></section>
+  </div>
+</div>
+
+<dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:12px">
+  <h2 id="dtitle"></h2><div class="note" id="dbody"></div>
+  <select id="drole" class="hide"><option value="gm">General Manager — can sign, release and trade</option><option value="hc">Head Coach — can send offers</option></select>
+  <textarea id="dtext" rows="3" class="hide"></textarea>
+  <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel">Cancel</button><button class="btn red" value="ok" id="dok">Confirm</button></div>
+</form></dialog>
+<div class="toast hide" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const API = "https://ufa-draft.dizzyokreal.workers.dev";
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const plain = s => String(s ?? "").replace(/\*\*/g, "").replace(/<@&?\d+>/g, "someone");
+  const RANK = {fo:"Owner", gm:"GM", hc:"Head coach", player:"Player"};
+  let SESSION = ""; try{ SESSION = localStorage.getItem("ufa_fo") || ""; }catch{}
+  let ME = null, TEAMS = [], CAP = 25, FROZEN = null, TEAM = null, PLAYERS = [], TAB = "roster";
+
+  const h = location.hash.slice(1), hp = new URLSearchParams(h);
+  if (hp.get("session")){ SESSION = hp.get("session"); try{ localStorage.setItem("ufa_fo", SESSION); }catch{} history.replaceState(null, "", location.pathname); }
+  if (hp.get("error")){ history.replaceState(null, "", location.pathname); setTimeout(() => msg($("#gmsg"), hp.get("error") === "cancelled" ? "Login cancelled." : "Discord login isn't available right now — use a team password.", false)); }
+
+  function msg(el, t, ok=true){ el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); }
+  let tt; function toast(t){ const el = $("#toast"); el.textContent = plain(t); el.classList.remove("hide"); clearTimeout(tt); tt = setTimeout(() => el.classList.add("hide"), 4200); }
+  async function call(path, body){
+    const r = await fetch(API + path, {method: body ? "POST" : "GET", headers: {"Content-Type":"application/json", ...(SESSION ? {Authorization: "Session " + SESSION} : {})}, body: body ? JSON.stringify(body) : undefined});
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401 && path !== "/api/login"){ logout(true); throw new Error("Please log in again."); }
+    if (!r.ok || j.error) throw new Error(j.error || ("Error " + r.status));
+    return j;
+  }
+  function ask({title, body, role=false, text=null, ok="Confirm", required=false}){
+    return new Promise(res => {
+      const d = $("#dlg"); $("#dtitle").textContent = title; $("#dbody").textContent = body || ""; $("#dok").textContent = ok;
+      $("#drole").classList.toggle("hide", !role); $("#dtext").classList.toggle("hide", text === null); $("#dtext").value = ""; $("#dtext").placeholder = text || "";
+      d.onclose = () => { if (d.returnValue !== "ok") return res(null); const v = $("#dtext").value.trim(); if (required && !v){ toast("Please add a reason."); return res(null); } res({role: $("#drole").value, text: v}); };
+      d.returnValue = ""; d.showModal();
+    });
+  }
+  const act = async (fn, okText) => { try{ const j = await fn(); toast(j.text || okText || "Done."); await refresh(); } catch(e){ toast(e.message); } };
+
+  // ---------- login ----------
+  $("#dlogin").onclick = () => { location.href = `${API}/auth/discord?return=${encodeURIComponent(location.origin + location.pathname)}`; };
+  $("#plogin").onclick = async () => {
+    try{ msg($("#gmsg"), "Checking…"); const j = await call("/api/login", {team: $("#pteam").value, password: $("#ppw").value});
+      SESSION = j.session; try{ localStorage.setItem("ufa_fo", SESSION); }catch{} boot(); }
+    catch(e){ msg($("#gmsg"), e.message, false); }
+  };
+  $("#ppw").onkeydown = e => { if (e.key === "Enter") $("#plogin").click(); };
+  function logout(silent){ if (!silent && SESSION) call("/api/logout", {}).catch(() => {}); SESSION = ""; try{ localStorage.removeItem("ufa_fo"); }catch{} $("#app").classList.add("hide"); showGate(); }
+  $("#logout").onclick = () => logout(false);
+  async function showGate(){
+    $("#gate").classList.remove("hide");
+    if (!$("#pteam").options.length){
+      try{ const S = await (await fetch("schedule.json", {cache:"no-store"})).json();
+        $("#pteam").innerHTML = S.teams.slice().sort((a,b) => a.name.localeCompare(b.name)).map(t => `<option value="${t.abbr}">${esc(t.name)}</option>`).join(""); }catch{}
+    }
+  }
+
+  // ---------- data ----------
+  const canDo = w => ({offer:["fo","gm","hc"], release:["fo","gm"], trade:["fo","gm"], promote:["fo"]}[w] || []).includes(ME.rank);
+  async function refresh(){
+    const [t, p] = await Promise.all([call("/api/team"), canDo("offer") || canDo("trade") ? call("/api/players") : Promise.resolve({players: []})]);
+    TEAM = t; PLAYERS = p.players; render();
+  }
+  function tabs(){
+    const list = [["roster","Roster"]];
+    if (canDo("offer")) list.push(["sign","Sign players"]);
+    if (canDo("trade")) list.push(["trade","Trades"]);
+    if (ME.rank && ME.rank !== "player" || canDo("offer")) list.push(["requests","Requests"]);
+    if (ME.rank && ME.rank !== "fo") list.push(["leave","Leave team"]);
+    list.push(["tx","Transactions"]);
+    if (!list.some(([k]) => k === TAB)) TAB = "roster";
+    $("#tabs").innerHTML = list.map(([k,l]) => `<button role="tab" data-t="${k}" aria-selected="${k===TAB}">${l}</button>`).join("");
+    document.querySelectorAll("section[data-tab]").forEach(s => s.classList.toggle("hide", s.dataset.tab !== TAB));
+  }
+  $("#tabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (!b) return; TAB = b.dataset.t; tabs(); if (TAB === "tx") loadTx(); if (TAB === "trade") loadTrade(); };
+
+  const card = (p, acts="") => `<div class="p"><img src="${esc(p.avatar)}" alt="" loading="lazy"><span class="nm">${esc(p.name)}</span>${p.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}<span class="acts">${acts}</span></div>`;
+  function render(){
+    const t = TEAM.team, n = TEAM.roster.length;
+    document.documentElement.style.setProperty("--team", t.color || "#3d7bff");
+    $("#thead").innerHTML = `<div style="flex:1 1 240px"><div class="tn">${esc(t.name)}</div><div class="note">You: <b>${esc(ME.name)}</b> · ${RANK[ME.rank] || "—"}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;flex:1 1 220px"><b>${n}/${CAP}</b><div class="meter" aria-label="Roster ${n} of ${CAP}"><i style="width:${Math.min(100, n/CAP*100)}%"></i></div></div>`;
+    $("#rcount").textContent = `${n} of ${CAP} spots`;
+    const order = {fo:0, gm:1, hc:2, player:3};
+    $("#roster").innerHTML = TEAM.roster.slice().sort((a,b) => order[a.rank]-order[b.rank] || a.name.localeCompare(b.name)).map(p => {
+      const a = [];
+      if (p.id !== ME.id && p.rank !== "fo"){
+        if (canDo("release") && !(ME.rank === "gm" && ["gm","hc"].includes(p.rank))) a.push(`<button class="btn sm" data-rel="${p.id}">Release</button>`);
+        if (canDo("promote") && p.rank === "player") a.push(`<button class="btn sm" data-pro="${p.id}">Promote</button>`);
+        if (canDo("promote") && ["gm","hc"].includes(p.rank)) a.push(`<button class="btn sm" data-pro="${p.id}">Change title</button><button class="btn sm" data-dem="${p.id}">Demote</button>`);
+      }
+      return card(p, a.join(""));
+    }).join("") || `<div class="note">No players yet.</div>`;
+    renderFA(); renderOffers(); renderReqs(); tabs();
+  }
+  function renderFA(){
+    const q = $("#fq").value.trim().toLowerCase();
+    const fa = PLAYERS.filter(p => !p.team && (!q || p.name.toLowerCase().includes(q))).sort((a,b) => a.name.localeCompare(b.name));
+    const pend = new Set(TEAM.offers.map(o => o.uid));
+    $("#fas").innerHTML = fa.slice(0, 40).map(p => card(p, pend.has(p.id) ? `<span class="tag">Offer sent</span>` : `<button class="btn sm red" data-off="${p.id}" ${FROZEN ? "disabled" : ""}>Offer</button>`)).join("")
+      + (fa.length > 40 ? `<div class="note">${fa.length - 40} more — search to narrow it down.</div>` : "") || `<div class="note">No free agents match.</div>`;
+  }
+  $("#fq").oninput = renderFA;
+  function renderOffers(){
+    $("#offers").innerHTML = TEAM.offers.map(o => `<div class="p"><span class="nm">${esc(o.name)}</span><span class="note">expires ${new Date(o.exp).toLocaleString([], {weekday:"short", hour:"numeric", minute:"2-digit"})}</span><span class="acts"><button class="btn sm" data-cancel="${o.id}">Cancel</button></span></div>`).join("") || `<div class="note">No pending offers.</div>`;
+  }
+  function renderReqs(){
+    const mine = TEAM.requests.filter(r => !(r.type === "trade" && r.status === "other" && r.to === ME.team));
+    $("#reqs").innerHTML = mine.map(r => `<div class="p"><span class="tag">${r.type === "trade" ? (r.status === "other" ? "Trade · waiting on other team" : "Trade") : r.type === "promote" ? "Promotion" : "Demand"}</span><span class="nm" style="white-space:normal">${esc(r.text)}</span></div>`).join("") || `<div class="note">Nothing waiting.</div>`;
+    const inc = TEAM.requests.filter(r => r.type === "trade" && r.status === "other" && r.to === ME.team);
+    $("#incoming").innerHTML = inc.map(r => `<div class="p" style="border-color:var(--gold)"><span class="tag fo">Incoming</span><span class="nm" style="white-space:normal">${esc(r.text)}</span><span class="acts"><button class="btn sm good" data-tacc="${r.id}">Accept</button><button class="btn sm" data-tdec="${r.id}">Decline</button></span></div>`).join("");
+  }
+
+  document.addEventListener("click", async e => {
+    const b = e.target.closest("button"); if (!b || !ME) return;
+    const name = id => (TEAM.roster.find(p => p.id === id) || PLAYERS.find(p => p.id === id) || {}).name || "this player";
+    if (b.dataset.off){ if (await ask({title:"Send offer", body:`Offer ${name(b.dataset.off)} a spot on the ${TEAM.team.name}?`, ok:"Send offer"})) act(() => call("/api/offer", {uid: b.dataset.off})); }
+    else if (b.dataset.rel){ if (await ask({title:"Release player", body:`Release ${name(b.dataset.rel)}? They become a free agent right away.`, ok:"Release"})) act(() => call("/api/release", {uid: b.dataset.rel})); }
+    else if (b.dataset.pro){ const r = await ask({title:"Promote", body:`New title for ${name(b.dataset.pro)}. Staff approve promotions.`, role:true, text:"Why? Staff will see this.", ok:"Send to staff", required:true}); if (r) act(() => call("/api/promote", {uid: b.dataset.pro, role: r.role, reason: r.text})); }
+    else if (b.dataset.dem){ if (await ask({title:"Demote", body:`Remove ${name(b.dataset.dem)}'s title? They stay on the roster.`, ok:"Demote"})) act(() => call("/api/demote", {uid: b.dataset.dem})); }
+    else if (b.dataset.cancel){ act(() => call("/api/offer/cancel", {id: b.dataset.cancel}), "Offer cancelled."); }
+    else if (b.dataset.tacc){ if (await ask({title:"Accept trade", body:"Accept this trade? It then goes to staff for final approval.", ok:"Accept"})) act(() => call("/api/trade/respond", {id: b.dataset.tacc, accept: true})); }
+    else if (b.dataset.tdec){ act(() => call("/api/trade/respond", {id: b.dataset.tdec, accept: false})); }
+  });
+
+  // ---------- trades ----------
+  let OTHER = null;
+  function pickList(list, name){ return list.filter(p => p.rank !== "fo").map(p => `<label class="pick"><input type="checkbox" name="${name}" value="${p.id}"> <img src="${esc(p.avatar)}" alt="" style="width:26px;height:26px;border-radius:50%"> ${esc(p.name)}${p.rank !== "player" ? ` <span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}</label>`).join("") || `<div class="note">No tradeable players.</div>`; }
+  async function loadTrade(){
+    if (!$("#tteam").options.length) $("#tteam").innerHTML = `<option value="">Pick a team…</option>` + TEAMS.filter(t => t.abbr !== ME.team).sort((a,b) => a.name.localeCompare(b.name)).map(t => `<option value="${t.abbr}">${esc(t.name)}</option>`).join("");
+    $("#tgive").innerHTML = pickList(TEAM.roster, "give");
+    const ab = $("#tteam").value;
+    if (!ab){ $("#tget").innerHTML = `<div class="note">Pick a team first.</div>`; $("#tgetl").textContent = "You get"; return; }
+    try{ OTHER = await call("/api/team?team=" + ab); $("#tgetl").textContent = `You get from the ${OTHER.team.name}`; $("#tget").innerHTML = pickList(OTHER.roster, "get"); }catch(e){ toast(e.message); }
+  }
+  $("#tteam").onchange = loadTrade;
+  $("#tsend").onclick = async () => {
+    const give = [...document.querySelectorAll('input[name=give]:checked')].map(x => x.value), get = [...document.querySelectorAll('input[name=get]:checked')].map(x => x.value);
+    if (!$("#tteam").value) return toast("Pick a team to trade with.");
+    if (!give.length && !get.length) return toast("Tick at least one player.");
+    if (await ask({title:"Propose trade", body:`You send ${give.length} player(s) and get ${get.length}. The other team has to accept, then staff approve.`, ok:"Send"})) act(() => call("/api/trade", {to: $("#tteam").value, give, get}));
+  };
+
+  // ---------- leave ----------
+  $("#dsend").onclick = async () => { if (await ask({title:"Request to leave", body:`Send a request to leave the ${TEAM.team.name} to staff?`, ok:"Send"})) act(() => call("/api/demand", {reason: $("#dreason").value.trim()})); };
+
+  // ---------- transactions ----------
+  async function loadTx(){
+    try{ const j = await call("/api/transactions");
+      $("#txs").innerHTML = j.tx.map(t => `<div class="tx"><b>${esc(t.title)}</b>${esc(t.text).replace(/\n/g,"<br>")}<br><small>${new Date(t.ts).toLocaleString()}</small></div>`).join("") || `<div class="note">No transactions yet.</div>`;
+    }catch(e){ toast(e.message); }
+  }
+
+  // ---------- boot ----------
+  async function boot(){
+    if (!SESSION) return showGate();
+    try{
+      const j = await call("/api/me"); ME = j.me; TEAMS = j.teams; CAP = j.cap; FROZEN = j.frozen;
+      $("#gate").classList.add("hide"); $("#app").classList.remove("hide");
+      $("#who").textContent = ME.pw ? `Logged in with the ${ME.name.replace(" front office","")} password` : `Logged in as ${ME.name}`;
+      $("#frozen").textContent = plain(FROZEN || ""); $("#frozen").classList.toggle("hide", !FROZEN);
+      if (!ME.team){ $("#thead").innerHTML = `<div><div class="tn">No team</div><div class="note">You're not on a team right now. Franchise owners can send you offers — you'll get a DM, or use <b>/offers</b> in the server.</div></div>`; TAB = "tx"; $("#tabs").innerHTML = ""; document.querySelectorAll("section[data-tab]").forEach(s => s.classList.toggle("hide", s.dataset.tab !== "tx")); loadTx(); return; }
+      await refresh();
+    }catch(e){ if (SESSION) msg($("#gmsg"), e.message, false); showGate(); }
+  }
+  boot();
+})();
+</script>
+</body></html>

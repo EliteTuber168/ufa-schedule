@@ -61,7 +61,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   <header>
     <div class="eyebrow">LEAGUE SCHEDULER</div>
     <h1><span>UFA</span> <b>ADMIN</b></h1>
-    <div style="display:flex;gap:16px;font-weight:700"><a href="./">← Public schedule</a><a href="plan.html">Plan a week →</a><a href="draftroom.html">Draft room →</a></div>
+    <div style="display:flex;gap:16px;font-weight:700"><a href="./">← Public schedule</a><a href="plan.html">Plan a week →</a><a href="draftroom.html">Draft room →</a><a href="fo.html">FO portal →</a></div>
   </header>
 
   <section class="panel gate" id="gate">
@@ -79,7 +79,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   <div id="app" class="hide" style="display:flex;flex-direction:column;gap:20px">
     <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn" id="signout">Sign out</button></div>
     <a class="btn red" href="plan.html" style="text-decoration:none;align-self:flex-start">Plan a week (step by step) →</a>
-    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button><button role="tab" data-tab="settings" aria-selected="false">Settings</button></div>
+    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button><button role="tab" data-tab="settings" aria-selected="false">Settings</button><button role="tab" data-tab="ops" aria-selected="false">League ops</button></div>
 
     <div id="tab-week" style="display:flex;flex-direction:column;gap:20px">
       <section class="panel">
@@ -136,6 +136,15 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
         <div class="note" id="sPrev"></div>
       </section>
       <section class="panel">
+        <h2>Transactions</h2>
+        <div class="note">Used by the bot and the FO portal. Save &amp; publish to apply (takes up to a minute).</div>
+        <div class="row">
+          <label class="f" style="flex:0 1 220px">Max roster size (FO counts)<input type="number" min="5" max="60" id="sCap"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFreeze"> Freeze signings &amp; trades</label>
+        </div>
+        <div class="note">Signings and trades are also paused automatically while the draft is live.</div>
+      </section>
+      <section class="panel">
         <h2>Scheduling defaults</h2>
         <div class="note">Used as the starting answers in Plan a Week. You can still change them each week.</div>
         <div class="row">
@@ -158,6 +167,26 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
           <label class="f">Season<input type="text" id="lseason"></label>
         </div>
         <label class="f">Announcement banner on the public page (optional)<textarea id="sAnn" rows="2" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="e.g. Week 6 posted — deadline Oct 8. Screenshots of scores go in #results"></textarea></label>
+      </section>
+    </div>
+    <div id="tab-ops" class="hide" style="display:flex;flex-direction:column;gap:20px">
+      <div class="note" id="opsnote"></div>
+      <section class="panel">
+        <div class="row" style="justify-content:space-between"><h2>Waiting for staff</h2><button class="btn" id="opsreload">Refresh</button></div>
+        <div class="note">Demands, promotions and trades. The same requests show in #approvals on Discord — deciding here or there both work. A reason is required and gets sent to the people involved.</div>
+        <div id="reqs" style="display:flex;flex-direction:column;gap:10px"></div>
+      </section>
+      <section class="panel">
+        <h2>Franchise owners</h2>
+        <div class="note">Appointing gives the person the team role + Franchise owner role and removes the old FO's owner role. They get a DM with the FO portal link.</div>
+        <div class="row">
+          <label class="f" style="flex:1 1 200px">Team<select id="apteam"></select></label>
+          <label class="f" style="flex:2 1 260px">Member<input type="text" id="apwho" list="aplist" placeholder="Start typing a Discord name…"></label>
+          <button class="btn red" id="apgo">Appoint FO</button>
+        </div>
+        <datalist id="aplist"></datalist>
+        <div class="tscroll"><table style="min-width:520px"><thead><tr><th>Team</th><th>Players</th><th>FO</th><th>Portal password</th><th></th></tr></thead><tbody id="fobody"></tbody></table></div>
+        <span class="msg" id="apmsg"></span>
       </section>
     </div>
   </div>
@@ -326,6 +355,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     const s = D.settings;
     $("#sMin").value = s.minPlayers; $("#sFO").checked = s.requireFO; $("#sDays").value = s.deadlineDays; $("#sCu").value = String(s.maxCatchup); $("#sRm").value = s.rematch;
     $("#sEvery").checked = s.pingEveryone; $("#sAnn").value = s.announcement || "";
+    $("#sCap").value = s.rosterCap; $("#sFreeze").checked = !!s.signingFreeze;
     $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
     renderPrev();
   }
@@ -333,7 +363,7 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     const act = D.teams.filter(t=>t.active), out = D.teams.filter(t=>!t.active && (t.players||0) > 0);
     $("#sPrev").innerHTML = `<b style="color:var(--good)">${act.length} active:</b> ${act.map(t=>`${esc(t.name)} (${t.players})`).join(", ") || "none"}<br><b>Left out:</b> ${out.map(t=>`${esc(t.name)} (${t.players}${t.fo?"":", no FO"})`).join(", ") || "none"}`;
   }
-  const SET_DEF = {minPlayers:5, requireFO:true, deadlineDays:4, maxCatchup:1, rematch:"avoid", pingEveryone:true, announcement:""};
+  const SET_DEF = {minPlayers:5, requireFO:true, deadlineDays:4, maxCatchup:1, rematch:"avoid", pingEveryone:true, announcement:"", rosterCap:25, signingFreeze:false};
   function applyRules(){
     const s = D.settings;
     D.teams.forEach(t => { const m = t.mode || "auto"; t.active = m === "on" ? true : m === "off" ? false : (t.players||0) >= s.minPlayers && (!s.requireFO || !!(t.fo||"").trim()); });
@@ -346,6 +376,8 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   $("#sRm").onchange = e => setS("rematch", e.target.value);
   $("#sEvery").onchange = e => setS("pingEveryone", e.target.checked);
   $("#sAnn").oninput = e => setS("announcement", e.target.value);
+  $("#sCap").oninput = e => { const v = parseInt(e.target.value); if (v >= 5) setS("rosterCap", v); };
+  $("#sFreeze").onchange = e => setS("signingFreeze", e.target.checked);
   $("#tbody").addEventListener("input", e => { const tr = e.target.closest("tr"), f = e.target.dataset.f; if (!tr || !f) return; const t = D.teams[+tr.dataset.i];
     if (f === "mode") return; t[f] = f === "players" ? +e.target.value : e.target.value.trim();
     if (f === "players" || f === "fo"){ applyRules(); const st = tr.querySelector(".st"); st.textContent = t.active ? "ACTIVE" : "OUT"; st.style.color = t.active ? "var(--good)" : "var(--mute)"; }
@@ -357,8 +389,72 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
 
   document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b) return;
     document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
-    ["week","teams","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", b.dataset.tab !== k));
-    if (b.dataset.tab === "week") renderWeek(); else if (b.dataset.tab === "teams") renderTeams(); else renderSettings(); });
+    ["week","teams","settings","ops"].forEach(k => $("#tab-"+k).classList.toggle("hide", b.dataset.tab !== k));
+    $("#bar").classList.toggle("hide", b.dataset.tab === "ops");
+    if (b.dataset.tab === "week") renderWeek(); else if (b.dataset.tab === "teams") renderTeams(); else if (b.dataset.tab === "ops") loadOps(); else renderSettings(); });
+
+  // ---------- league ops (talks to the bot's Worker; your GitHub token proves you're an admin) ----------
+  const BOT = "https://ufa-draft.dizzyokreal.workers.dev";
+  const plain = s => String(s ?? "").replace(/\*\*/g, "");
+  async function bot(path, body){
+    const r = await fetch(BOT + path, {method: body ? "POST" : "GET", headers: {"Content-Type":"application/json", Authorization: "GitHub " + TOKEN}, body: body ? JSON.stringify(body) : undefined});
+    const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(plain(j.error) || "Error " + r.status); return j;
+  }
+  let MEMBERS = [], PWS = new Set();
+  async function loadOps(){
+    if (!canSave){ $("#opsnote").innerHTML = "<b>Sign in with your GitHub token</b> to use League ops."; return; }
+    $("#opsnote").textContent = "Loading…";
+    try{
+      const [rq, mm, pw] = await Promise.all([bot("/api/admin/requests"), bot("/api/admin/members"), bot("/api/admin/passwords")]);
+      MEMBERS = mm.members; PWS = new Set(pw.teams); $("#opsnote").textContent = "";
+      renderReqs(rq.requests); renderFOs();
+    }catch(e){ $("#opsnote").innerHTML = `<span class="msg err">${esc(e.message)}</span>`; }
+  }
+  $("#opsreload").onclick = loadOps;
+  function renderReqs(list){
+    const lab = {demand:"Demand", promote:"Promotion", trade:"Trade"};
+    $("#reqs").innerHTML = list.filter(r => r.status === "staff").map(r => `<div class="panel" style="background:var(--panel2)" data-id="${r.id}">
+      <div class="row"><b style="color:var(--gold)">${lab[r.type]}</b><span class="note">${new Date(r.ts).toLocaleString()}</span></div>
+      <div>${esc(r.text)}</div>
+      <label class="f" style="flex:none">Reason (required)<input type="text" class="why" placeholder="Sent to the people involved"></label>
+      <div class="row"><button class="btn gold" data-ok="1">Approve</button><button class="btn x" data-ok="0">Deny</button><span class="msg"></span></div></div>`).join("")
+      + (list.filter(r => r.status === "other").length ? `<div class="note">${list.filter(r => r.status === "other").length} trade(s) still waiting on the other team.</div>` : "")
+      || `<div class="note">Nothing waiting. 🎉</div>`;
+  }
+  $("#reqs").addEventListener("click", async e => {
+    const b = e.target.closest("button[data-ok]"); if (!b) return; const box = b.closest("[data-id]"), why = box.querySelector(".why").value.trim(), m = box.querySelector(".msg");
+    if (!why) return msg(m, "Add a reason first.", false);
+    b.disabled = true; msg(m, "Working…");
+    try{ const j = await bot("/api/admin/decide", {id: box.dataset.id, approve: b.dataset.ok === "1", reason: why}); msg(m, j.status === "failed" ? "Couldn't complete: " + j.note : j.status === "approved" ? "Approved." : "Denied.", j.status !== "failed"); setTimeout(loadOps, 1200); }
+    catch(err){ msg(m, err.message, false); b.disabled = false; }
+  });
+  const label = m => `${m.name} (${m.id})`;
+  function renderFOs(){
+    const sorted = D.teams.slice().sort((a,b) => a.name.localeCompare(b.name));
+    $("#apteam").innerHTML = sorted.map(t => `<option value="${t.abbr}">${esc(t.name)}</option>`).join("");
+    $("#aplist").innerHTML = MEMBERS.slice().sort((a,b) => a.name.localeCompare(b.name)).map(m => `<option value="${esc(label(m))}">`).join("");
+    $("#fobody").innerHTML = sorted.map(t => { const r = MEMBERS.filter(m => m.team === t.abbr), fo = r.find(m => m.rank === "fo");
+      return `<tr><td><b>${esc(t.name)}</b></td><td>${r.length}</td><td>${fo ? esc(fo.name) : '<span class="note">No FO</span>'}</td>
+        <td>${PWS.has(t.abbr) ? '<span style="color:var(--good);font-weight:700">Set</span>' : '<span class="note">None</span>'} <button class="btn" data-pw="${t.abbr}">${PWS.has(t.abbr) ? "New" : "Create"}</button>${PWS.has(t.abbr) ? ` <button class="btn x" data-pwx="${t.abbr}" aria-label="Remove password">✕</button>` : ""}</td>
+        <td>${fo ? `<button class="btn x" data-unfo="${t.abbr}">Remove FO</button>` : ""}</td></tr>`; }).join("");
+  }
+  $("#apgo").onclick = async () => {
+    const v = $("#apwho").value.trim(), id = (v.match(/\((\d{15,})\)$/) || [])[1] || (MEMBERS.find(m => m.name.toLowerCase() === v.toLowerCase()) || {}).id;
+    if (!id) return msg($("#apmsg"), "Pick a member from the list.", false);
+    msg($("#apmsg"), "Appointing…");
+    try{ const j = await bot("/api/admin/appoint", {team: $("#apteam").value, uid: id}); msg($("#apmsg"), plain(j.text)); $("#apwho").value = ""; setTimeout(loadOps, 1500); }catch(e){ msg($("#apmsg"), e.message, false); }
+  };
+  const words = ["blitz","huddle","endzone","redzone","audible","gridiron","snap","punt","sack","spiral","tackle","pylon","hailmary","shotgun","pocket","flag"];
+  const genPw = () => { const r = crypto.getRandomValues(new Uint32Array(3)); return `${words[r[0]%words.length]}-${words[r[1]%words.length]}-${1000 + r[2]%9000}`; };
+  $("#fobody").addEventListener("click", async e => {
+    const b = e.target.closest("button"); if (!b) return;
+    try{
+      if (b.dataset.unfo){ if (!confirm("Remove this team's franchise owner?")) return; const j = await bot("/api/admin/unappoint", {team: b.dataset.unfo}); msg($("#apmsg"), plain(j.text)); setTimeout(loadOps, 1500); }
+      else if (b.dataset.pw){ const pw = genPw(); await bot("/api/admin/password", {team: b.dataset.pw, password: pw}); PWS.add(b.dataset.pw); renderFOs();
+        msg($("#apmsg"), `Password for ${T(b.dataset.pw).name}: ${pw} — copy it now, it won't be shown again. Any old password stops working.`); }
+      else if (b.dataset.pwx){ await bot("/api/admin/password", {team: b.dataset.pwx, password: null}); PWS.delete(b.dataset.pwx); renderFOs(); msg($("#apmsg"), "Password removed."); }
+    }catch(err){ msg($("#apmsg"), err.message, false); }
+  });
 
   // ---------- boot ----------
   async function boot(){
