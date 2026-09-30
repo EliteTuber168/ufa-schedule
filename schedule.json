@@ -21,7 +21,7 @@
    "color": "#A71930",
    "active": false,
    "role": "1548502224949346378",
-   "players": 3,
+   "players": 2,
    "fo": "彼女は嫌っている CLAMPS"
   },
   {
@@ -39,8 +39,8 @@
    "color": "#00338D",
    "active": true,
    "role": "1548502233669443686",
-   "players": 12,
-   "fo": "KA1♠️"
+   "players": 9,
+   "fo": "Sh8dow (@Richards100110)⭐"
   },
   {
    "name": "Carolina Panthers",
@@ -66,17 +66,17 @@
    "color": "#FB4F14",
    "active": true,
    "role": "1548502246151561296",
-   "players": 10,
-   "fo": "Georgerussel"
+   "players": 9,
+   "fo": "Georgerussel (@flymac1)"
   },
   {
    "name": "Cleveland Browns",
    "abbr": "CLE",
    "color": "#FF3C00",
-   "active": true,
+   "active": false,
    "role": "1548502250060648598",
-   "players": 5,
-   "fo": "Jace"
+   "players": 4,
+   "fo": "Jace (@StarlordJCR)"
   },
   {
    "name": "Dallas Cowboys",
@@ -91,10 +91,10 @@
    "name": "Denver Broncos",
    "abbr": "DEN",
    "color": "#FB4F14",
-   "active": true,
+   "active": false,
    "role": "1548502258491195483",
-   "players": 5,
-   "fo": "SensicJ"
+   "players": 4,
+   "fo": "SensicJ (@jayjaycarrera6)"
   },
   {
    "name": "Detroit Lions",
@@ -102,7 +102,7 @@
    "color": "#0076B6",
    "active": false,
    "role": "1548502262844891187",
-   "players": 4,
+   "players": 3,
    "fo": ""
   },
   {
@@ -129,8 +129,8 @@
    "color": "#002C5F",
    "active": true,
    "role": "1548502275268411402",
-   "players": 12,
-   "fo": "Rivon"
+   "players": 11,
+   "fo": "𝑉𝑜𝗇"
   },
   {
    "name": "Jacksonville Jaguars",
@@ -138,8 +138,8 @@
    "color": "#006778",
    "active": false,
    "role": "1548502279550930975",
-   "players": 3,
-   "fo": "3B_Knzxo"
+   "players": 2,
+   "fo": "3B_Knzxo (@Obj_ex)"
   },
   {
    "name": "Kansas City Chiefs",
@@ -147,17 +147,17 @@
    "color": "#E31837",
    "active": true,
    "role": "1548502283644444822",
-   "players": 14,
+   "players": 8,
    "fo": "𝑩𝑨𝑳𝑬𝑵𝑪𝑰𝑨𝑮𝑨"
   },
   {
    "name": "Las Vegas Raiders",
    "abbr": "LV",
    "color": "#A5ACAF",
-   "active": false,
+   "active": true,
    "role": "1548502288006389820",
-   "players": 0,
-   "fo": ""
+   "players": 5,
+   "fo": "Robloxianp8t3e6b4y"
   },
   {
    "name": "Los Angeles Chargers",
@@ -190,9 +190,9 @@
    "name": "Minnesota Vikings",
    "abbr": "MIN",
    "color": "#4F2683",
-   "active": true,
+   "active": false,
    "role": "1548502304603512912",
-   "players": 11,
+   "players": 4,
    "fo": "CrazyAndrew"
   },
   {
@@ -228,8 +228,8 @@
    "color": "#125740",
    "active": true,
    "role": "1548502321422671903",
-   "players": 21,
-   "fo": "Skib"
+   "players": 15,
+   "fo": "Skib  (hot and dangerous)"
   },
   {
    "name": "Philadelphia Eagles",
@@ -481,6 +481,8 @@
   "maxCatchup": 1,
   "rematch": "avoid",
   "pingEveryone": true,
-  "announcement": ""
+  "announcement": "",
+  "rosterCap": 25,
+  "signingFreeze": false
  }
 }
