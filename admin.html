@@ -424,6 +424,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     if (under.length) items.push(`<div><b>Under ${min} players:</b> ${under.map(t => `${esc(t.abbr)} (${t.players})`).join(", ")}</div>`);
     const noFo = D.teams.filter(t => (t.players||0) > 0 && !(t.fo||"").trim());
     if (noFo.length) items.push(`<div><b>Players but no FO:</b> ${noFo.map(t => esc(t.abbr)).join(", ")} — <a href="#" data-wz="fo">assign one</a></div>`);
+    const multi = D.teams.map(t => [t, rosterOf(t.abbr).filter(m => m.rank === "fo")]).filter(([, f]) => f.length > 1);
+    if (multi.length) items.push(`<div><b>More than one FO:</b> ${multi.map(([t, f]) => `${esc(t.abbr)} (${f.map(m => esc(m.name)).join(", ")})`).join("; ")} — use <a href="#" data-wz="fo">Assign new FO</a> on the right person to fix it</div>`);
     if (LIVE?.pending) items.push(`<div><b>${LIVE.pending} request(s)</b> waiting — <a href="#" data-go="approvals">review</a></div>`);
     if (!D.weeks.find(w => !w.done)) items.push(`<div><b>No current week</b> on the schedule — <a href="plan.html">plan one</a></div>`);
     if (!items.length) items.push(`<div class="ok">All good. ✅</div>`);
@@ -450,7 +452,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <div class="body">
           <div><div class="row between" style="font-weight:700"><span>${n}<span class="note"> / ${cap} players</span></span><span class="note">${n && n < min ? `under ${min}` : ""}</span></div>
           <div class="meter" style="margin-top:4px"><i style="width:${Math.min(100,n/cap*100)}%;background:${esc(t.color)}"></i></div></div>
-          <div class="row between"><span>👑 ${t.fo ? `<b>${esc(t.fo)}</b>` : `<span class="note">No FO</span>`}</span><button class="btn sm" data-wzt="fo" data-team="${t.abbr}">${t.fo ? "Replace" : "Assign"}</button></div>
+          <div class="row between"><span>👑 ${t.fo ? `<b>${esc(t.fo)}</b>` : `<span class="note">No FO</span>`}${rosterOf(t.abbr).filter(m => m.rank === "fo").length > 1 ? ` <span class="tag" style="color:var(--warn);border-color:var(--warn)">${rosterOf(t.abbr).filter(m => m.rank === "fo").length} FOs</span>` : ""}</span><button class="btn sm" data-wzt="fo" data-team="${t.abbr}">${t.fo ? "Replace" : "Assign"}</button></div>
           <div class="ctl">${statusSel(t)}<input type="color" data-f="color" value="${esc(t.color)}" aria-label="${esc(t.name)} color"><button class="btn sm" data-open="${t.abbr}" aria-expanded="${open}">${open ? "Hide" : "Roster"}</button></div>
           ${open ? `<div class="roster">${r.map(m => pl(m, m.rank !== "fo" ? `<button class="btn sm x" data-rm="${m.id}" title="Remove from team" aria-label="Remove ${esc(m.name)}">✕</button>` : "")).join("") || `<div class="note">${LIVE ? "No players." : "Roster shows when the bot is reachable."}</div>`}
             <button class="btn sm" data-wzt="add" data-team="${t.abbr}" style="align-self:flex-start;margin-top:4px">➕ Add player</button></div>` : ""}
@@ -477,7 +479,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     fo: {title:"Assign new FO", steps:["team","person","confirm"], hint:"Who is the new franchise owner?", person: () => true,
       confirm: s => { const t = T(s.team), p = byId(s.uid), old = foOf(s.team);
         return `<b>${esc(p.name)}</b> becomes franchise owner of the <b>${esc(t.name)}</b>.`
-          + (old && old.id !== p.id ? `<div class="warnbox">⚠️ This replaces ${esc(old.name)} as FO. They keep their spot on the roster.</div>` : "")
+          + (rosterOf(s.team).filter(m => m.rank === "fo" && m.id !== p.id).length ? `<div class="warnbox">⚠️ This replaces ${rosterOf(s.team).filter(m => m.rank === "fo" && m.id !== p.id).map(m => esc(m.name)).join(" and ")} as FO. They keep their spot on the roster.</div>` : "")
           + (p.team && p.team !== s.team ? `<div class="warnbox">⚠️ ${esc(p.name)} is on the ${esc(T(p.team).name)} and will be moved.</div>` : "")
           + (old && old.id === p.id ? `<div class="warnbox">They're already the FO.</div>` : ""); },
       run: s => bot("/api/admin/appoint", {team: s.team, uid: s.uid}), ok:"Yes, assign FO"},
