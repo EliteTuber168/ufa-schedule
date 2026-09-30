@@ -221,13 +221,40 @@ async function stripTeam(env, L, uid, abbr, why) {
   await delRole(env, L, uid, teamOf(L, abbr)?.roleId, why);
   for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r, why).catch(() => {});
 }
-async function logTx(env, L, { title, desc, color, teams = [] }) {
-  const ts = Date.now();
-  if (L.C.transactions) {
-    await discord(env, "POST", `/channels/${L.C.transactions}/messages`, { embeds: [{ title, description: desc, color, timestamp: new Date(ts).toISOString(), footer: { text: "UFA Transactions" } }], allowed_mentions: { parse: [] } }).catch(() => {});
-  }
-  if (env.VOTES) await kput(env, `tx:${String(9e12 - ts).padStart(13, "0")}`, { title, desc, teams, ts }, 90 * 86400).catch(() => {});
+// ---------- transaction posts (TeamSign-style embeds: team logo, role mentions, usernames, details block) ----------
+const guildEmojis = (env, L) => cached("emojis", 600000, () => discord(env, "GET", `/guilds/${L.guild}/emojis`).catch(() => []));
+function teamEmoji(E, t) {
+  const nick = t.name.split(" ").pop().toLowerCase(), ab = t.abbr.toLowerCase();
+  return E.find((x) => x.name.toLowerCase() === nick || x.name.toLowerCase() === ab) || E.find((x) => x.name.toLowerCase().includes(nick)) || null;
 }
+const emojiTag = (e) => `<${e.animated ? "a" : ""}:${e.name}:${e.id}>`;
+const emojiUrl = (e) => `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? "gif" : "png"}?size=128`;
+const brandIcon = (env, L) => cached("brand", 3600000, async () => {
+  const g = await discord(env, "GET", `/guilds/${L.guild}`).catch(() => null);
+  return g?.icon ? `https://cdn.discordapp.com/icons/${L.guild}/${g.icon}.${g.icon.startsWith("a_") ? "gif" : "png"}?size=64` : null;
+});
+/** title, desc and lines may use <@id> and **Team Name**; they're turned into mentions + `username` and team emoji + role mention. */
+async function logTx(env, L, { title, desc, color, teams = [], lines = [] }) {
+  const ts = Date.now();
+  const [E, M, icon] = await Promise.all([guildEmojis(env, L), members(env, L).catch(() => []), brandIcon(env, L)]);
+  const main = teamOf(L, teams[0]);
+  const dress = (txt) => {
+    let d = String(txt);
+    for (const a of teams) { const t = teamOf(L, a); if (!t) continue; const e = teamEmoji(E, t);
+      d = d.split(`the **${t.name}**`).join(`${e ? emojiTag(e) + " " : ""}${t.roleId ? `<@&${t.roleId}>` : `**${t.name}**`}`); }
+    return d.replace(/<@(\d+)>/g, (s, id) => { const m = M.find((x) => x.user.id === id); return m ? `${s} \`${m.user.username}\`` : s; });
+  };
+  const body = dress(desc) + (lines.length ? "\n\n" + lines.map((l) => `> • ${dress(l)}`).join("\n") : "");
+  const logo = main && teamEmoji(E, main);
+  if (L.C.transactions) {
+    await discord(env, "POST", `/channels/${L.C.transactions}/messages`, { allowed_mentions: { parse: [] }, embeds: [{
+      author: { name: "Transactions", ...(icon ? { icon_url: icon } : {}) }, title, description: body.slice(0, 4000),
+      color: color ?? (main ? colorInt(main.color) : 0x3d7bff), ...(logo ? { thumbnail: { url: emojiUrl(logo) } } : {}),
+      footer: { text: "UFA League" }, timestamp: new Date(ts).toISOString() }] }).catch(() => {});
+  }
+  if (env.VOTES) await kput(env, `tx:${String(9e12 - ts).padStart(13, "0")}`, { title, desc: [desc, ...lines].join("\n"), teams, ts }, 90 * 86400).catch(() => {});
+}
+const capLine = (L, n) => `🔋 Roster Cap · \`${n}/${cap(L)}\``;
 const cap = (L) => Number(L.settings.rosterCap) || 25;
 function frozen(L) {
   if (L.settings.signingFreeze) return "🧊 Signings and trades are frozen right now.";
@@ -249,7 +276,7 @@ async function makeOffer(env, L, actor, uid) {
   if (n >= cap(L)) throw UE(`Your roster is full (${n}/${cap(L)}).`);
   const open = (await klist(env, "offer:")).filter((k) => k.metadata?.uid === uid && k.metadata?.team === actor.team && k.metadata?.status === "pending" && k.metadata.exp > Date.now());
   if (open.length) throw UE(`You already have a pending offer out to **${t.name}**.`);
-  const o = { id: rid(), team: actor.team, uid, name: t.name, by: actor.id, byName: actor.name, ts: Date.now(), exp: Date.now() + DAY, status: "pending" };
+  const o = { id: rid(), team: actor.team, uid, name: t.name, by: actor.id, byName: actor.name, byRank: actor.rank, ts: Date.now(), exp: Date.now() + DAY, status: "pending" };
   await saveOffer(env, o);
   const sent = await dm(env, uid, { embeds: [{ title: `📝 Contract offer — ${team.name}`, color: colorInt(team.color),
       description: `${who(actor)} (${RANK[actor.rank] || "front office"}) wants to sign you to the **${team.name}**.\nRoster: ${n}/${cap(L)}\n\nThis offer expires <t:${Math.floor(o.exp / 1000)}:R>.` }],
@@ -284,8 +311,8 @@ async function answerOffer(env, id, uid, accept) {
     const x = await kget(env, k.name); if (x) { x.status = "void"; await saveOffer(env, x); }
   }
   bust("members");
-  await logTx(env, L, { title: "✍️ Signing", color: colorInt(team.color), teams: [o.team],
-    desc: `<@${uid}> has signed with the **${team.name}**.\nOffered by ${ref(o.by, o.byName)} · Roster ${n + 1}/${cap(L)}` });
+  await logTx(env, L, { title: "Offer Accepted", teams: [o.team], desc: `<@${uid}> has accepted the offer to the **${team.name}**`,
+    lines: [`👤 ${o.byRank === "hc" ? "Coach" : o.byRank === "gm" ? "General Manager" : "Franchise Owner"} · ${ref(o.by, o.byName)}`, capLine(L, n + 1)] });
   await notify(env, L, o.by, o.team, `✅ **${o.name}** accepted and is now on the ${team.name}! Roster ${n + 1}/${cap(L)}.`);
   return `🎉 Welcome to the **${team.name}**!`;
 }
@@ -298,10 +325,11 @@ async function releasePlayer(env, L, actor, uid) {
   if (!t.team || (!actor.staff && t.team !== actor.team)) throw UE(`**${t.name}** isn't on your team.`);
   if (t.rank === "fo") throw UE("You can't release a franchise owner. Staff handle FO changes.");
   if (actor.rank === "gm" && ["gm", "hc"].includes(t.rank)) throw UE("Only the franchise owner can release team staff.");
-  const team = teamOf(L, t.team);
+  const team = teamOf(L, t.team), n = rosterOf(L, M, t.team).length - 1;
   await stripTeam(env, L, uid, t.team, `Released by ${actor.name}`);
   bust("members");
-  await logTx(env, L, { title: "🧾 Release", color: 0x93a0bf, teams: [t.team], desc: `<@${uid}> has been released by the **${team.name}** (${who(actor)}).` });
+  await logTx(env, L, { title: "Player Released", teams: [t.team], desc: `<@${uid}> has been released from the **${team.name}**`,
+    lines: [`👤 Released by · ${actor.id ? `<@${actor.id}>` : `**${actor.name}**`}${actor.staff && !actor.team ? " (staff)" : ""}`, capLine(L, n)] });
   await dm(env, uid, `🧾 You've been released by the **${team.name}**. You're now a free agent.`);
   return `🧾 **${t.name}** has been released.`;
 }
@@ -343,7 +371,7 @@ async function demote(env, L, actor, uid) {
   await delRole(env, L, uid, L.R[t.rank], `Demoted by ${actor.name}`);
   bust("members");
   const team = teamOf(L, t.team);
-  await logTx(env, L, { title: "📉 Staff change", color: 0x93a0bf, teams: [t.team], desc: `<@${uid}> is no longer ${RANK[t.rank]} of the **${team.name}**.` });
+  await logTx(env, L, { title: "Demotion", teams: [t.team], desc: `<@${uid}> is no longer **${RANK[t.rank]}** of the **${team.name}**`, lines: [`👤 By · ${who(actor)}`] });
   await dm(env, uid, `📉 You're no longer ${RANK[t.rank]} of the ${team.name}. You're still on the roster.`);
   return `📉 **${t.name}** is no longer ${RANK[t.rank]}.`;
 }
@@ -420,7 +448,8 @@ async function decide(env, id, approve, reason, staff) {
     if (r.type === "demand") {
       const p = I(r.uid);
       if (p?.team === r.team) await stripTeam(env, L, r.uid, r.team, `Demand approved by ${staff.name}`);
-      await logTx(env, L, { title: "🚪 Demand", color: 0xffa24a, teams: [r.team], desc: `<@${r.uid}> has left the **${t.name}** (demand approved by staff).` });
+      await logTx(env, L, { title: "Demand Successful", teams: [r.team], desc: `<@${r.uid}> has demanded from the **${t.name}**`,
+        lines: [`🛡️ Approved by · ${staff.id ? `<@${staff.id}>` : `**${staff.name}**`}`, capLine(L, rosterOf(L, M, r.team).length - (p?.team === r.team ? 1 : 0))] });
       await dm(env, r.uid, `✅ Your demand to leave the ${t.name} was approved. You're now a free agent.\nStaff note: ${reason}`);
       const fo = foOf(L, M, r.team); if (fo) await dm(env, fo.id, `🚪 **${r.name}** has left the ${t.name} (demand approved).\nStaff note: ${reason}`);
     } else if (r.type === "promote") {
@@ -429,7 +458,8 @@ async function decide(env, id, approve, reason, staff) {
       else {
         await addRole(env, L, r.uid, L.R[r.role], `Promotion approved by ${staff.name}`);
         const other = r.role === "gm" ? "hc" : "gm"; if (p.rank === other) await delRole(env, L, r.uid, L.R[other]).catch(() => {});
-        await logTx(env, L, { title: "📈 Promotion", color: colorInt(t.color), teams: [r.team], desc: `<@${r.uid}> is now **${RANK[r.role]}** of the **${t.name}**.` });
+        await logTx(env, L, { title: "Promotion", teams: [r.team], desc: `<@${r.uid}> has been promoted to **${RANK[r.role]}** of the **${t.name}**`,
+          lines: [`👑 Requested by · ${ref(r.by, r.byName)}`, `🛡️ Approved by · ${staff.id ? `<@${staff.id}>` : `**${staff.name}**`}`] });
         await dm(env, r.uid, `📈 You've been promoted to **${RANK[r.role]}** of the ${t.name}!`);
         await notify(env, L, r.by, r.team, `✅ Your promotion of **${r.name}** to ${RANK[r.role]} was approved.\nStaff note: ${reason}`);
       }
@@ -442,7 +472,10 @@ async function decide(env, id, approve, reason, staff) {
       else {
         for (const u of r.give) { await stripTeam(env, L, u, r.from, "Trade"); await addRole(env, L, u, to.roleId, "Trade"); }
         for (const u of r.get) { await stripTeam(env, L, u, r.to, "Trade"); await addRole(env, L, u, from.roleId, "Trade"); }
-        await logTx(env, L, { title: "🔁 Trade", color: colorInt(from.color), teams: [r.from, r.to], desc: tradeText(L, r) });
+        const lst = (us) => us.length ? us.map((u) => `<@${u}>`).join(", ") : "nothing";
+        await logTx(env, L, { title: "Trade Accepted", teams: [r.from, r.to], desc: `the **${from.name}** and the **${to.name}** have completed a trade`,
+          lines: [`📤 ${from.abbr} send · ${lst(r.give)}`, `📥 ${to.abbr} send · ${lst(r.get)}`, `🛡️ Approved by · ${staff.id ? `<@${staff.id}>` : `**${staff.name}**`}`,
+            `🔋 Roster Cap · ${from.abbr} \`${nf}/${cap(L)}\` · ${to.abbr} \`${nt}/${cap(L)}\``] });
         for (const u of [...r.give, ...r.get]) await dm(env, u, `🔁 You've been traded! Check #transactions for the details.`);
       }
       const msg = result === "approved" ? `✅ Trade approved!\n${tradeText(L, r)}\nStaff note: ${reason}` : `⚠️ The trade couldn't go through: ${note}`;
@@ -465,23 +498,24 @@ async function appoint(env, L, abbr, uid, staffName) {
   if (!L.R.fo) throw UE("No Franchise owner role found.");
   const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
   if (!m) throw UE("That person isn't in the server.");
-  const p = info(L, m), old = foOf(L, M, abbr);
-  if (old && old.id !== uid) await delRole(env, L, old.id, L.R.fo, `FO replaced by ${staffName}`);
+  const p = info(L, m);
+  // a team should have exactly one FO — take the role off every other FO on this team
+  for (const old of rosterOf(L, M, abbr).filter((x) => x.rank === "fo" && x.id !== uid)) await delRole(env, L, old.id, L.R.fo, `FO replaced by ${staffName}`);
   if (p.team && p.team !== abbr) await stripTeam(env, L, uid, p.team, "Appointed FO of another team");
   await addRole(env, L, uid, t.roleId, `Appointed FO by ${staffName}`);
   await addRole(env, L, uid, L.R.fo, `Appointed FO by ${staffName}`);
   for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r).catch(() => {});
   bust("members");
-  await logTx(env, L, { title: "👑 New franchise owner", color: colorInt(t.color), teams: [abbr], desc: `<@${uid}> is the new franchise owner of the **${t.name}**.` });
+  await logTx(env, L, { title: "Franchise Owner Appointed", teams: [abbr], desc: `<@${uid}> is the new franchise owner of the **${t.name}**`, lines: [`🛡️ Appointed by · **${staffName}**`] });
   await dm(env, uid, `👑 You've been appointed franchise owner of the **${t.name}**! Manage your team at ${SITE}fo.html`);
   return `👑 ${p.name} is now FO of the ${t.name}.`;
 }
 async function unappoint(env, L, abbr, staffName) {
-  const M = await members(env, L, true), fo = foOf(L, M, abbr), t = teamOf(L, abbr);
+  const M = await members(env, L, true), fos = rosterOf(L, M, abbr).filter((x) => x.rank === "fo"), fo = fos[0], t = teamOf(L, abbr);
   if (!fo) throw UE("That team has no FO.");
-  await delRole(env, L, fo.id, L.R.fo, `FO removed by ${staffName}`);
+  for (const x of fos) await delRole(env, L, x.id, L.R.fo, `FO removed by ${staffName}`);
   bust("members");
-  await logTx(env, L, { title: "👑 Franchise owner removed", color: 0x93a0bf, teams: [abbr], desc: `<@${fo.id}> is no longer franchise owner of the **${t.name}**.` });
+  await logTx(env, L, { title: "Franchise Owner Removed", teams: [abbr], desc: `${fos.map((x) => `<@${x.id}>`).join(", ")} ${fos.length > 1 ? "are" : "is"} no longer franchise owner of the **${t.name}**`, lines: [`🛡️ By · **${staffName}**`] });
   return `${fo.name} is no longer FO of the ${t.name}.`;
 }
 
@@ -500,8 +534,9 @@ async function staffAssign(env, L, staff, uid, abbr) {
   await addRole(env, L, uid, t.roleId, `Assigned by ${staff.name}`);
   await delRole(env, L, uid, L.R.draftable, "Assigned to a team").catch(() => {});
   bust("members");
-  await logTx(env, L, { title: from ? "🔀 Roster move" : "📋 Staff signing", color: colorInt(t.color), teams: [abbr, ...(from ? [from.abbr] : [])],
-    desc: from ? `<@${uid}> has been moved from the **${from.name}** to the **${t.name}** by staff.` : `<@${uid}> has been added to the **${t.name}** by staff. Roster ${n + 1}/${cap(L)}` });
+  await logTx(env, L, { title: from ? "Roster Move" : "Staff Signing", teams: [abbr, ...(from ? [from.abbr] : [])],
+    desc: from ? `<@${uid}> has been moved from the **${from.name}** to the **${t.name}**` : `<@${uid}> has been added to the **${t.name}**`,
+    lines: [`🛡️ By · **${staff.name}**`, capLine(L, n + 1)] });
   await dm(env, uid, from ? `🔀 Staff moved you from the ${from.name} to the **${t.name}**.` : `📋 Staff added you to the **${t.name}**!`);
   return from ? `${p.name} moved from the ${from.name} to the ${t.name}.` : `${p.name} added to the ${t.name}.`;
 }
@@ -518,8 +553,9 @@ async function staffTitle(env, L, staff, uid, role) {
   if (role !== "none") await addRole(env, L, uid, L.R[role], `Title set by ${staff.name}`);
   bust("members");
   const t = teamOf(L, p.team);
-  await logTx(env, L, { title: role === "none" ? "📉 Staff change" : "📈 Promotion", color: colorInt(t.color), teams: [p.team],
-    desc: role === "none" ? `<@${uid}> is no longer ${RANK[p.rank]} of the **${t.name}**.` : `<@${uid}> is now **${RANK[role]}** of the **${t.name}**.` });
+  await logTx(env, L, { title: role === "none" ? "Demotion" : "Promotion", teams: [p.team],
+    desc: role === "none" ? `<@${uid}> is no longer **${RANK[p.rank]}** of the **${t.name}**` : `<@${uid}> has been promoted to **${RANK[role]}** of the **${t.name}**`,
+    lines: [`🛡️ By · **${staff.name}**`] });
   if (role !== "none") await dm(env, uid, `📈 You're now **${RANK[role]}** of the ${t.name}!`);
   return role === "none" ? `${p.name} no longer has a title.` : `${p.name} is now ${RANK[role]} of the ${t.name}.`;
 }
@@ -612,8 +648,8 @@ async function dangerSimple(env, L, admin, body) {
 // ---------- franchises ----------
 async function franchisesEmbeds(env, L) {
   const M = await members(env, L, true);
-  const emojis = await cached("emojis", 600000, () => discord(env, "GET", `/guilds/${L.guild}/emojis`).catch(() => []));
-  const emo = (t) => { const k = t.name.split(" ").pop().toLowerCase(); const e = emojis.find((x) => x.name.toLowerCase().includes(k) || x.name.toLowerCase() === t.abbr.toLowerCase()); return e ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}> ` : ""; };
+  const E = await guildEmojis(env, L);
+  const emo = (t) => { const e = teamEmoji(E, t); return e ? emojiTag(e) + " " : ""; };
   const rows = L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { t, n: r.length, fo: r.find((p) => p.rank === "fo") }; });
   const line = (x) => `${emo(x.t)}${x.t.roleId ? `<@&${x.t.roleId}>` : `**${x.t.name}**`} \`${x.n}/${cap(L)}\` ${x.fo ? `<@${x.fo.id}>` : "**No FO**"}`;
   const act = rows.filter((x) => x.fo).sort((a, b) => a.t.name.localeCompare(b.t.name)), un = rows.filter((x) => !x.fo).sort((a, b) => a.t.name.localeCompare(b.t.name));
@@ -1093,7 +1129,7 @@ async function adminFrom(env, L, auth) {
   });
 }
 function mentionsToNames(M, L, s) {
-  return String(s || "").replace(/<@&(\d+)>/g, (_, id) => "@" + (L.teams.find((t) => t.roleId === id)?.name || "role"))
+  return String(s || "").replace(/<a?:\w+:\d+>\s?/g, "").replace(/`/g, "").replace(/^> • /gm, "• ").replace(/<@&(\d+)>/g, (_, id) => "@" + (L.teams.find((t) => t.roleId === id)?.name || "role"))
     .replace(/<@(\d+)>/g, (_, id) => "@" + (M.find((m) => m.user.id === id) ? display(M.find((m) => m.user.id === id)) : "user")).replace(/\*\*/g, "");
 }
 function plain(L, r) {
