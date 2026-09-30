@@ -3,7 +3,7 @@
  "rounds": 8,
  "snake": true,
  "pickMinutes": 0,
- "clockStart": 1790734685704,
+ "clockStart": 1790734737720,
  "teams": [
   {
    "abbr": "MIN",
@@ -250,6 +250,12 @@
    "avatar": "https://cdn.discordapp.com/avatars/1455465653761736930/1d25465be09dc5c1de7233fde40788ff.png?size=96"
   }
  ],
- "picks": [],
+ "picks": [
+  {
+   "player": 2,
+   "at": 1790734737720,
+   "by": "296046630619054090"
+  }
+ ],
  "announcement": ""
 }
