@@ -1,0 +1,26 @@
+name: Deploy bot (Cloudflare Worker)
+on:
+  push:
+    branches: [main]
+    paths: ["worker/**"]
+  workflow_dispatch:
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the Cloudflare token is set
+        env:
+          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF" ]; then echo "::error::Add the CLOUDFLARE_API_TOKEN secret (Settings → Secrets and variables → Actions)."; exit 1; fi
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: b6a188c897b69db5c46e16393b6a98ba
+          workingDirectory: worker
+          command: deploy
