@@ -1,0 +1,14 @@
+# Deploy config for the UFA bot Worker. GitHub deploys it automatically (.github/workflows/deploy-worker.yml).
+# Variables and secrets stay in the Cloudflare dashboard (keep_vars keeps them).
+name = "ufa-draft"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+keep_vars = true
+
+[[kv_namespaces]]
+binding = "VOTES"
+id = "c9b7d8c749364764805b70b652d95956"
+
+[observability]
+enabled = true

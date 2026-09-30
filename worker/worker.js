@@ -485,6 +485,56 @@ async function unappoint(env, L, abbr, staffName) {
   return `${fo.name} is no longer FO of the ${t.name}.`;
 }
 
+// ---------- staff overrides (admin page) ----------
+async function staffAssign(env, L, staff, uid, abbr) {
+  const t = teamOf(L, abbr); if (!t?.roleId) throw UE("That team has no Discord role linked.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const p = info(L, m);
+  if (p.team === abbr) throw UE(`${p.name} is already on the ${t.name}.`);
+  if (p.rank === "fo") throw UE(`${p.name} is a franchise owner — remove them as FO first (or appoint them to the new team).`);
+  const n = rosterOf(L, M, abbr).length;
+  if (n >= cap(L)) throw UE(`The ${t.name} roster is full (${n}/${cap(L)}). Raise the cap in Settings or remove someone first.`);
+  const from = p.team && teamOf(L, p.team);
+  if (from) await stripTeam(env, L, uid, p.team, `Moved by ${staff.name}`);
+  await addRole(env, L, uid, t.roleId, `Assigned by ${staff.name}`);
+  await delRole(env, L, uid, L.R.draftable, "Assigned to a team").catch(() => {});
+  bust("members");
+  await logTx(env, L, { title: from ? "🔀 Roster move" : "📋 Staff signing", color: colorInt(t.color), teams: [abbr, ...(from ? [from.abbr] : [])],
+    desc: from ? `<@${uid}> has been moved from the **${from.name}** to the **${t.name}** by staff.` : `<@${uid}> has been added to the **${t.name}** by staff. Roster ${n + 1}/${cap(L)}` });
+  await dm(env, uid, from ? `🔀 Staff moved you from the ${from.name} to the **${t.name}**.` : `📋 Staff added you to the **${t.name}**!`);
+  return from ? `${p.name} moved from the ${from.name} to the ${t.name}.` : `${p.name} added to the ${t.name}.`;
+}
+async function staffTitle(env, L, staff, uid, role) {
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const p = info(L, m);
+  if (!p.team) throw UE(`${p.name} isn't on a team.`);
+  if (p.rank === "fo") throw UE(`${p.name} is the franchise owner.`);
+  if (!["gm", "hc", "none"].includes(role)) throw UE("Pick General Manager, Head Coach or no title.");
+  if (role !== "none" && !L.R[role]) throw UE("The GM/HC roles aren't set up yet.");
+  if ((p.rank === "player" && role === "none") || p.rank === role) throw UE(`${p.name} already has that title.`);
+  for (const r of ["gm", "hc"]) if (r !== role && p.rank === r) await delRole(env, L, uid, L.R[r], `Title changed by ${staff.name}`);
+  if (role !== "none") await addRole(env, L, uid, L.R[role], `Title set by ${staff.name}`);
+  bust("members");
+  const t = teamOf(L, p.team);
+  await logTx(env, L, { title: role === "none" ? "📉 Staff change" : "📈 Promotion", color: colorInt(t.color), teams: [p.team],
+    desc: role === "none" ? `<@${uid}> is no longer ${RANK[p.rank]} of the **${t.name}**.` : `<@${uid}> is now **${RANK[role]}** of the **${t.name}**.` });
+  if (role !== "none") await dm(env, uid, `📈 You're now **${RANK[role]}** of the ${t.name}!`);
+  return role === "none" ? `${p.name} no longer has a title.` : `${p.name} is now ${RANK[role]} of the ${t.name}.`;
+}
+async function staffRole(env, L, staff, uid, on) {
+  if (!L.R.staff) throw UE("The UFA Staff role isn't set up yet.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const has = (m.roles || []).includes(L.R.staff), name = display(m);
+  if (has === on) throw UE(on ? `${name} is already staff.` : `${name} isn't staff.`);
+  await (on ? addRole : delRole)(env, L, uid, L.R.staff, `${on ? "Given" : "Removed"} by ${staff.name}`);
+  bust("members");
+  if (on) await dm(env, uid, "🛡️ You've been made **UFA Staff**. You can now see the staff channels and approve requests.");
+  return on ? `${name} is now UFA Staff.` : `${name} is no longer staff.`;
+}
+
 // ---------- franchises ----------
 async function franchisesEmbeds(env, L) {
   const M = await members(env, L, true);
@@ -889,6 +939,18 @@ async function web(req, url, env, ctx) {
         return out({ ok: true });
       }
       if (p === "/api/admin/passwords") { const ks = await klist(env, "pw:"); return out({ teams: ks.map((k) => k.name.slice(3)) }); }
+      if (p === "/api/admin/overview") {
+        const M = await members(env, L, true);
+        const pending = (await klist(env, "req:")).filter((k) => k.metadata?.status === "staff").length;
+        return out({ teams: L.teams, members: M.map((m) => info(L, m)), cap: cap(L), frozen: frozen(L), draftStatus: L.draftStatus, pending, ready: { staff: !!L.R.staff, gm: !!L.R.gm, hc: !!L.R.hc, fo: !!L.R.fo, approvals: !!L.C.approvals, transactions: !!L.C.transactions } });
+      }
+      if (p === "/api/admin/assign") return out({ ok: true, text: await staffAssign(env, L, admin, body.uid, body.team) });
+      if (p === "/api/admin/title") return out({ ok: true, text: await staffTitle(env, L, admin, body.uid, body.role) });
+      if (p === "/api/admin/staffrole") return out({ ok: true, text: await staffRole(env, L, admin, body.uid, !!body.on) });
+      if (p === "/api/admin/tx") {
+        const M = await members(env, L), ks = (await klist(env, "tx:")).slice(0, 60);
+        return out({ tx: (await Promise.all(ks.map((k) => kget(env, k.name)))).filter(Boolean).map((t) => ({ ...t, text: mentionsToNames(M, L, t.desc) })) });
+      }
       if (p === "/api/admin/members") { const M = await members(env, L); return out({ members: M.map((m) => info(L, m)) }); }
       if (p === "/api/admin/release") return out({ ok: true, text: await releasePlayer(env, L, admin, body.uid) });
       return out({ error: "Unknown admin route." }, 404);
