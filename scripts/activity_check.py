@@ -1,6 +1,6 @@
 """Weekly activity check (Mondays, or on demand).
 
-Secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, STAFF_CHANNEL (channel ID or name). Optional FO_ROLE.
+Secrets: DISCORD_BOT_TOKEN, DISCORD_GUILD_ID. Optional STAFF_CHANNEL (defaults to #staff-chat from config.json), FO_ROLE.
 Counts every team's players from its Discord role and reports to the staff channel:
 - teams under the minimum player count (Settings on the admin page)
 - teams with no franchise owner, and FOs who left the server
@@ -66,7 +66,7 @@ def main():
     out += ["", f"**{active}** active teams. Schedule: {SITE}"]
     text = "\n".join(out)
     print(text)
-    ch = os.environ.get("STAFF_CHANNEL", "").strip()
+    ch = os.environ.get("STAFF_CHANNEL", "").strip() or ((load("config.json", {}) or {}).get("channels") or {}).get("staffChat", "")
     if ch: post(channel_id(ch), text, pings=False)
     else: print("STAFF_CHANNEL secret not set — report printed only.")
 
