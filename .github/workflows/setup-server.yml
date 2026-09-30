@@ -1,0 +1,23 @@
+name: Set up server (roles + staff channels)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create roles and channels
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          FO_ROLE: ${{ secrets.FO_ROLE }}
+          TRANSACTIONS_CHANNEL: ${{ secrets.TRANSACTIONS_CHANNEL }}
+        run: python scripts/setup_server.py
+      - name: Save config.json
+        run: |
+          git config user.name "ufa-draft-bot"
+          git config user.email "ufa-draft-bot@users.noreply.github.com"
+          git add config.json
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Server setup: save role and channel IDs" && (git push || (git pull --rebase && git push)))
