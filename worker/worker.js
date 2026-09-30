@@ -535,6 +535,80 @@ async function staffRole(env, L, staff, uid, on) {
   return on ? `${name} is now UFA Staff.` : `${name} is no longer staff.`;
 }
 
+// ---------- danger zone (bulk role changes, run in small batches) ----------
+const DANGER = {
+  wipe_all:     { phrase: "WIPE ALL",     label: "Wipe all teams",               tx: "🧹 All rosters have been cleared" },
+  wipe_keep_fo: { phrase: "WIPE PLAYERS", label: "Wipe players (keep FOs)",      tx: "🧹 All rosters have been cleared — franchise owners stay" },
+  clear_titles: { phrase: "CLEAR TITLES", label: "Remove every GM / HC title",   tx: "📉 All GM and Head Coach titles have been removed" },
+  clear_fos:    { phrase: "REMOVE FOS",   label: "Remove every franchise owner", tx: "👑 All franchise owner roles have been removed" },
+  restore:      { phrase: "RESTORE",      label: "Undo last wipe",               tx: "↩️ Rosters have been restored" },
+};
+const BATCH = 15;
+function planOps(L, M, action) {
+  const teamIds = new Set(L.teams.map((t) => t.roleId).filter(Boolean)), titles = [L.R.gm, L.R.hc].filter(Boolean);
+  const ops = [];
+  for (const m of M) {
+    const roles = m.roles || [], isFo = !!L.R.fo && roles.includes(L.R.fo);
+    let rm = [];
+    if (action === "wipe_all") rm = roles.filter((r) => teamIds.has(r) || titles.includes(r) || r === L.R.fo);
+    else if (action === "wipe_keep_fo") rm = roles.filter((r) => titles.includes(r) || (!isFo && teamIds.has(r)));
+    else if (action === "clear_titles") rm = roles.filter((r) => titles.includes(r));
+    else if (action === "clear_fos") rm = roles.filter((r) => r === L.R.fo);
+    for (const r of rm) ops.push([m.user.id, r]);
+  }
+  return ops;
+}
+async function dangerPreview(env, L) {
+  const M = await members(env, L, true), out = {};
+  for (const a of ["wipe_all", "wipe_keep_fo", "clear_titles", "clear_fos"]) { const ops = planOps(L, M, a); out[a] = { ops: ops.length, people: new Set(ops.map((o) => o[0])).size }; }
+  const b = await kget(env, "backup:latest"), job = await kget(env, "job:current");
+  const kv = {};
+  for (const pre of ["offer:", "req:", "sess:", "pw:", "tx:"]) kv[pre.slice(0, -1)] = (await klist(env, pre)).filter((k) => pre === "offer:" ? k.metadata?.status === "pending" : pre === "req:" ? ["staff", "other"].includes(k.metadata?.status) : true).length;
+  return { counts: out, backup: b ? { action: b.action, label: DANGER[b.action]?.label, ts: b.ts, by: b.by, ops: b.ops.length, people: new Set(b.ops.map((o) => o[0])).size } : null,
+    job: job ? { action: job.action, i: job.i, total: job.ops.length } : null, kv, phrases: Object.fromEntries(Object.entries(DANGER).map(([k, v]) => [k, v.phrase])) };
+}
+async function dangerRun(env, L, admin, body) {
+  let job = await kget(env, "job:current");
+  if (!job) {
+    const a = body.action, d = DANGER[a];
+    if (!d) throw UE("Unknown action.");
+    if (String(body.confirm || "").trim().toUpperCase() !== d.phrase) throw UE(`Type ${d.phrase} to confirm.`);
+    let ops;
+    if (a === "restore") { const b = await kget(env, "backup:latest"); if (!b) throw UE("There's nothing to undo."); ops = b.ops; }
+    else ops = planOps(L, await members(env, L, true), a);
+    job = { id: rid(), action: a, ops, i: 0, add: a === "restore", announce: !!body.announce, by: admin.name, ts: Date.now(), errors: 0 };
+    if (a !== "restore" && ops.length) await kput(env, "backup:latest", { action: a, ops, ts: job.ts, by: admin.name }, 60 * 86400);
+    if (a === "restore") await KV(env).delete("backup:latest");
+  } else if (body.action && body.action !== job.action) {
+    throw UE(`"${DANGER[job.action].label}" is still running (${job.i}/${job.ops.length}) — let it finish first.`);
+  }
+  const end = Math.min(job.ops.length, job.i + BATCH);
+  for (; job.i < end; job.i++) {
+    const [u, r] = job.ops[job.i];
+    try { await discord(env, job.add ? "PUT" : "DELETE", `/guilds/${L.guild}/members/${u}/roles/${r}`, null, `${DANGER[job.action].label} (by ${job.by})`); }
+    catch (e) { if (e.status === 403) { await kput(env, "job:current", job, 3600); throw UE("Discord refused a role change — the bot's role must sit above the team, FO, GM and HC roles. Fix that, then press Continue."); } if (e.status !== 404) job.errors++; }
+  }
+  bust("members");
+  if (job.i < job.ops.length) { await kput(env, "job:current", job, 3600); return { done: false, i: job.i, total: job.ops.length }; }
+  await KV(env).delete("job:current");
+  if (job.announce && job.ops.length) await logTx(env, L, { title: DANGER[job.action].tx, color: 0xe8424a, desc: `${new Set(job.ops.map((o) => o[0])).size} members updated by staff.` });
+  return { done: true, i: job.i, total: job.ops.length, errors: job.errors, people: new Set(job.ops.map((o) => o[0])).size };
+}
+async function dangerSimple(env, L, admin, body) {
+  const a = body.action;
+  if (String(body.confirm || "").trim().toUpperCase() !== "CONFIRM") throw UE("Type CONFIRM to go ahead.");
+  let n = 0;
+  if (a === "cancel_pending") {
+    for (const k of await klist(env, "offer:")) if (k.metadata?.status === "pending") { const o = await kget(env, k.name); if (o) { o.status = "void"; await saveOffer(env, o); n++; } }
+    for (const k of await klist(env, "req:")) if (["staff", "other"].includes(k.metadata?.status)) { const r = await kget(env, k.name); if (r) { r.status = "cancelled"; r.decidedByName = admin.name; r.decisionReason = "Cancelled from the Danger Zone"; await saveReq(env, r); n++; } }
+    return `Cancelled ${n} pending offer(s) and request(s).`;
+  }
+  const pre = { logout_all: "sess:", clear_passwords: "pw:", clear_tx: "tx:" }[a];
+  if (!pre) throw UE("Unknown action.");
+  for (const k of await klist(env, pre)) { await KV(env).delete(k.name); n++; }
+  return a === "logout_all" ? `Logged out ${n} FO portal session(s).` : a === "clear_passwords" ? `Removed ${n} team password(s) — those logins stop working.` : `Deleted ${n} transaction log entries (Discord messages stay).`;
+}
+
 // ---------- franchises ----------
 async function franchisesEmbeds(env, L) {
   const M = await members(env, L, true);
@@ -944,6 +1018,9 @@ async function web(req, url, env, ctx) {
         const pending = (await klist(env, "req:")).filter((k) => k.metadata?.status === "staff").length;
         return out({ teams: L.teams, members: M.map((m) => info(L, m)), cap: cap(L), frozen: frozen(L), draftStatus: L.draftStatus, pending, ready: { staff: !!L.R.staff, gm: !!L.R.gm, hc: !!L.R.hc, fo: !!L.R.fo, approvals: !!L.C.approvals, transactions: !!L.C.transactions } });
       }
+      if (p === "/api/admin/danger/preview") return out(await dangerPreview(env, L));
+      if (p === "/api/admin/danger") return out({ ok: true, ...(await dangerRun(env, L, admin, body)) });
+      if (p === "/api/admin/danger/simple") return out({ ok: true, text: await dangerSimple(env, L, admin, body) });
       if (p === "/api/admin/assign") return out({ ok: true, text: await staffAssign(env, L, admin, body.uid, body.team) });
       if (p === "/api/admin/title") return out({ ok: true, text: await staffTitle(env, L, admin, body.uid, body.role) });
       if (p === "/api/admin/staffrole") return out({ ok: true, text: await staffRole(env, L, admin, body.uid, !!body.on) });
