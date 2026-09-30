@@ -1,25 +1,28 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>UFA Scheduler</title>
+<title>UFA Admin</title>
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
 <style>body{margin:0}
-/* Scheduler admin: week editor with generator, teams table, Discord post builder. Dark only, matches the public page. */
-:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;--warn:#ffa24a;
+/* League admin: dashboard, assign tools (FO / players / titles / staff), team cards, approvals, schedule builder, transactions, settings.
+   Team/player data comes live from Discord through the bot's Worker; schedule data is schedule.json on GitHub. Dark only. */
+:root{--bg:#070b16;--panel:#0e1526;--panel2:#141d33;--panel3:#1a2542;--line:#243152;--fg:#eef2fb;--mute:#93a0bf;--red:#e8424a;--blue:#3d7bff;--gold:#ffc62f;--good:#4fd18b;--warn:#ffa24a;
   --num:"Bebas Neue",Impact,sans-serif;--body:"Rajdhani",system-ui,sans-serif;color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;font-weight:500;line-height:1.4}
 a{color:var(--gold)}
-.wrap{max-width:1040px;margin:0 auto;padding:24px 16px 96px;display:flex;flex-direction:column;gap:20px}
-header{text-align:center;display:flex;flex-direction:column;gap:4px;align-items:center}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 110px;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .eyebrow{font-size:13px;letter-spacing:.42em;color:var(--gold);font-weight:700}
-h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(44px,8vw,72px);line-height:.95;letter-spacing:.04em}
+h1{margin:0;font-family:var(--num);font-weight:400;font-size:clamp(40px,7vw,64px);line-height:.95;letter-spacing:.04em}
 h1 span{color:var(--red)} h1 b{color:var(--blue);font-weight:400}
+.links{display:flex;gap:14px;font-weight:700;flex-wrap:wrap}
 h2{margin:0;font-family:var(--num);font-weight:400;font-size:28px;letter-spacing:.06em;line-height:1}
+h3{margin:0;font-size:17px;font-weight:700}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
-.panel>label.f{flex:none}
+.between{justify-content:space-between;align-items:center}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase;min-width:0;flex:1 1 140px}
 label.c{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;cursor:pointer}
 input,select,textarea{font:inherit;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
@@ -27,17 +30,58 @@ label.f input,label.f select{width:100%}
 input[type=checkbox]{accent-color:var(--red);width:18px;height:18px;padding:0}
 textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;font-weight:500;resize:vertical}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.btn{font:inherit;font-weight:700;letter-spacing:.08em;font-size:14px;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+.btn{font:inherit;font-weight:700;letter-spacing:.06em;font-size:14px;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg);white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 .btn.red{background:var(--red);border-color:var(--red);color:#fff}
 .btn.blue{background:var(--blue);border-color:var(--blue);color:#fff}
 .btn.gold{background:var(--gold);border-color:var(--gold);color:#1a1300}
+.btn.good{background:var(--good);border-color:var(--good);color:#04200f}
 .btn.x{padding:6px 10px;color:var(--red);border-color:rgba(232,66,74,.5)}
+.btn.sm{padding:5px 9px;font-size:13px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
-.tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tabs button{font:inherit;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);background:transparent;border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0}
+.tabs button{font:inherit;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--mute);background:transparent;border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
 .tabs button[aria-selected=true]{color:#fff;background:var(--red);border-color:var(--red)}
+.count{background:var(--gold);color:#1a1300;border-radius:99px;font-size:11px;padding:0 6px;letter-spacing:0}
 .note{font-size:14px;color:var(--mute)}
 .msg{font-size:14px;font-weight:700}.msg.ok{color:var(--good)}.msg.err{color:var(--red)}
+.hide{display:none!important}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:13px;font-weight:700;letter-spacing:.06em;border:1px solid var(--line);border-radius:99px;padding:4px 12px;color:var(--mute);background:var(--panel)}
+.chip.good{color:var(--good);border-color:rgba(79,209,139,.5)}.chip.warn{color:var(--warn);border-color:rgba(255,162,74,.5)}.chip.red{color:var(--red);border-color:rgba(232,66,74,.5)}
+button.chip{cursor:pointer;font-family:inherit}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.stat .n{font-family:var(--num);font-size:44px;line-height:1;letter-spacing:.03em}
+.stat .l{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
+.attn{display:flex;flex-direction:column;gap:6px}
+.attn div{background:var(--panel2);border-left:3px solid var(--warn);border-radius:8px;padding:8px 12px}
+.attn div.ok{border-left-color:var(--good)}
+.attn .tx{border-left-color:var(--line)}
+.acts{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.act{text-align:left;font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color .15s,transform .15s}
+.act:hover{border-color:var(--gold);transform:translateY(-1px)}
+.act .ic{font-size:26px}
+.act b{font-family:var(--num);font-size:24px;font-weight:400;letter-spacing:.05em}
+.act span{font-size:14px;color:var(--mute)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start}
+.tc{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.tc .top{display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.badge{display:inline-flex;min-width:42px;height:34px;border-radius:8px;align-items:center;justify-content:center;font-family:var(--num);font-size:19px;color:#fff;padding:2px 6px 0;flex:none;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.tc .nm{font-weight:700;line-height:1.15;flex:1;min-width:0}
+.tc .body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.meter{height:7px;background:var(--panel3);border-radius:99px;overflow:hidden}.meter i{display:block;height:100%}
+.st{font-size:12px;font-weight:700;letter-spacing:.12em}
+.tc.out{opacity:.75}
+.tc .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tc .ctl select{flex:1 1 120px}
+.tc input[type=color]{width:40px;height:36px;padding:2px}
+.roster{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow:auto}
+.pl{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:8px;background:var(--panel2);min-width:0}
+.pl img{width:26px;height:26px;border-radius:50%;flex:none;background:#223}
+.pl .pn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.tag{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-radius:6px;padding:1px 6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.tag.fo{color:var(--gold);border-color:var(--gold)}.tag.gm{color:var(--blue);border-color:var(--blue)}.tag.hc{color:var(--good);border-color:var(--good)}.tag.staff{color:var(--red);border-color:var(--red)}
 .games{display:flex;flex-direction:column;gap:8px}
 .g{display:grid;grid-template-columns:minmax(0,1fr) 26px minmax(0,1fr) minmax(0,1fr) auto auto;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px}
 .g.auto{border-color:var(--blue);background:rgba(61,123,255,.08)}
@@ -45,119 +89,171 @@ textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;f
 .g select,.g input[type=text]{width:100%}
 .warn{grid-column:1/-1;font-size:13px;font-weight:700;color:var(--warn)}
 @media (max-width:720px){.g{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}.g input[type=text]{grid-column:1/-1}}
-.sticky{position:fixed;left:0;right:0;bottom:0;z-index:10;background:rgba(7,11,22,.95);border-top:1px solid var(--line);padding:10px 16px;display:flex;justify-content:center;gap:10px;align-items:center}
+.sticky{position:fixed;left:0;right:0;bottom:0;z-index:10;background:rgba(7,11,22,.96);border-top:1px solid var(--line);padding:10px 16px;display:flex;justify-content:center;gap:10px;align-items:center;flex-wrap:wrap}
 .sticky .dirty{color:var(--gold);font-weight:700;font-size:14px}
-.tscroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:760px}
-th,td{padding:6px 6px;text-align:left;border-bottom:1px solid var(--line)}
-th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
-td input[type=text],td input[type=number]{width:100%}
-.badge{display:inline-flex;width:36px;height:30px;border-radius:7px;align-items:center;justify-content:center;font-family:var(--num);font-size:16px;color:#fff;padding-top:2px}
-.hide{display:none!important}
-.gate{max-width:560px;margin:0 auto}
+.gate{max-width:560px;margin:0 auto;width:100%}
 ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:column;gap:4px} ol b{color:var(--fg)}
+.tx{border-left:3px solid var(--line);padding:6px 12px;background:var(--panel2);border-radius:0 8px 8px 0}.tx b{display:block}.tx small{color:var(--mute)}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px)}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+.wz{display:flex;flex-direction:column;gap:14px;padding:18px}
+.wz .steps{display:flex;gap:6px}.wz .steps i{flex:1;height:4px;border-radius:9px;background:var(--line)}.wz .steps i.on{background:var(--gold)}
+.pick{display:flex;flex-direction:column;gap:4px;max-height:48vh;overflow:auto}
+.opt{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid transparent;background:var(--panel2);cursor:pointer;font:inherit;color:var(--fg);text-align:left;width:100%}
+.opt:hover,.opt:focus-visible{border-color:var(--gold)}
+.opt img{width:30px;height:30px;border-radius:50%;flex:none;background:#223}
+.opt .pn{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.confirm{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:17px;line-height:1.45}
+.confirm .warnbox{color:var(--warn);font-weight:700;font-size:15px;margin-top:8px}
+.pwbox{font-family:ui-monospace,Consolas,monospace;font-size:22px;background:var(--bg);border:1px dashed var(--gold);border-radius:10px;padding:12px;text-align:center;letter-spacing:.04em;user-select:all}
+.toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.toast.err{border-color:var(--red);color:#ffb3b7}
 </style></head><body>
 <div class="wrap">
   <header>
-    <div class="eyebrow">LEAGUE SCHEDULER</div>
-    <h1><span>UFA</span> <b>ADMIN</b></h1>
-    <div style="display:flex;gap:16px;font-weight:700"><a href="./">← Public schedule</a><a href="plan.html">Plan a week →</a><a href="draftroom.html">Draft room →</a><a href="fo.html">FO portal →</a></div>
+    <div><div class="eyebrow">UFA LEAGUE</div><h1><span>UFA</span> <b>ADMIN</b></h1></div>
+    <div class="links"><a href="./">Public site</a><a href="plan.html">Plan a week</a><a href="draftroom.html">Draft room</a><a href="fo.html">FO portal</a></div>
   </header>
 
   <section class="panel gate" id="gate">
     <h2>Sign in</h2>
-    <div class="note">Saving needs a GitHub token that can write to the <b>ufa-schedule</b> repo. You can still build matchups and copy Discord posts without signing in.</div>
+    <div class="note">The admin page needs your GitHub token (the same one as before). It proves you run the site, so the bot lets you manage the league.</div>
     <ol>
       <li>Open <a href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener">your GitHub tokens</a> and edit your token (or make a new one).</li>
       <li><b>Repository access</b> → Only select repositories → add <b>ufa-schedule</b>.</li>
       <li><b>Permissions</b> → Repositories → <b>Contents: Read and write</b>. Save.</li>
     </ol>
     <label class="f">Access token<input type="password" id="tok" autocomplete="off" placeholder="github_pat_…"></label>
-    <div class="row"><button class="btn gold" id="signin">Sign in</button><button class="btn" id="skip">Continue without saving</button><span class="msg" id="gmsg"></span></div>
+    <div class="row"><button class="btn gold" id="signin">Sign in</button><span class="msg" id="gmsg"></span></div>
   </section>
 
-  <div id="app" class="hide" style="display:flex;flex-direction:column;gap:20px">
-    <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn" id="signout">Sign out</button></div>
-    <a class="btn red" href="plan.html" style="text-decoration:none;align-self:flex-start">Plan a week (step by step) →</a>
-    <div class="tabs" role="tablist"><button role="tab" data-tab="week" aria-selected="true">Week builder</button><button role="tab" data-tab="teams" aria-selected="false">Teams &amp; roles</button><button role="tab" data-tab="settings" aria-selected="false">Settings</button><button role="tab" data-tab="ops" aria-selected="false">League ops</button></div>
+  <div id="app" class="hide" style="display:flex;flex-direction:column;gap:14px">
+    <div class="row between"><div class="chips" id="chips"></div><div class="row" style="align-items:center"><span class="note" id="who"></span><button class="btn sm" id="refresh">↻ Refresh</button><button class="btn sm" id="signout">Sign out</button></div></div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
+      <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
+      <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
+      <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
+      <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
+      <button role="tab" data-tab="tx" aria-selected="false">Transactions</button>
+      <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </nav>
+    <div class="note hide" id="livewarn"></div>
 
-    <div id="tab-week" style="display:flex;flex-direction:column;gap:20px">
+    <div id="tab-dash" style="display:flex;flex-direction:column;gap:16px">
+      <div class="stats" id="stats"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+        <section class="panel"><h2>Needs attention</h2><div class="attn" id="attn"></div></section>
+        <section class="panel"><h2>Quick actions</h2>
+          <div class="row">
+            <button class="btn red" data-wz="fo">👑 Assign new FO</button>
+            <button class="btn" data-wz="add">➕ Add / move player</button>
+            <button class="btn" data-wz="remove">➖ Remove player</button>
+            <a class="btn" href="plan.html">📅 Plan a week</a>
+            <a class="btn" href="draftroom.html">🏈 Draft room</a>
+          </div>
+          <h3 style="margin-top:6px">Latest transactions</h3><div class="attn" id="dashtx"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-assign" class="hide" style="display:flex;flex-direction:column;gap:16px">
+      <div class="note">These happen right away in Discord (roles change instantly), get posted in #transactions, and the person gets a DM. There's always a confirm step first.</div>
+      <div class="acts">
+        <button class="act" data-wz="fo"><span class="ic">👑</span><b>Assign new FO</b><span>Pick a team and a person. Replaces the current FO if there is one.</span></button>
+        <button class="act" data-wz="unfo"><span class="ic">🚫</span><b>Remove an FO</b><span>Take the franchise owner role away. They stay on the roster.</span></button>
+        <button class="act" data-wz="add"><span class="ic">➕</span><b>Add / move player</b><span>Put anyone on a team, or move them from one team to another. Skips offers.</span></button>
+        <button class="act" data-wz="remove"><span class="ic">➖</span><b>Remove player</b><span>Take someone off their team. They become a free agent.</span></button>
+        <button class="act" data-wz="title"><span class="ic">🎖️</span><b>Set GM / Head Coach</b><span>Give or remove a title directly — no approval step.</span></button>
+        <button class="act" data-wz="staff"><span class="ic">🛡️</span><b>UFA Staff</b><span>Add or remove staff. Staff see the staff channels and approve requests.</span></button>
+        <button class="act" data-wz="pw"><span class="ic">🔑</span><b>FO portal password</b><span>Make a password a team can use to log in to the FO portal.</span></button>
+      </div>
+      <section class="panel"><h2>Current staff</h2><div class="roster" id="stafflist" style="max-height:none"></div></section>
+    </div>
+
+    <div id="tab-teams" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="filters">
+        <input type="search" id="tq" placeholder="Search teams…" aria-label="Search teams" style="flex:1 1 200px">
+        <select id="tf" aria-label="Filter"><option value="all">All teams</option><option value="active">Active</option><option value="out">Out</option><option value="nofo">No FO</option><option value="under">Under minimum</option></select>
+        <select id="ts" aria-label="Sort"><option value="name">Sort: name</option><option value="players">Sort: most players</option><option value="fewest">Sort: fewest players</option></select>
+      </div>
+      <div class="note">Players and FO come straight from Discord roles. <b>Status</b>: Auto follows your rules in Settings (min players + FO); Always / Never overrides them. Status and color changes need <b>Save &amp; publish</b>.</div>
+      <div class="cards" id="cards"></div>
+    </div>
+
+    <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="note">Demands, promotions and trades. The same requests are in #approvals on Discord — deciding in either place works. A reason is required and gets DMed to the people involved.</div>
+      <div id="reqs" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <div id="tab-week" class="hide" style="display:flex;flex-direction:column;gap:16px">
       <section class="panel">
         <div class="row">
           <label class="f" style="flex:0 1 160px">Week<select id="wsel"></select></label>
           <button class="btn" id="newweek">+ New week</button>
           <label class="f" style="flex:0 1 180px">Deadline<input type="date" id="wdl"></label>
           <label class="c" style="margin-bottom:10px"><input type="checkbox" id="wdone"> Week finished</label>
+          <a class="btn red" href="plan.html" style="margin-left:auto">Plan a week step by step →</a>
         </div>
         <label class="f">Note on public page (optional)<input type="text" id="wnote" placeholder="e.g. Playoff race heating up"></label>
       </section>
-
       <section class="panel">
-        <div class="row" style="justify-content:space-between"><h2 id="gtitle">Matchups</h2><button class="btn" id="addgame">+ Add game</button></div>
+        <div class="row between"><h2 id="gtitle">Matchups</h2><button class="btn" id="addgame">+ Add game</button></div>
         <div class="games" id="games"></div>
         <div class="note" id="byes"></div>
         <div class="panel" style="background:var(--panel2);gap:10px">
-          <h2 style="font-size:22px">Auto-schedule</h2>
-          <div class="note">Fills the rest of the week with active teams that don't have a game yet. It avoids rematches (especially last week's), and if there's an odd number it gives the bye to whoever has had the fewest. Suggested games show in blue until you save.</div>
+          <h3>Auto-schedule</h3>
+          <div class="note">Fills the rest of the week with active teams that don't have a game yet, avoiding rematches. Odd number → the bye goes to whoever has had the fewest. Suggestions show in blue until you save.</div>
           <label class="c"><input type="checkbox" id="cuplay" checked> Teams in catch-up games still get a regular game</label>
           <div class="row"><button class="btn blue" id="fill">Fill rest of week</button><button class="btn" id="reroll">Reroll suggestions</button><button class="btn" id="clearauto">Remove suggestions</button></div>
         </div>
       </section>
-
       <section class="panel">
-        <div class="row" style="justify-content:space-between"><h2>Discord post</h2><button class="btn gold" id="copy">Copy post</button></div>
+        <div class="row between"><h2>Discord post</h2><button class="btn gold" id="copy">Copy post</button></div>
         <div class="row">
           <label class="c"><input type="checkbox" id="pres" checked> Include results</label>
           <label class="c"><input type="checkbox" id="pbye" checked> List byes</label>
           <label class="c"><input type="checkbox" id="pnotdone"> Add "NOT DONE"</label>
         </div>
-        <textarea id="post" rows="14" aria-label="Discord post"></textarea>
-        <div class="note">Team names only ping in Discord if you add role IDs in <b>Teams &amp; roles</b>. Otherwise they post as plain text like "@Minnesota Vikings".</div>
+        <textarea id="post" rows="12" aria-label="Discord post"></textarea>
+        <div class="note">The bot also posts each new week automatically in your schedule channel.</div>
         <span class="msg" id="cmsg"></span>
       </section>
     </div>
 
-    <div id="tab-teams" class="hide" style="display:flex;flex-direction:column;gap:20px">
-      <section class="panel">
-        <h2>Teams</h2>
-        <div class="note">Status <b>Auto</b> follows the rules in Settings; <b>Always</b>/<b>Never</b> overrides them. Only active teams get scheduled. <b>Discord role ID</b>: turn on Developer Mode in Discord, right-click the team role, then Copy Role ID. With an ID, the post pings the role for real.</div>
-        <div class="tscroll"><table><thead><tr><th>Status</th><th></th><th>Team</th><th>Players</th><th>FO</th><th>Discord role ID</th><th>Color</th></tr></thead><tbody id="tbody"></tbody></table></div>
-      </section>
+    <div id="tab-tx" class="hide" style="display:flex;flex-direction:column;gap:10px">
+      <input type="search" id="txq" placeholder="Search transactions (player or team)…" aria-label="Search transactions">
+      <div id="txlist" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
-    <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:20px">
+    <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:16px">
+      <section class="panel">
+        <h2>Transactions</h2>
+        <div class="row">
+          <label class="f" style="flex:0 1 220px">Max roster size (FO counts)<input type="number" min="5" max="60" id="sCap"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFreeze"> Freeze signings &amp; trades</label>
+        </div>
+        <div class="note">Signings and trades also pause automatically while the draft is live.</div>
+      </section>
       <section class="panel">
         <h2>Who counts as active</h2>
-        <div class="note">Teams set to <b>Auto</b> (in Teams &amp; roles) are active only if they meet these rules. Only active teams get scheduled. You can still force any team on or off.</div>
+        <div class="note">Teams set to <b>Auto</b> are active only if they meet these rules. Only active teams get scheduled.</div>
         <div class="row">
-          <label class="f" style="flex:0 1 220px">Minimum players to be active<input type="number" min="1" max="25" id="sMin"></label>
+          <label class="f" style="flex:0 1 220px">Minimum players to be active<input type="number" min="1" max="60" id="sMin"></label>
           <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFO"> Must have a franchise owner</label>
         </div>
         <div class="note" id="sPrev"></div>
       </section>
       <section class="panel">
-        <h2>Transactions</h2>
-        <div class="note">Used by the bot and the FO portal. Save &amp; publish to apply (takes up to a minute).</div>
-        <div class="row">
-          <label class="f" style="flex:0 1 220px">Max roster size (FO counts)<input type="number" min="5" max="60" id="sCap"></label>
-          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFreeze"> Freeze signings &amp; trades</label>
-        </div>
-        <div class="note">Signings and trades are also paused automatically while the draft is live.</div>
-      </section>
-      <section class="panel">
         <h2>Scheduling defaults</h2>
-        <div class="note">Used as the starting answers in Plan a Week. You can still change them each week.</div>
         <div class="row">
           <label class="f">Deadline (days after posting)<input type="number" min="1" max="21" id="sDays"></label>
           <label class="f">Max catch-up games per team, per week<select id="sCu"><option value="0">0 (no auto catch-ups)</option><option value="1">1</option><option value="2">2</option></select></label>
           <label class="f">Rematches<select id="sRm"><option value="avoid">Try to avoid</option><option value="never">Never</option><option value="allow">Don't care</option></select></label>
         </div>
-      </section>
-      <section class="panel">
-        <h2>Discord post</h2>
         <div class="row">
-          <label class="f">Owners role (name or role ID)<input type="text" id="lowners"></label>
-          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sEvery"> Ping @everyone at the end</label>
+          <label class="f">Owners role (name or role ID) for the post<input type="text" id="lowners"></label>
+          <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sEvery"> Ping @everyone at the end of the post</label>
         </div>
       </section>
       <section class="panel">
@@ -166,77 +262,303 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
           <label class="f">League name<input type="text" id="lname"></label>
           <label class="f">Season<input type="text" id="lseason"></label>
         </div>
-        <label class="f">Announcement banner on the public page (optional)<textarea id="sAnn" rows="2" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="e.g. Week 6 posted — deadline Oct 8. Screenshots of scores go in #results"></textarea></label>
-      </section>
-    </div>
-    <div id="tab-ops" class="hide" style="display:flex;flex-direction:column;gap:20px">
-      <div class="note" id="opsnote"></div>
-      <section class="panel">
-        <div class="row" style="justify-content:space-between"><h2>Waiting for staff</h2><button class="btn" id="opsreload">Refresh</button></div>
-        <div class="note">Demands, promotions and trades. The same requests show in #approvals on Discord — deciding here or there both work. A reason is required and gets sent to the people involved.</div>
-        <div id="reqs" style="display:flex;flex-direction:column;gap:10px"></div>
-      </section>
-      <section class="panel">
-        <h2>Franchise owners</h2>
-        <div class="note">Appointing gives the person the team role + Franchise owner role and removes the old FO's owner role. They get a DM with the FO portal link.</div>
-        <div class="row">
-          <label class="f" style="flex:1 1 200px">Team<select id="apteam"></select></label>
-          <label class="f" style="flex:2 1 260px">Member<input type="text" id="apwho" list="aplist" placeholder="Start typing a Discord name…"></label>
-          <button class="btn red" id="apgo">Appoint FO</button>
-        </div>
-        <datalist id="aplist"></datalist>
-        <div class="tscroll"><table style="min-width:520px"><thead><tr><th>Team</th><th>Players</th><th>FO</th><th>Portal password</th><th></th></tr></thead><tbody id="fobody"></tbody></table></div>
-        <span class="msg" id="apmsg"></span>
+        <label class="f">Announcement banner on the public page (optional)<textarea id="sAnn" rows="2" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="e.g. Week 6 posted — deadline Oct 8"></textarea></label>
       </section>
     </div>
   </div>
 </div>
 <div class="sticky hide" id="bar"><span class="dirty" id="dirty"></span><button class="btn red" id="save">Save &amp; publish</button><span class="msg" id="smsg"></span></div>
+<dialog id="dlg"><div class="wz" id="wz"></div></dialog>
+<div class="toast hide" id="toast" role="status"></div>
+
 <script>
 (() => {
-  const $ = s => document.querySelector(s);
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const plain = s => String(s ?? "").replace(/\*\*/g, "");
   const h = location.hostname, parts = location.pathname.split("/").filter(Boolean);
   const OWNER = h.endsWith(".github.io") ? h.split(".")[0] : "EliteTuber168";
   const REPO = h.endsWith(".github.io") ? (parts[0] || h) : "ufa-schedule";
   const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/schedule.json`;
+  const BOT = "https://ufa-draft.dizzyokreal.workers.dev";
+  const RANK = {fo:"Owner", gm:"GM", hc:"Head coach", player:"Player"};
   let TOKEN = ""; try{ TOKEN = localStorage.getItem("vk_token") || ""; }catch{}
-  let D = null, sha = null, W = 0, dirty = false, canSave = false;
+  let D = null, sha = null, W = 0, dirty = false, LIVE = null, TAB = "dash";
+  const OPEN = new Set();
   const b64e = s => { const b = new TextEncoder().encode(s); let o = ""; for (let i=0;i<b.length;i+=0x8000) o += String.fromCharCode(...b.subarray(i,i+0x8000)); return btoa(o); };
   const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c => c.charCodeAt(0)));
-  const msg = (el, t, ok=true) => { el.textContent = t; el.className = "msg " + (ok?"ok":"err"); };
+  const msg = (el, t, ok=true) => { if (!el) return; el.textContent = t; el.className = "msg " + (ok?"ok":"err"); };
+  let tt; const toast = (t, ok=true) => { const el = $("#toast"); el.textContent = plain(t); el.className = "toast" + (ok ? "" : " err"); clearTimeout(tt); tt = setTimeout(() => el.classList.add("hide"), 5000); };
   const T = a => D.teams.find(t=>t.abbr===a) || {name:a, abbr:a, color:"#445"};
-  const setDirty = v => { dirty = v; $("#dirty").textContent = v ? "Unsaved changes" : ""; };
+  const setDirty = (v, label) => { dirty = v; $("#dirty").textContent = v ? (label || "Unsaved schedule / team changes") : ""; $("#bar").classList.toggle("hide", !v); };
   const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const fmtDate = s => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return `${MON[m-1]} ${d}`; };
+  const SET_DEF = {minPlayers:5, requireFO:true, deadlineDays:4, maxCatchup:1, rematch:"avoid", pingEveryone:true, announcement:"", rosterCap:25, signingFreeze:false};
 
-  // ---------- load / save ----------
-  async function load(){
-    if (TOKEN){
-      const r = await fetch(API + "?t=" + Date.now(), {cache:"no-store", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json"}});
-      if (!r.ok){ const e = new Error(r.status === 401 ? "That token didn't work." : r.status === 404 ? "That token can't see the ufa-schedule repo — add it to the token." : "GitHub error " + r.status); throw e; }
-      const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content)); canSave = true;
-    } else { D = await (await fetch("schedule.json", {cache:"no-store"})).json(); canSave = false; }
+  // ---------- GitHub (schedule.json) ----------
+  async function loadSchedule(){
+    const r = await fetch(API + "?t=" + Date.now(), {cache:"no-store", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json"}});
+    if (!r.ok) throw new Error(r.status === 401 ? "That token didn't work." : r.status === 404 ? "That token can't see the ufa-schedule repo — add it to the token." : "GitHub error " + r.status);
+    const f = await r.json(); sha = f.sha; D = JSON.parse(b64d(f.content));
     D.weeks.forEach(w => w.games.forEach(g => delete g.auto));
-    const fresh = !D.settings; D.settings = {...SET_DEF, ...(D.settings||{})}; D.__fresh = fresh;
+    D.settings = {...SET_DEF, ...(D.settings||{})};
     W = Math.max(0, D.weeks.findIndex(w=>!w.done)); if (D.weeks[W]?.done) W = D.weeks.length-1;
   }
-  $("#save").onclick = async () => {
-    if (!canSave) return msg($("#smsg"), "Sign in to save. You can still copy the Discord post.", false);
-    const out = JSON.parse(JSON.stringify(D)); delete out.__fresh; out.weeks.forEach(w => w.games.forEach(g => delete g.auto));
-    $("#save").disabled = true; msg($("#smsg"), "Saving…");
+  $("#save").onclick = () => save(false);
+  async function save(quiet){
+    const out = JSON.parse(JSON.stringify(D)); out.weeks.forEach(w => w.games.forEach(g => delete g.auto));
+    $("#save").disabled = true; if (!quiet) msg($("#smsg"), "Saving…");
     try{
       const r = await fetch(API, {method:"PUT", headers:{Authorization:`Bearer ${TOKEN}`, Accept:"application/vnd.github+json", "Content-Type":"application/json"},
-        body:JSON.stringify({message:`Update schedule (week ${D.weeks[W]?.week ?? ""})`, content:b64e(JSON.stringify(out,null,1)+"\n"), sha})});
+        body:JSON.stringify({message:"Admin: update schedule/teams", content:b64e(JSON.stringify(out,null,1)+"\n"), sha})});
       if (!r.ok){ let m = r.status; try{ m = (await r.json()).message; }catch{} throw new Error(r.status === 409 ? "Someone else saved first — reload the page." : m); }
-      sha = (await r.json()).content.sha; D.weeks.forEach(w => w.games.forEach(g => delete g.auto)); setDirty(false); renderWeek();
-      msg($("#smsg"), "Published. The public page updates in about a minute.");
-    }catch(e){ msg($("#smsg"), "Couldn't save: " + e.message, false); }
+      sha = (await r.json()).content.sha; setDirty(false); msg($("#smsg"), ""); if (!quiet) toast("Published. The site and bot pick it up within a minute.");
+      if (TAB === "week" && !quiet) renderWeek();
+    }catch(e){ setDirty(true); msg($("#smsg"), "Couldn't save: " + e.message, false); }
     $("#save").disabled = false;
-  };
+  }
   window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
 
-  // ---------- history helpers ----------
+  // ---------- bot (live Discord data) ----------
+  async function bot(path, body){
+    const r = await fetch(BOT + path, {method: body ? "POST" : "GET", headers: {"Content-Type":"application/json", Authorization: "GitHub " + TOKEN}, body: body ? JSON.stringify(body) : undefined});
+    const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(plain(j.error) || "Error " + r.status); return j;
+  }
+  const members = () => LIVE?.members || [];
+  const rosterOf = a => members().filter(m => m.team === a);
+  const foOf = a => rosterOf(a).find(m => m.rank === "fo");
+  const byId = id => members().find(m => m.id === id);
+  async function loadLive(){
+    try{
+      LIVE = await bot("/api/admin/overview"); $("#livewarn").classList.add("hide");
+      syncFromLive();
+    }catch(e){
+      LIVE = null; $("#livewarn").classList.remove("hide");
+      $("#livewarn").innerHTML = `<span class="msg err">Couldn't reach the bot: ${esc(e.message)}</span> — live players/FOs and the Assign tools need the bot running (check its secrets in Cloudflare).`;
+    }
+    renderChips();
+  }
+  /** Copy live counts / FO / role IDs into schedule.json so the public page, scheduler and activity rules stay right. */
+  function syncFromLive(){
+    if (!LIVE) return;
+    let changed = false;
+    for (const t of D.teams){
+      const lt = LIVE.teams.find(x => x.abbr === t.abbr) || {}, r = rosterOf(t.abbr), fo = r.find(m => m.rank === "fo");
+      const want = {players: r.length, fo: fo ? fo.name : "", role: lt.roleId || t.role || ""};
+      for (const k in want) if ((t[k] ?? "") !== want[k]){ t[k] = want[k]; changed = true; }
+    }
+    if (applyRules()) changed = true;
+    // counts/FOs are facts from Discord, not edits — publish them right away unless you have unsaved edits of your own
+    if (changed){ if (dirty) setDirty(true, "Unsaved changes (player counts / FOs were also refreshed from Discord)"); else save(true); }
+  }
+  function applyRules(){
+    const s = D.settings; let changed = false;
+    D.teams.forEach(t => { const m = t.mode || "auto", a = m === "on" ? true : m === "off" ? false : (t.players||0) >= s.minPlayers && (!s.requireFO || !!(t.fo||"").trim()); if (!!t.active !== a){ t.active = a; changed = true; } });
+    return changed;
+  }
+
+  // ---------- chips / tabs ----------
+  function renderChips(){
+    const c = [];
+    if (LIVE){
+      c.push(LIVE.frozen ? `<span class="chip warn">🧊 ${esc(plain(LIVE.frozen).replace(/^\S+\s/,""))}</span>` : `<span class="chip good">✍️ Signings open</span>`);
+      c.push(`<span class="chip">Draft: ${esc(LIVE.draftStatus || "—")}</span>`);
+      if (LIVE.pending) c.push(`<button class="chip red" data-go="approvals">${LIVE.pending} waiting for approval</button>`);
+      const miss = Object.entries(LIVE.ready || {}).filter(([,v]) => !v).map(([k]) => k);
+      if (miss.length) c.push(`<span class="chip warn">Setup missing: ${esc(miss.join(", "))}</span>`);
+    }
+    $("#chips").innerHTML = c.join("");
+    const pc = $("#pcount"); pc.textContent = LIVE?.pending || ""; pc.classList.toggle("hide", !LIVE?.pending);
+  }
+  document.addEventListener("click", e => {
+    const g = e.target.closest("[data-go]"); if (g){ e.preventDefault(); go(g.dataset.go); return; }
+    const w = e.target.closest("[data-wz]"); if (w){ e.preventDefault(); wizard(w.dataset.wz); }
+  });
+  $("#tabs").onclick = e => { const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab); };
+  function go(tab){
+    TAB = tab;
+    $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
+    ["dash","assign","teams","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: renderSettings})[tab]();
+  }
+
+  // ---------- dashboard ----------
+  async function renderDash(){
+    const act = D.teams.filter(t => t.active).length, ms = members();
+    const tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    $("#stats").innerHTML = tile(`${act}<span style="font-size:24px;color:var(--mute)">/${D.teams.length}</span>`, "Active teams", "var(--good)")
+      + tile(LIVE ? ms.filter(m => m.team).length : "—", "Players on teams") + tile(LIVE ? ms.filter(m => !m.team).length : "—", "Not on a team")
+      + tile(LIVE ? D.teams.filter(t => foOf(t.abbr)).length : "—", "Teams with an FO", "var(--gold)")
+      + tile(LIVE ? LIVE.pending : "—", "Waiting for approval", LIVE?.pending ? "var(--red)" : "");
+    const min = D.settings.minPlayers, items = [];
+    const under = D.teams.filter(t => (t.players||0) > 0 && (t.players||0) < min);
+    if (under.length) items.push(`<div><b>Under ${min} players:</b> ${under.map(t => `${esc(t.abbr)} (${t.players})`).join(", ")}</div>`);
+    const noFo = D.teams.filter(t => (t.players||0) > 0 && !(t.fo||"").trim());
+    if (noFo.length) items.push(`<div><b>Players but no FO:</b> ${noFo.map(t => esc(t.abbr)).join(", ")} — <a href="#" data-wz="fo">assign one</a></div>`);
+    if (LIVE?.pending) items.push(`<div><b>${LIVE.pending} request(s)</b> waiting — <a href="#" data-go="approvals">review</a></div>`);
+    if (!D.weeks.find(w => !w.done)) items.push(`<div><b>No current week</b> on the schedule — <a href="plan.html">plan one</a></div>`);
+    if (!items.length) items.push(`<div class="ok">All good. ✅</div>`);
+    $("#attn").innerHTML = items.join("");
+    $("#dashtx").innerHTML = `<div class="note">Loading…</div>`;
+    try{ const j = await bot("/api/admin/tx"); $("#dashtx").innerHTML = j.tx.slice(0, 5).map(txHTML).join("") || `<div class="note">No transactions yet.</div>`; }
+    catch{ $("#dashtx").innerHTML = `<div class="note">Transactions show once the bot is reachable.</div>`; }
+  }
+
+  // ---------- teams ----------
+  const statusSel = t => `<select data-f="mode" aria-label="${esc(t.name)} status">${[["auto","Auto"],["on","Always active"],["off","Never (out)"]].map(([v,l])=>`<option value="${v}" ${(t.mode||"auto")===v?"selected":""}>${l}</option>`).join("")}</select>`;
+  const pl = (m, extra="") => `<div class="pl"><img src="${esc(m.avatar)}" alt="" loading="lazy"><span class="pn">${esc(m.name)}</span>${m.rank && m.rank !== "player" ? `<span class="tag ${m.rank}">${RANK[m.rank]}</span>` : ""}${m.staff ? `<span class="tag staff">Staff</span>` : ""}${extra}</div>`;
+  const ORDER = ["fo","gm","hc","player"];
+  function renderCards(){
+    const q = $("#tq").value.trim().toLowerCase(), f = $("#tf").value, s = $("#ts").value, cap = D.settings.rosterCap, min = D.settings.minPlayers;
+    const list = D.teams.filter(t => (!q || t.name.toLowerCase().includes(q) || t.abbr.toLowerCase().includes(q))
+      && (f === "all" || (f === "active" && t.active) || (f === "out" && !t.active) || (f === "nofo" && !(t.fo||"").trim()) || (f === "under" && (t.players||0) < min)));
+    list.sort((a,b) => s === "players" ? (b.players||0)-(a.players||0) : s === "fewest" ? (a.players||0)-(b.players||0) : a.name.localeCompare(b.name));
+    $("#cards").innerHTML = list.map(t => {
+      const n = t.players || 0, open = OPEN.has(t.abbr);
+      const r = rosterOf(t.abbr).sort((a,b) => ORDER.indexOf(a.rank)-ORDER.indexOf(b.rank) || a.name.localeCompare(b.name));
+      return `<article class="tc ${t.active?"":"out"}" data-a="${t.abbr}">
+        <div class="top"><span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span><div class="nm">${esc(t.name)}<div class="st" style="color:${t.active?"var(--good)":"var(--mute)"}">${t.active?"ACTIVE":"OUT"}${t.mode ? " · set by hand" : ""}</div></div></div>
+        <div class="body">
+          <div><div class="row between" style="font-weight:700"><span>${n}<span class="note"> / ${cap} players</span></span><span class="note">${n && n < min ? `under ${min}` : ""}</span></div>
+          <div class="meter" style="margin-top:4px"><i style="width:${Math.min(100,n/cap*100)}%;background:${esc(t.color)}"></i></div></div>
+          <div class="row between"><span>👑 ${t.fo ? `<b>${esc(t.fo)}</b>` : `<span class="note">No FO</span>`}</span><button class="btn sm" data-wzt="fo" data-team="${t.abbr}">${t.fo ? "Replace" : "Assign"}</button></div>
+          <div class="ctl">${statusSel(t)}<input type="color" data-f="color" value="${esc(t.color)}" aria-label="${esc(t.name)} color"><button class="btn sm" data-open="${t.abbr}" aria-expanded="${open}">${open ? "Hide" : "Roster"}</button></div>
+          ${open ? `<div class="roster">${r.map(m => pl(m, m.rank !== "fo" ? `<button class="btn sm x" data-rm="${m.id}" title="Remove from team" aria-label="Remove ${esc(m.name)}">✕</button>` : "")).join("") || `<div class="note">${LIVE ? "No players." : "Roster shows when the bot is reachable."}</div>`}
+            <button class="btn sm" data-wzt="add" data-team="${t.abbr}" style="align-self:flex-start;margin-top:4px">➕ Add player</button></div>` : ""}
+        </div></article>`;
+    }).join("") || `<div class="note">No teams match.</div>`;
+  }
+  ["#tq","#tf","#ts"].forEach(s => $(s).addEventListener("input", renderCards));
+  $("#cards").addEventListener("change", e => {
+    const c = e.target.closest(".tc"), f = e.target.dataset.f; if (!c || !f) return; const t = T(c.dataset.a);
+    if (f === "mode"){ t.mode = e.target.value; if (t.mode === "auto") delete t.mode; applyRules(); }
+    else if (f === "color") t.color = e.target.value;
+    setDirty(true); renderCards();
+  });
+  $("#cards").addEventListener("click", e => {
+    const o = e.target.closest("[data-open]"); if (o){ OPEN.has(o.dataset.open) ? OPEN.delete(o.dataset.open) : OPEN.add(o.dataset.open); renderCards(); return; }
+    const w = e.target.closest("[data-wzt]"); if (w){ wizard(w.dataset.wzt, {team: w.dataset.team}); return; }
+    const r = e.target.closest("[data-rm]"); if (r) wizard("remove", {uid: r.dataset.rm});
+  });
+
+  // ---------- wizards (pick → pick → are you sure?) ----------
+  const dlg = $("#dlg"), wz = $("#wz");
+  const KEY = {team:"team", person:"uid", choice:"choice"};
+  const FLOWS = {
+    fo: {title:"Assign new FO", steps:["team","person","confirm"], hint:"Who is the new franchise owner?", person: () => true,
+      confirm: s => { const t = T(s.team), p = byId(s.uid), old = foOf(s.team);
+        return `<b>${esc(p.name)}</b> becomes franchise owner of the <b>${esc(t.name)}</b>.`
+          + (old && old.id !== p.id ? `<div class="warnbox">⚠️ This replaces ${esc(old.name)} as FO. They keep their spot on the roster.</div>` : "")
+          + (p.team && p.team !== s.team ? `<div class="warnbox">⚠️ ${esc(p.name)} is on the ${esc(T(p.team).name)} and will be moved.</div>` : "")
+          + (old && old.id === p.id ? `<div class="warnbox">They're already the FO.</div>` : ""); },
+      run: s => bot("/api/admin/appoint", {team: s.team, uid: s.uid}), ok:"Yes, assign FO"},
+    unfo: {title:"Remove an FO", steps:["team","confirm"], teams: t => !!foOf(t.abbr), emptyTeams:"No team has an FO right now.",
+      confirm: s => `Remove <b>${esc(foOf(s.team)?.name)}</b> as franchise owner of the <b>${esc(T(s.team).name)}</b>? They stay on the roster as a player.`,
+      run: s => bot("/api/admin/unappoint", {team: s.team}), ok:"Yes, remove FO"},
+    add: {title:"Add / move player", steps:["person","team","confirm"], hint:"Who are you adding or moving? (FOs are changed with Assign new FO.)", person: (m, s) => m.rank !== "fo" && m.team !== s.team,
+      teams: (t, s) => byId(s.uid)?.team !== t.abbr,
+      confirm: s => { const p = byId(s.uid), t = T(s.team); return p.team ? `Move <b>${esc(p.name)}</b> from the <b>${esc(T(p.team).name)}</b> to the <b>${esc(t.name)}</b>?${p.rank !== "player" ? `<div class="warnbox">They'll lose their ${RANK[p.rank]} title.</div>` : ""}` : `Add <b>${esc(p.name)}</b> to the <b>${esc(t.name)}</b>? They'll be ${(t.players||0)+1}/${D.settings.rosterCap}.`; },
+      run: s => bot("/api/admin/assign", {uid: s.uid, team: s.team}), ok:"Yes, do it"},
+    remove: {title:"Remove player", steps:["person","confirm"], hint:"Who's coming off their team?", person: m => m.team && m.rank !== "fo",
+      confirm: s => { const p = byId(s.uid); return `Remove <b>${esc(p.name)}</b> from the <b>${esc(T(p.team).name)}</b>? They become a free agent and get a DM.`; },
+      run: s => bot("/api/admin/release", {uid: s.uid}), ok:"Yes, remove"},
+    title: {title:"Set GM / Head Coach", steps:["person","choice","confirm"], hint:"Whose title are you changing?", person: m => m.team && m.rank !== "fo",
+      choices: s => { const p = byId(s.uid); return [["gm","General Manager","Can sign, release and trade"],["hc","Head Coach","Can send offers"],["none","No title","Regular player"]].filter(([v]) => v !== (p.rank === "player" ? "none" : p.rank)); },
+      confirm: s => { const p = byId(s.uid); return s.choice === "none" ? `Remove <b>${esc(p.name)}</b>'s ${RANK[p.rank]} title?` : `Make <b>${esc(p.name)}</b> <b>${s.choice === "gm" ? "General Manager" : "Head Coach"}</b> of the ${esc(T(p.team).name)}?` + (p.rank !== "player" ? `<div class="warnbox">Replaces their ${RANK[p.rank]} title.</div>` : ""); },
+      run: s => bot("/api/admin/title", {uid: s.uid, role: s.choice}), ok:"Yes, confirm"},
+    staff: {title:"UFA Staff", steps:["person","confirm"], hint:"Pick someone — staff get removed, everyone else gets added.", person: () => true,
+      confirm: s => { const p = byId(s.uid); return p.staff ? `Remove <b>${esc(p.name)}</b> from UFA Staff?` : `Make <b>${esc(p.name)}</b> UFA Staff? They'll see the staff channels and can approve requests.`; },
+      run: s => bot("/api/admin/staffrole", {uid: s.uid, on: !byId(s.uid).staff}), ok:"Yes, confirm"},
+    pw: {title:"FO portal password", steps:["team","confirm"],
+      confirm: s => `Make a new FO portal password for the <b>${esc(T(s.team).name)}</b>? Any old password for this team stops working.`,
+      run: async s => { const pw = genPw(); await bot("/api/admin/password", {team: s.team, password: pw}); return {title: `Password for the ${T(s.team).name}`, pw}; }, ok:"Make password"},
+  };
+  function wizard(kind, pre = {}){
+    if (!LIVE) return toast("The bot isn't reachable right now, so live changes are off.", false);
+    const F = FLOWS[kind], s = {...pre};
+    const steps = F.steps.filter(st => !(st === "team" && pre.team) && !(st === "person" && pre.uid));
+    let i = 0;
+    function body(step){
+      if (step === "team"){
+        const list = D.teams.filter(t => !F.teams || F.teams(t, s)).slice().sort((a,b) => a.name.localeCompare(b.name));
+        return `<div class="note">Which team?</div><div class="pick">${list.map(t => `<button class="opt" data-team="${t.abbr}"><span class="badge" style="background:${esc(t.color)};min-width:38px;height:28px;font-size:16px">${esc(t.abbr)}</span><span class="pn">${esc(t.name)}</span><span class="note">${t.players||0} · ${t.fo ? "FO " + esc(t.fo) : "no FO"}</span></button>`).join("") || `<div class="note">${esc(F.emptyTeams || "No teams to pick.")}</div>`}</div>`;
+      }
+      if (step === "person"){
+        const list = members().filter(m => F.person(m, s)).sort((a,b) => a.name.localeCompare(b.name));
+        return `<div class="note">${esc(F.hint)}</div><input type="search" id="pq" placeholder="Search by Discord name…" aria-label="Search people" autocomplete="off">
+          <div class="pick" id="plist">${list.map(m => `<button class="opt" data-uid="${m.id}" data-name="${esc(m.name.toLowerCase())}"><img src="${esc(m.avatar)}" alt="" loading="lazy"><span class="pn">${esc(m.name)}</span>${m.team ? `<span class="tag">${esc(m.team)}</span>` : `<span class="tag">Free agent</span>`}${m.rank && m.rank !== "player" ? `<span class="tag ${m.rank}">${RANK[m.rank]}</span>` : ""}${m.staff ? `<span class="tag staff">Staff</span>` : ""}</button>`).join("") || `<div class="note">Nobody to pick.</div>`}</div>`;
+      }
+      if (step === "choice") return `<div class="note">Which title?</div><div class="pick">${F.choices(s).map(([v,l,d]) => `<button class="opt" data-choice="${v}"><span class="pn">${l}</span><span class="note">${d}</span></button>`).join("")}</div>`;
+      return `<div class="confirm">${F.confirm(s)}</div><div class="note"><b>Are you sure?</b></div>`;
+    }
+    function show(){
+      const step = steps[i];
+      wz.innerHTML = `<div class="row between"><h2>${esc(F.title)}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+        <div class="steps">${steps.map((_, k) => `<i class="${k <= i ? "on" : ""}"></i>`).join("")}</div>${body(step)}
+        <div class="row between"><button class="btn" data-back ${i ? "" : "disabled"}>← Back</button>${step === "confirm" ? `<button class="btn red" data-run>${esc(F.ok)}</button>` : ""}</div><span class="msg" id="wmsg"></span>`;
+      const pq = $("#pq"); if (pq){ pq.focus(); pq.oninput = () => { const q = pq.value.trim().toLowerCase(); $$("#plist .opt").forEach(o => o.classList.toggle("hide", !!q && !o.dataset.name.includes(q))); }; }
+    }
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.hasAttribute("data-back")){ i--; delete s[KEY[steps[i]]]; return show(); }
+      if (b.dataset.copy){ try{ await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; }catch{ toast("Select the password and copy it.", false); } return; }
+      for (const k of ["team","uid","choice"]) if (b.dataset[k]){ s[k] = b.dataset[k]; i++; return show(); }
+      if (b.hasAttribute("data-run")){
+        b.disabled = true; msg($("#wmsg"), "Working…");
+        try{
+          const j = await F.run(s);
+          if (j.pw){ wz.innerHTML = `<h2>${esc(j.title)}</h2><div class="pwbox">${esc(j.pw)}</div><div class="note">Copy it now — it won't be shown again. The FO picks their team on the FO portal and types this in.</div><div class="row" style="justify-content:flex-end"><button class="btn gold" data-copy="${esc(j.pw)}">Copy</button><button class="btn" data-close>Done</button></div>`; return; }
+          dlg.close(); toast(j.text || "Done."); await afterChange();
+        }catch(err){ msg($("#wmsg"), err.message, false); b.disabled = false; }
+      }
+    };
+    show(); if (!dlg.open) dlg.showModal();
+  }
+  async function afterChange(){ await loadLive(); ({dash: renderDash, assign: renderStaff, teams: renderCards})[TAB]?.(); }
+  const words = ["blitz","huddle","endzone","redzone","audible","gridiron","snap","punt","sack","spiral","tackle","pylon","hailmary","shotgun","pocket","flag"];
+  const genPw = () => { const r = crypto.getRandomValues(new Uint32Array(3)); return `${words[r[0]%words.length]}-${words[r[1]%words.length]}-${1000 + r[2]%9000}`; };
+  function renderStaff(){
+    const st = members().filter(m => m.staff);
+    $("#stafflist").innerHTML = LIVE ? (st.map(m => pl(m, `<button class="btn sm x" data-unstaff="${m.id}">Remove</button>`)).join("") || `<div class="note">No one has the UFA Staff role yet — use the UFA Staff card above.</div>`) : `<div class="note">Shows when the bot is reachable.</div>`;
+  }
+  $("#stafflist").addEventListener("click", e => { const b = e.target.closest("[data-unstaff]"); if (b) wizard("staff", {uid: b.dataset.unstaff}); });
+
+  // ---------- approvals ----------
+  async function loadReqs(){
+    $("#reqs").innerHTML = `<div class="note">Loading…</div>`;
+    try{
+      const {requests} = await bot("/api/admin/requests"), lab = {demand:"🚪 Demand", promote:"📈 Promotion", trade:"🔁 Trade"};
+      const wait = requests.filter(r => r.status === "staff"), other = requests.filter(r => r.status === "other");
+      $("#reqs").innerHTML = wait.map(r => `<div class="panel" data-id="${r.id}">
+        <div class="row between"><b style="color:var(--gold)">${lab[r.type]}</b><span class="note">${new Date(r.ts).toLocaleString()}</span></div>
+        <div style="font-size:17px">${esc(r.text)}</div>
+        <label class="f" style="flex:none">Reason (required — sent to the people involved)<input type="text" class="why" placeholder="e.g. Approved, fair trade"></label>
+        <div class="row"><button class="btn good" data-ok="1">Approve</button><button class="btn" data-ok="0" style="color:var(--red);border-color:rgba(232,66,74,.6)">Deny</button><span class="msg"></span></div></div>`).join("")
+        + (other.length ? `<div class="note">${other.length} trade(s) still waiting on the other team to accept.</div>` : "")
+        || `<div class="panel"><div class="note">Nothing waiting. 🎉</div></div>`;
+    }catch(e){ $("#reqs").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }
+  $("#reqs").addEventListener("click", async e => {
+    const b = e.target.closest("button[data-ok]"); if (!b) return; const box = b.closest("[data-id]"), why = box.querySelector(".why").value.trim(), m = box.querySelector(".msg");
+    if (!why) return msg(m, "Add a reason first.", false);
+    box.querySelectorAll("button").forEach(x => x.disabled = true); msg(m, "Working…");
+    try{ const j = await bot("/api/admin/decide", {id: box.dataset.id, approve: b.dataset.ok === "1", reason: why});
+      toast(j.status === "failed" ? "Couldn't complete: " + j.note : j.status === "approved" ? "Approved." : "Denied.", j.status !== "failed"); await loadLive(); loadReqs(); }
+    catch(err){ msg(m, err.message, false); box.querySelectorAll("button").forEach(x => x.disabled = false); }
+  });
+
+  // ---------- transactions ----------
+  let TX = [];
+  const txHTML = t => `<div class="tx"><b>${esc(t.title)}</b>${esc(t.text).replace(/\n/g,"<br>")}<br><small>${new Date(t.ts).toLocaleString()}</small></div>`;
+  async function loadTx(){
+    $("#txlist").innerHTML = `<div class="note">Loading…</div>`;
+    try{ TX = (await bot("/api/admin/tx")).tx; renderTx(); }catch(e){ $("#txlist").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }
+  function renderTx(){ const q = $("#txq").value.trim().toLowerCase(); $("#txlist").innerHTML = TX.filter(t => !q || (t.title + " " + t.text).toLowerCase().includes(q)).map(txHTML).join("") || `<div class="note">No transactions${q ? " match" : " yet"}.</div>`; }
+  $("#txq").oninput = renderTx;
+
+  // ---------- schedule (week builder) ----------
   function history(exceptWeek){
     const meet = {}, last = {}, played = {}, bye = {};
     const act = new Set(D.teams.filter(t=>t.active).map(t=>t.abbr));
@@ -249,8 +571,6 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     return {meet, last, played, bye};
   }
   const pairKey = (a,b) => [a,b].sort().join("|");
-
-  // ---------- generator ----------
   function pool(){
     const w = D.weeks[W], busy = new Set();
     for (const g of w.games){ if (!g.catchup || !$("#cuplay").checked){ busy.add(g.a); busy.add(g.b); } }
@@ -261,28 +581,23 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     if (P.length < 2) return {games:[], bye:P[0] || null};
     const cost = (a,b) => { const k = pairKey(a,b), m = H.meet[k] || 0, l = H.last[k] || 0; return m*10 + (l && w.week - l <= 1 ? 25 : l && w.week - l <= 2 ? 8 : 0); };
     let byeTeam = null, list = P.slice();
-    if (list.length % 2){
-      const r = list.map(a=>({a, s:(H.bye[a]||0)*100 - (H.played[a]||0) + Math.random()})).sort((x,y)=>x.s-y.s);
-      byeTeam = r[0].a; list = list.filter(a=>a!==byeTeam);
-    }
-    let best = null, bestCost = Infinity, ties = [];
+    if (list.length % 2){ const r = list.map(a=>({a, s:(H.bye[a]||0)*100 - (H.played[a]||0) + Math.random()})).sort((x,y)=>x.s-y.s); byeTeam = r[0].a; list = list.filter(a=>a!==byeTeam); }
+    let bestCost = Infinity, ties = [];
     for (let it=0; it<600; it++){
       const L = list.slice().sort(()=>Math.random()-.5), out = []; let c = 0;
       while (L.length){ const a = L.shift(); let bi = 0, bc = Infinity; L.forEach((b,i)=>{ const x = cost(a,b) + Math.random()*.5; if (x < bc){ bc = x; bi = i; } }); const b = L.splice(bi,1)[0]; out.push([a,b]); c += cost(a,b); }
       if (c < bestCost){ bestCost = c; ties = [out]; } else if (c === bestCost && ties.length < 40) ties.push(out);
     }
-    best = ties[Math.floor(Math.random()*ties.length)];
+    const best = ties[Math.floor(Math.random()*ties.length)];
     return {games: best.map(([a,b])=>({a, b, result:"", auto:true})), bye:byeTeam};
   }
-  $("#fill").onclick = () => { const r = generate(); D.weeks[W].games.push(...r.games); setDirty(true); renderWeek(); };
-  $("#reroll").onclick = () => { D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); $("#fill").onclick(); };
-  $("#clearauto").onclick = () => { D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); setDirty(true); renderWeek(); };
-
-  // ---------- week editor ----------
+  $("#fill").onclick = () => { if (!D.weeks[W]) return; const r = generate(); D.weeks[W].games.push(...r.games); setDirty(true); renderWeek(); };
+  $("#reroll").onclick = () => { if (!D.weeks[W]) return; D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); $("#fill").onclick(); };
+  $("#clearauto").onclick = () => { if (!D.weeks[W]) return; D.weeks[W].games = D.weeks[W].games.filter(g=>!g.auto); setDirty(true); renderWeek(); };
   function renderWeekSel(){ $("#wsel").innerHTML = D.weeks.map((w,i)=>`<option value="${i}" ${i===W?"selected":""}>Week ${w.week}${w.done?"":" (current)"}</option>`).join(""); }
-  function teamOpts(sel){ return `<option value="">—</option>` + D.teams.slice().sort((x,y)=>(y.active-x.active)||x.name.localeCompare(y.name)).map(t=>`<option value="${t.abbr}" ${t.abbr===sel?"selected":""}>${esc(t.name)}${t.active?"":" (inactive)"}</option>`).join(""); }
+  function teamOpts(sel){ return `<option value="">—</option>` + D.teams.slice().sort((x,y)=>(y.active-x.active)||x.name.localeCompare(y.name)).map(t=>`<option value="${t.abbr}" ${t.abbr===sel?"selected":""}>${esc(t.name)}${t.active?"":" (out)"}</option>`).join(""); }
   function renderWeek(){
-    const w = D.weeks[W]; if (!w) return;
+    const w = D.weeks[W]; if (!w){ $("#games").innerHTML = `<div class="note">No weeks yet — hit "+ New week".</div>`; return; }
     renderWeekSel(); $("#wdl").value = w.deadline || ""; $("#wdone").checked = !!w.done; $("#wnote").value = w.note || "";
     $("#gtitle").textContent = `Week ${w.week} matchups`;
     const H = history(W), count = {};
@@ -290,13 +605,13 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     $("#games").innerHTML = w.games.map((g,i)=>{
       const warn = [];
       if (g.a && g.a === g.b) warn.push("Same team on both sides");
-      const m = H.meet[pairKey(g.a,g.b)]; if (g.a && g.b && m) warn.push(`Rematch — they've already been scheduled ${m}× (last in week ${H.last[pairKey(g.a,g.b)]})`);
+      const m = H.meet[pairKey(g.a,g.b)]; if (g.a && g.b && m) warn.push(`Rematch — already scheduled ${m}× (last in week ${H.last[pairKey(g.a,g.b)]})`);
       if (!g.catchup && (count[g.a] > 1 || count[g.b] > 1)) warn.push("A team is in two games this week");
-      if ((g.a && !T(g.a).active) || (g.b && !T(g.b).active)) warn.push("Includes an inactive team");
+      if ((g.a && !T(g.a).active) || (g.b && !T(g.b).active)) warn.push("Includes a team that's out");
       return `<div class="g ${g.auto?"auto":""}" data-i="${i}"><select data-f="a" aria-label="Team 1">${teamOpts(g.a)}</select><span class="vs">VS</span><select data-f="b" aria-label="Team 2">${teamOpts(g.b)}</select>
         <input type="text" data-f="result" value="${esc(g.result)}" placeholder="Result (e.g. 45-44, FFW Jets)" aria-label="Result">
         <label class="c" title="Catch-up game from an earlier week"><input type="checkbox" data-f="catchup" ${g.catchup?"checked":""}> Catch-up</label>
-        <button class="btn x" data-rm="${i}" aria-label="Remove game">✕</button>${warn.length ? `<div class="warn">${warn.map(esc).join(" · ")}</div>` : ""}</div>`;
+        <button class="btn x" data-rmg="${i}" aria-label="Remove game">✕</button>${warn.length ? `<div class="warn">${warn.map(esc).join(" · ")}</div>` : ""}</div>`;
     }).join("") || `<div class="note">No games yet. Add them by hand or hit "Fill rest of week".</div>`;
     const P = pool(); $("#byes").innerHTML = P.length ? `Active teams without a game this week: <b>${P.map(a=>esc(T(a).name)).join(", ")}</b>` : "Every active team has a game this week.";
     renderPost();
@@ -307,21 +622,19 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
     if (!g.catchup) delete g.catchup; setDirty(true); renderWeek();
   });
   $("#games").addEventListener("input", e => { if (e.target.dataset.f === "result"){ const el = e.target.closest(".g"); D.weeks[W].games[+el.dataset.i].result = e.target.value; setDirty(true); renderPost(); } });
-  $("#games").addEventListener("click", e => { const b = e.target.closest("[data-rm]"); if (b){ D.weeks[W].games.splice(+b.dataset.rm,1); setDirty(true); renderWeek(); } });
-  $("#addgame").onclick = () => { D.weeks[W].games.push({a:"", b:"", result:""}); setDirty(true); renderWeek(); };
+  $("#games").addEventListener("click", e => { const b = e.target.closest("[data-rmg]"); if (b){ D.weeks[W].games.splice(+b.dataset.rmg,1); setDirty(true); renderWeek(); } });
+  $("#addgame").onclick = () => { if (!D.weeks[W]) return; D.weeks[W].games.push({a:"", b:"", result:""}); setDirty(true); renderWeek(); };
   $("#wsel").onchange = e => { W = +e.target.value; renderWeek(); };
   $("#wdl").onchange = e => { D.weeks[W].deadline = e.target.value; setDirty(true); renderPost(); };
   $("#wdone").onchange = e => { D.weeks[W].done = e.target.checked; setDirty(true); renderWeekSel(); };
   $("#wnote").oninput = e => { D.weeks[W].note = e.target.value || undefined; if (!D.weeks[W].note) delete D.weeks[W].note; setDirty(true); };
   $("#newweek").onclick = () => {
-    const last = D.weeks[D.weeks.length-1]; const d = new Date(); d.setDate(d.getDate()+5);
+    const last = D.weeks[D.weeks.length-1]; const d = new Date(); d.setDate(d.getDate() + (D.settings.deadlineDays || 5));
     D.weeks.forEach(w => { if (w !== last) w.done = true; });
     D.weeks.push({week:(last?.week||0)+1, deadline:d.toLocaleDateString("en-CA"), done:false, games:[]});
     W = D.weeks.length-1; setDirty(true); renderWeek();
   };
   $("#cuplay").onchange = renderWeek;
-
-  // ---------- Discord post ----------
   const mention = a => { const t = T(a); return t.role ? `<@&${t.role}>` : `@${t.name}`; };
   const owners = () => { const o = (D.roles?.owners || "Franchise owner").trim(); return /^\d{6,}$/.test(o) ? `<@&${o}>` : `@${o}`; };
   function renderPost(){
@@ -342,33 +655,19 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   ["#pres","#pbye","#pnotdone"].forEach(s => $(s).onchange = renderPost);
   $("#copy").onclick = async () => { try{ await navigator.clipboard.writeText($("#post").value); msg($("#cmsg"), "Copied — paste it in Discord."); }catch{ $("#post").select(); msg($("#cmsg"), "Press Ctrl+C to copy.", false); } };
 
-  // ---------- teams ----------
-  function renderTeams(){
-    $("#tbody").innerHTML = D.teams.map((t,i)=>`<tr data-i="${i}"><td style="white-space:nowrap"><select data-f="mode" aria-label="${esc(t.name)} status">${[["auto","Auto"],["on","Always"],["off","Never"]].map(([v,l])=>`<option value="${v}" ${(t.mode||"auto")===v?"selected":""}>${l}</option>`).join("")}</select> <span class="st" style="font-size:12px;font-weight:700;letter-spacing:.1em;color:${t.active?"var(--good)":"var(--mute)"}">${t.active?"ACTIVE":"OUT"}</span></td>
-      <td><span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span></td><td><b>${esc(t.name)}</b></td>
-      <td style="width:80px"><input type="number" min="0" max="25" data-f="players" value="${esc(t.players ?? 0)}" aria-label="Players"></td>
-      <td><input type="text" data-f="fo" value="${esc(t.fo||"")}" aria-label="FO"></td>
-      <td><input type="text" data-f="role" value="${esc(t.role||"")}" placeholder="optional" aria-label="Role ID" inputmode="numeric"></td>
-      <td style="width:60px"><input type="color" data-f="color" value="${esc(t.color)}" aria-label="Color" style="width:44px;height:34px;padding:2px"></td></tr>`).join("");
-  }
+  // ---------- settings ----------
   function renderSettings(){
     const s = D.settings;
     $("#sMin").value = s.minPlayers; $("#sFO").checked = s.requireFO; $("#sDays").value = s.deadlineDays; $("#sCu").value = String(s.maxCatchup); $("#sRm").value = s.rematch;
-    $("#sEvery").checked = s.pingEveryone; $("#sAnn").value = s.announcement || "";
-    $("#sCap").value = s.rosterCap; $("#sFreeze").checked = !!s.signingFreeze;
+    $("#sEvery").checked = s.pingEveryone; $("#sAnn").value = s.announcement || ""; $("#sCap").value = s.rosterCap; $("#sFreeze").checked = !!s.signingFreeze;
     $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
     renderPrev();
   }
   function renderPrev(){
     const act = D.teams.filter(t=>t.active), out = D.teams.filter(t=>!t.active && (t.players||0) > 0);
-    $("#sPrev").innerHTML = `<b style="color:var(--good)">${act.length} active:</b> ${act.map(t=>`${esc(t.name)} (${t.players})`).join(", ") || "none"}<br><b>Left out:</b> ${out.map(t=>`${esc(t.name)} (${t.players}${t.fo?"":", no FO"})`).join(", ") || "none"}`;
+    $("#sPrev").innerHTML = `<b style="color:var(--good)">${act.length} active:</b> ${act.map(t=>`${esc(t.abbr)} (${t.players})`).join(", ") || "none"}<br><b>Out (with players):</b> ${out.map(t=>`${esc(t.abbr)} (${t.players}${t.fo?"":", no FO"})`).join(", ") || "none"}`;
   }
-  const SET_DEF = {minPlayers:5, requireFO:true, deadlineDays:4, maxCatchup:1, rematch:"avoid", pingEveryone:true, announcement:"", rosterCap:25, signingFreeze:false};
-  function applyRules(){
-    const s = D.settings;
-    D.teams.forEach(t => { const m = t.mode || "auto"; t.active = m === "on" ? true : m === "off" ? false : (t.players||0) >= s.minPlayers && (!s.requireFO || !!(t.fo||"").trim()); });
-  }
-  const setS = (k, v) => { D.settings[k] = v; if (k === "minPlayers" || k === "requireFO") { applyRules(); renderPrev(); } setDirty(true); renderPost(); };
+  const setS = (k, v) => { D.settings[k] = v; if (k === "minPlayers" || k === "requireFO"){ applyRules(); renderPrev(); } setDirty(true); };
   $("#sMin").oninput = e => { const v = parseInt(e.target.value); if (v > 0) setS("minPlayers", v); };
   $("#sFO").onchange = e => setS("requireFO", e.target.checked);
   $("#sDays").oninput = e => { const v = parseInt(e.target.value); if (v > 0) setS("deadlineDays", v); };
@@ -378,97 +677,22 @@ ol{margin:0;padding-left:20px;color:var(--mute);display:flex;flex-direction:colu
   $("#sAnn").oninput = e => setS("announcement", e.target.value);
   $("#sCap").oninput = e => { const v = parseInt(e.target.value); if (v >= 5) setS("rosterCap", v); };
   $("#sFreeze").onchange = e => setS("signingFreeze", e.target.checked);
-  $("#tbody").addEventListener("input", e => { const tr = e.target.closest("tr"), f = e.target.dataset.f; if (!tr || !f) return; const t = D.teams[+tr.dataset.i];
-    if (f === "mode") return; t[f] = f === "players" ? +e.target.value : e.target.value.trim();
-    if (f === "players" || f === "fo"){ applyRules(); const st = tr.querySelector(".st"); st.textContent = t.active ? "ACTIVE" : "OUT"; st.style.color = t.active ? "var(--good)" : "var(--mute)"; }
-    setDirty(true); });
-  $("#tbody").addEventListener("change", e => { if (e.target.dataset.f === "mode"){ const t = D.teams[+e.target.closest("tr").dataset.i]; t.mode = e.target.value; if (t.mode === "auto") delete t.mode; applyRules(); renderTeams(); setDirty(true); } });
   $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
   $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
-  $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); renderPost(); };
-
-  document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("button[data-tab]"); if (!b) return;
-    document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", x === b));
-    ["week","teams","settings","ops"].forEach(k => $("#tab-"+k).classList.toggle("hide", b.dataset.tab !== k));
-    $("#bar").classList.toggle("hide", b.dataset.tab === "ops");
-    if (b.dataset.tab === "week") renderWeek(); else if (b.dataset.tab === "teams") renderTeams(); else if (b.dataset.tab === "ops") loadOps(); else renderSettings(); });
-
-  // ---------- league ops (talks to the bot's Worker; your GitHub token proves you're an admin) ----------
-  const BOT = "https://ufa-draft.dizzyokreal.workers.dev";
-  const plain = s => String(s ?? "").replace(/\*\*/g, "");
-  async function bot(path, body){
-    const r = await fetch(BOT + path, {method: body ? "POST" : "GET", headers: {"Content-Type":"application/json", Authorization: "GitHub " + TOKEN}, body: body ? JSON.stringify(body) : undefined});
-    const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(plain(j.error) || "Error " + r.status); return j;
-  }
-  let MEMBERS = [], PWS = new Set();
-  async function loadOps(){
-    if (!canSave){ $("#opsnote").innerHTML = "<b>Sign in with your GitHub token</b> to use League ops."; return; }
-    $("#opsnote").textContent = "Loading…";
-    try{
-      const [rq, mm, pw] = await Promise.all([bot("/api/admin/requests"), bot("/api/admin/members"), bot("/api/admin/passwords")]);
-      MEMBERS = mm.members; PWS = new Set(pw.teams); $("#opsnote").textContent = "";
-      renderReqs(rq.requests); renderFOs();
-    }catch(e){ $("#opsnote").innerHTML = `<span class="msg err">${esc(e.message)}</span>`; }
-  }
-  $("#opsreload").onclick = loadOps;
-  function renderReqs(list){
-    const lab = {demand:"Demand", promote:"Promotion", trade:"Trade"};
-    $("#reqs").innerHTML = list.filter(r => r.status === "staff").map(r => `<div class="panel" style="background:var(--panel2)" data-id="${r.id}">
-      <div class="row"><b style="color:var(--gold)">${lab[r.type]}</b><span class="note">${new Date(r.ts).toLocaleString()}</span></div>
-      <div>${esc(r.text)}</div>
-      <label class="f" style="flex:none">Reason (required)<input type="text" class="why" placeholder="Sent to the people involved"></label>
-      <div class="row"><button class="btn gold" data-ok="1">Approve</button><button class="btn x" data-ok="0">Deny</button><span class="msg"></span></div></div>`).join("")
-      + (list.filter(r => r.status === "other").length ? `<div class="note">${list.filter(r => r.status === "other").length} trade(s) still waiting on the other team.</div>` : "")
-      || `<div class="note">Nothing waiting. 🎉</div>`;
-  }
-  $("#reqs").addEventListener("click", async e => {
-    const b = e.target.closest("button[data-ok]"); if (!b) return; const box = b.closest("[data-id]"), why = box.querySelector(".why").value.trim(), m = box.querySelector(".msg");
-    if (!why) return msg(m, "Add a reason first.", false);
-    b.disabled = true; msg(m, "Working…");
-    try{ const j = await bot("/api/admin/decide", {id: box.dataset.id, approve: b.dataset.ok === "1", reason: why}); msg(m, j.status === "failed" ? "Couldn't complete: " + j.note : j.status === "approved" ? "Approved." : "Denied.", j.status !== "failed"); setTimeout(loadOps, 1200); }
-    catch(err){ msg(m, err.message, false); b.disabled = false; }
-  });
-  const label = m => `${m.name} (${m.id})`;
-  function renderFOs(){
-    const sorted = D.teams.slice().sort((a,b) => a.name.localeCompare(b.name));
-    $("#apteam").innerHTML = sorted.map(t => `<option value="${t.abbr}">${esc(t.name)}</option>`).join("");
-    $("#aplist").innerHTML = MEMBERS.slice().sort((a,b) => a.name.localeCompare(b.name)).map(m => `<option value="${esc(label(m))}">`).join("");
-    $("#fobody").innerHTML = sorted.map(t => { const r = MEMBERS.filter(m => m.team === t.abbr), fo = r.find(m => m.rank === "fo");
-      return `<tr><td><b>${esc(t.name)}</b></td><td>${r.length}</td><td>${fo ? esc(fo.name) : '<span class="note">No FO</span>'}</td>
-        <td>${PWS.has(t.abbr) ? '<span style="color:var(--good);font-weight:700">Set</span>' : '<span class="note">None</span>'} <button class="btn" data-pw="${t.abbr}">${PWS.has(t.abbr) ? "New" : "Create"}</button>${PWS.has(t.abbr) ? ` <button class="btn x" data-pwx="${t.abbr}" aria-label="Remove password">✕</button>` : ""}</td>
-        <td>${fo ? `<button class="btn x" data-unfo="${t.abbr}">Remove FO</button>` : ""}</td></tr>`; }).join("");
-  }
-  $("#apgo").onclick = async () => {
-    const v = $("#apwho").value.trim(), id = (v.match(/\((\d{15,})\)$/) || [])[1] || (MEMBERS.find(m => m.name.toLowerCase() === v.toLowerCase()) || {}).id;
-    if (!id) return msg($("#apmsg"), "Pick a member from the list.", false);
-    msg($("#apmsg"), "Appointing…");
-    try{ const j = await bot("/api/admin/appoint", {team: $("#apteam").value, uid: id}); msg($("#apmsg"), plain(j.text)); $("#apwho").value = ""; setTimeout(loadOps, 1500); }catch(e){ msg($("#apmsg"), e.message, false); }
-  };
-  const words = ["blitz","huddle","endzone","redzone","audible","gridiron","snap","punt","sack","spiral","tackle","pylon","hailmary","shotgun","pocket","flag"];
-  const genPw = () => { const r = crypto.getRandomValues(new Uint32Array(3)); return `${words[r[0]%words.length]}-${words[r[1]%words.length]}-${1000 + r[2]%9000}`; };
-  $("#fobody").addEventListener("click", async e => {
-    const b = e.target.closest("button"); if (!b) return;
-    try{
-      if (b.dataset.unfo){ if (!confirm("Remove this team's franchise owner?")) return; const j = await bot("/api/admin/unappoint", {team: b.dataset.unfo}); msg($("#apmsg"), plain(j.text)); setTimeout(loadOps, 1500); }
-      else if (b.dataset.pw){ const pw = genPw(); await bot("/api/admin/password", {team: b.dataset.pw, password: pw}); PWS.add(b.dataset.pw); renderFOs();
-        msg($("#apmsg"), `Password for ${T(b.dataset.pw).name}: ${pw} — copy it now, it won't be shown again. Any old password stops working.`); }
-      else if (b.dataset.pwx){ await bot("/api/admin/password", {team: b.dataset.pwx, password: null}); PWS.delete(b.dataset.pwx); renderFOs(); msg($("#apmsg"), "Password removed."); }
-    }catch(err){ msg($("#apmsg"), err.message, false); }
-  });
+  $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); };
 
   // ---------- boot ----------
+  $("#refresh").onclick = async () => { $("#refresh").disabled = true; await loadLive(); go(TAB); $("#refresh").disabled = false; toast(LIVE ? "Refreshed from Discord." : "Couldn't reach the bot.", !!LIVE); };
   async function boot(){
-    try{ msg($("#gmsg"), "Loading…"); await load();
-      $("#gate").classList.add("hide"); $("#app").classList.remove("hide"); $("#bar").classList.remove("hide");
-      $("#who").textContent = canSave ? `Signed in · editing ${OWNER}/${REPO}` : "Not signed in — you can build and copy, but not save.";
-      renderWeek(); setDirty(false);
-      if (D.__fresh){ const before = D.teams.filter(t=>t.active).map(t=>t.abbr).join(); applyRules(); if (D.teams.filter(t=>t.active).map(t=>t.abbr).join() !== before){ setDirty(true); renderWeek(); msg($("#smsg"), "New Settings applied (5+ players and an FO = active). Check the Settings tab, then Save.", true); } }
-      delete D.__fresh;
+    try{
+      msg($("#gmsg"), "Loading…"); await loadSchedule();
+      $("#gate").classList.add("hide"); $("#app").classList.remove("hide");
+      $("#who").textContent = `Signed in · ${OWNER}/${REPO}`;
+      await loadLive(); go("dash");
     }catch(e){ msg($("#gmsg"), e.message, false); }
   }
   $("#signin").onclick = () => { TOKEN = $("#tok").value.trim(); if (!TOKEN) return; try{ localStorage.setItem("vk_token", TOKEN); }catch{} boot(); };
   $("#tok").onkeydown = e => { if (e.key === "Enter") $("#signin").click(); };
-  $("#skip").onclick = () => { TOKEN = ""; boot(); };
   $("#signout").onclick = () => { try{ localStorage.removeItem("vk_token"); }catch{} location.reload(); };
   if (TOKEN) boot();
 })();
