@@ -106,6 +106,19 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .confirm{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:17px;line-height:1.45}
 .confirm .warnbox{color:var(--warn);font-weight:700;font-size:15px;margin-top:8px}
 .pwbox{font-family:ui-monospace,Consolas,monospace;font-size:22px;background:var(--bg);border:1px dashed var(--gold);border-radius:10px;padding:12px;text-align:center;letter-spacing:.04em;user-select:all}
+.sub{display:flex;gap:6px;flex-wrap:wrap}
+.sub button{font:inherit;font-weight:700;font-size:14px;color:var(--mute);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+.sub button[aria-selected=true]{color:var(--fg);border-color:var(--fg)}
+.sub button.dz[aria-selected=true]{color:#fff;background:rgba(232,66,74,.18);border-color:var(--red)}
+.dzbanner{border:1px solid var(--red);background:rgba(232,66,74,.08);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.dzbanner>b{color:var(--red);font-family:var(--num);font-size:26px;font-weight:400;letter-spacing:.06em}
+.dzgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.dz{background:var(--panel);border:1px solid rgba(232,66,74,.45);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.dz.soft{border-color:var(--line)}
+.dz h3{font-size:18px}.dz .imp{font-size:14px;font-weight:700;color:var(--warn)}
+.dz .btn{align-self:flex-start}
+.bar{height:10px;background:var(--panel3);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--red);transition:width .3s}
+.phrase{font-family:ui-monospace,Consolas,monospace;color:var(--red);font-weight:700}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-color:var(--red);color:#ffb3b7}
 </style></head><body>
@@ -227,6 +240,21 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     </div>
 
     <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:16px">
+      <div class="sub" role="tablist"><button data-sub="general" aria-selected="true">League settings</button><button class="dz" data-sub="danger" aria-selected="false">⚠️ Danger Zone</button></div>
+      <div id="set-danger" class="hide" style="display:flex;flex-direction:column;gap:16px">
+        <div class="dzbanner"><b>Danger Zone</b><span class="note">These change a lot of people at once. Every roster wipe saves a backup first, so you can press <b>Undo last wipe</b> if you make a mistake. Each action asks you to type a phrase to confirm.</span></div>
+        <div id="dzjob"></div>
+        <h2>Rosters</h2>
+        <div class="dzgrid" id="dzroster"></div>
+        <h2>League data</h2>
+        <div class="dzgrid" id="dzdata"></div>
+        <h2>Season</h2>
+        <div class="dzgrid">
+          <div class="dz"><h3>🗓️ Start a fresh schedule</h3><div class="note">Deletes every week and game from the schedule (teams and settings stay). A backup file downloads first.</div><div class="imp" id="dzweeks"></div><button class="btn red" data-dz="season">Clear schedule…</button></div>
+          <div class="dz soft"><h3>🏈 Reset the draft</h3><div class="note">Clears all picks and puts the draft back to setup. Done from the draft room with <b>Restart draft</b>.</div><a class="btn" href="draftroom.html">Open draft room →</a></div>
+        </div>
+      </div>
+      <div id="set-general" style="display:flex;flex-direction:column;gap:16px">
       <section class="panel">
         <h2>Transactions</h2>
         <div class="row">
@@ -264,6 +292,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         </div>
         <label class="f">Announcement banner on the public page (optional)<textarea id="sAnn" rows="2" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="e.g. Week 6 posted — deadline Oct 8"></textarea></label>
       </section>
+      </div>
     </div>
   </div>
 </div>
@@ -379,7 +408,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
     ["dash","assign","teams","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: renderSettings})[tab]();
+    ({dash: renderDash, assign: renderStaff, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -680,6 +709,72 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
   $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
   $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); };
+
+  // ---------- danger zone ----------
+  let DZ = null, SUB = "general";
+  $(".sub").onclick = e => { const b = e.target.closest("button[data-sub]"); if (!b) return; SUB = b.dataset.sub;
+    $$(".sub button").forEach(x => x.setAttribute("aria-selected", x === b)); $("#set-general").classList.toggle("hide", SUB !== "general"); $("#set-danger").classList.toggle("hide", SUB !== "danger");
+    if (SUB === "danger") loadDanger(); };
+  const ROSTER_DZ = [
+    ["wipe_all", "🧹 Wipe all teams", "Takes every team role off everyone — players, GMs, head coaches <b>and franchise owners</b>. Also removes all FO / GM / HC roles. Every team ends up empty."],
+    ["wipe_keep_fo", "🧹 Wipe players, keep FOs", "Takes everyone off their team except franchise owners, and removes all GM / HC titles. Perfect for a league restart before a draft."],
+    ["clear_titles", "📉 Remove every GM / HC title", "Everyone stays on their team; only the General Manager and Head Coach roles come off."],
+    ["clear_fos", "👑 Remove every franchise owner", "Takes the Franchise owner role off everyone. They stay on their teams as players."],
+  ];
+  const DATA_DZ = [
+    ["cancel_pending", "🚫 Cancel pending offers & requests", "offer+req", "Voids every open contract offer and cancels demands, promotions and trades waiting for staff or the other team."],
+    ["logout_all", "🔒 Log everyone out of the FO portal", "sess", "Ends every FO portal login. People just log in again."],
+    ["clear_passwords", "🔑 Delete all team passwords", "pw", "Every FO portal team password stops working. Discord login still works."],
+    ["clear_tx", "🗑️ Clear the transaction history", "tx", "Empties the history on this page and the FO portal. Messages already in #transactions stay."],
+  ];
+  async function loadDanger(){
+    $("#dzroster").innerHTML = `<div class="note">Loading…</div>`;
+    try{ DZ = await bot("/api/admin/danger/preview"); }catch(e){ $("#dzroster").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+    const c = DZ.counts, b = DZ.backup;
+    $("#dzjob").innerHTML = DZ.job ? `<div class="dz"><h3>⏳ "${esc(ROSTER_DZ.find(x=>x[0]===DZ.job.action)?.[1] || "Undo")}" didn't finish</h3><div class="note">${DZ.job.i} of ${DZ.job.total} role changes done.</div><button class="btn red" data-dzcont>Continue</button></div>` : "";
+    $("#dzroster").innerHTML = ROSTER_DZ.map(([k, t, d]) => `<div class="dz"><h3>${t}</h3><div class="note">${d}</div><div class="imp">${c[k].people ? `Affects ${c[k].people} ${c[k].people === 1 ? "person" : "people"} (${c[k].ops} role changes)` : "Nothing to change right now"}</div><button class="btn red" data-dz="${k}" ${c[k].ops && !DZ.job ? "" : "disabled"}>${t.replace(/^\S+\s/, "")}…</button></div>`).join("")
+      + `<div class="dz soft"><h3>↩️ Undo last wipe</h3><div class="note">Puts back every role the last roster action removed.</div><div class="imp" style="color:var(--mute)">${b ? `Last: ${esc(b.label)} by ${esc(b.by)} — ${new Date(b.ts).toLocaleString()} (${b.people} people)` : "No backup saved."}</div><button class="btn gold" data-dz="restore" ${b && !DZ.job ? "" : "disabled"}>Undo last wipe…</button></div>`;
+    const cnt = {"offer+req": (DZ.kv.offer||0) + (DZ.kv.req||0), sess: DZ.kv.sess||0, pw: DZ.kv.pw||0, tx: DZ.kv.tx||0};
+    $("#dzdata").innerHTML = DATA_DZ.map(([k, t, key, d]) => `<div class="dz"><h3>${t}</h3><div class="note">${d}</div><div class="imp">${cnt[key] ? `${cnt[key]} item(s)` : "Nothing right now"}</div><button class="btn red" data-dzs="${k}" ${cnt[key] ? "" : "disabled"}>${t.replace(/^\S+\s/, "")}…</button></div>`).join("");
+    $("#dzweeks").textContent = D.weeks.length ? `${D.weeks.length} week(s), ${D.weeks.reduce((n, w) => n + w.games.length, 0)} game(s) on the schedule` : "The schedule is already empty";
+    $("[data-dz=season]").disabled = !D.weeks.length;
+  }
+  function dangerDialog({title, body, phrase, announce, go}){
+    wz.innerHTML = `<div class="row between"><h2 style="color:var(--red)">${title}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="confirm">${body}</div>
+      ${announce ? `<label class="c"><input type="checkbox" id="dzann"> Post a notice in #transactions</label>` : ""}
+      <label class="f" style="flex:none"><span>Type <span class="phrase">${esc(phrase)}</span> to confirm</span><input type="text" id="dzph" autocomplete="off" spellcheck="false"></label>
+      <div class="bar hide" id="dzbar"><i style="width:0"></i></div><span class="msg" id="dzmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="dzgo" disabled>${title}</button></div>`;
+    const ph = $("#dzph"); ph.oninput = () => { $("#dzgo").disabled = ph.value.trim().toUpperCase() !== phrase; }; ph.focus();
+    wz.onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.hasAttribute("data-close") && !$("#dzgo").dataset.busy) dlg.close(); };
+    $("#dzgo").onclick = async () => { const g = $("#dzgo"); g.disabled = true; g.dataset.busy = "1"; try{ await go(ph.value.trim(), !!$("#dzann")?.checked); }catch(err){ msg($("#dzmsg"), err.message, false); g.disabled = false; } delete g.dataset.busy; };
+    if (!dlg.open) dlg.showModal();
+  }
+  async function runJob(action, confirm, announce){
+    $("#dzbar").classList.remove("hide"); let r = await bot("/api/admin/danger", {action, confirm, announce});
+    const upd = () => { $("#dzbar i").style.width = (r.total ? r.i / r.total * 100 : 100) + "%"; msg($("#dzmsg"), `${r.i} / ${r.total} role changes…`); };
+    upd(); while (!r.done){ r = await bot("/api/admin/danger", {}); upd(); }
+    msg($("#dzmsg"), `Done — ${r.people || 0} people updated${r.errors ? ` (${r.errors} skipped)` : ""}.`);
+    toast("Done."); await loadLive(); await loadDanger(); setTimeout(() => dlg.close(), 1200);
+  }
+  $("#set-danger").addEventListener("click", async e => {
+    const b = e.target.closest("button"); if (!b || b.disabled) return;
+    if (b.hasAttribute("data-dzcont")) return dangerDialog({title:"Continue", body:"Finish the role changes that didn't complete.", phrase:"CONTINUE", go: () => runJob(undefined)});
+    const k = b.dataset.dz, s = b.dataset.dzs;
+    if (k === "season") return dangerDialog({title:"Clear schedule", phrase:"NEW SEASON",
+      body:`Deletes all <b>${D.weeks.length}</b> week(s) from the schedule. Teams, colors and settings stay. A backup of the current schedule downloads first.`,
+      go: async () => {
+        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(D, null, 1)], {type:"application/json"})); a.download = `schedule-backup-${new Date().toISOString().slice(0,10)}.json`; a.click();
+        D.weeks = []; W = 0; await save(false); dlg.close(); loadDanger();
+      }});
+    if (k){
+      const meta = k === "restore" ? ["↩️ Undo last wipe", `Puts back ${DZ.backup.ops} role(s) for ${DZ.backup.people} people from "${esc(DZ.backup.label)}".`] : [ROSTER_DZ.find(x => x[0] === k)[1], ROSTER_DZ.find(x => x[0] === k)[2] + `<div class="warnbox">Affects ${DZ.counts[k].people} people. A backup is saved first.</div>`];
+      return dangerDialog({title: meta[0].replace(/^\S+\s/, ""), body: meta[1], phrase: DZ.phrases[k], announce: true, go: (c, ann) => runJob(k, c, ann)});
+    }
+    if (s){ const d = DATA_DZ.find(x => x[0] === s);
+      return dangerDialog({title: d[1].replace(/^\S+\s/, ""), body: d[3], phrase: "CONFIRM", go: async c => { const j = await bot("/api/admin/danger/simple", {action: s, confirm: c}); toast(j.text); dlg.close(); await loadLive(); loadDanger(); }}); }
+  });
 
   // ---------- boot ----------
   $("#refresh").onclick = async () => { $("#refresh").disabled = true; await loadLive(); go(TAB); $("#refresh").disabled = false; toast(LIVE ? "Refreshed from Discord." : "Couldn't reach the bot.", !!LIVE); };
