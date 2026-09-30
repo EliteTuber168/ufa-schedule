@@ -1,9 +1,9 @@
 {
- "status": "done",
+ "status": "setup",
  "rounds": 8,
  "snake": true,
  "pickMinutes": 0,
- "clockStart": 1790725135142,
+ "clockStart": null,
  "teams": [
   {
    "abbr": "MIN",
