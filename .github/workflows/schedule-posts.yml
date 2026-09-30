@@ -1,0 +1,34 @@
+name: Weekly schedule posts
+on:
+  schedule:
+    - cron: "7 14 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Post now even if already posted"
+        type: choice
+        options: [none, schedule, reminder]
+        default: none
+permissions:
+  contents: write
+concurrency:
+  group: bot-state
+  cancel-in-progress: false
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post schedule / reminder
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          SCHEDULE_CHANNEL: ${{ secrets.SCHEDULE_CHANNEL }}
+          FORCE: ${{ inputs.force }}
+        run: python scripts/post_schedule.py
+      - name: Save what was posted
+        run: |
+          git config user.name "ufa-draft-bot"
+          git config user.email "ufa-draft-bot@users.noreply.github.com"
+          git add bot_state.json
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Bot: schedule post state" && (git push || (git pull --rebase && git push)))

@@ -1,0 +1,25 @@
+name: Clear team roles (league restart)
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (only list who would lose roles)"
+        type: boolean
+        default: true
+      confirm:
+        description: "Type CLEAR to really remove team roles from everyone except FOs"
+        type: string
+        default: ""
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove team roles
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          FO_ROLE: ${{ secrets.FO_ROLE }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: python scripts/clear_team_roles.py

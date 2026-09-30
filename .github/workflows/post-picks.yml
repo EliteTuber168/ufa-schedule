@@ -13,8 +13,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Post new picks
+      - name: Post picks, give team roles, DM players
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           DRAFT_CHANNEL_ID: ${{ secrets.DRAFT_CHANNEL_ID }}
         run: python scripts/post_picks.py

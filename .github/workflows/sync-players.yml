@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Sync pool
+      - name: Sync pool, FOs and rosters
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
@@ -24,5 +24,5 @@ jobs:
         run: |
           git config user.name "ufa-draft-bot"
           git config user.email "ufa-draft-bot@users.noreply.github.com"
-          git add draft.json
-          git diff --cached --quiet && echo "No changes" || (git commit -m "Sync draft pool from Discord" && git push)
+          git add draft.json rosters.json
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Sync draft pool and rosters from Discord" && (git push || (git pull --rebase && git push)))

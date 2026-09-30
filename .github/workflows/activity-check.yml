@@ -1,0 +1,34 @@
+name: Weekly activity check
+on:
+  schedule:
+    - cron: "13 14 * * 1"
+  workflow_dispatch:
+    inputs:
+      update_counts:
+        description: "Update player counts / active status on the schedule"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: draft-json
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check teams
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          STAFF_CHANNEL: ${{ secrets.STAFF_CHANNEL }}
+          FO_ROLE: ${{ secrets.FO_ROLE }}
+          UPDATE_COUNTS: ${{ github.event_name == 'schedule' && 'true' || inputs.update_counts }}
+        run: python scripts/activity_check.py
+      - name: Commit changes
+        run: |
+          git config user.name "ufa-draft-bot"
+          git config user.email "ufa-draft-bot@users.noreply.github.com"
+          git add schedule.json rosters.json
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Activity check: update team counts" && (git push || (git pull --rebase && git push)))
