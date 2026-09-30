@@ -1,74 +1,85 @@
 /**
- * UFA League bot — Cloudflare Worker that handles Discord slash commands and buttons.
+ * UFA League bot — Cloudflare Worker: Discord slash commands/buttons + the FO portal / admin API.
  *
- *   /pick player            FO on the clock (or a commissioner) makes the draft pick
- *   /onclock                who's on the clock
- *   /available [position]   best available players
- *   /schedule [team]        this week's games, or one team's whole schedule
- *   /roster team            a team's roster (from its Discord role + draft picks)
- *   /fa list|join|leave     free agents: see who's available, sign up, drop out
- *   /activity               (staff) teams under the minimum / without an FO
- *   /vote create            (staff) button vote — one vote per person, staff close it to show results
- *
- * Draft picks and sign-ups are saved into the GitHub repo (draft.json). Commits to draft.json trigger the
- * "Post draft picks" GitHub Action, which announces picks, gives team roles and sends DMs.
+ * Draft:        /pick /onclock /available
+ * League:       /schedule /roster /franchises /fa list|join|leave
+ * Transactions: /offer /offers /release /demand /trade /promote /demote
+ * Staff:        /activity /vote create — plus Approve/Deny (with reason) on requests in #approvals
+ * Website API:  /auth/discord, /auth/callback, /api/*  (used by fo.html and admin.html)
  *
  * Worker settings → Variables and Secrets:
- *   DISCORD_PUBLIC_KEY  Discord Developer Portal → General Information → Public Key
- *   GITHUB_TOKEN        (secret) fine-grained token with Contents: Read and write on ufa-schedule
- *   DISCORD_BOT_TOKEN   (secret) the bot's token — needed for /fa join and /fa leave (gives/removes the Draftable role)
- *   COMMISH_IDS         Discord user IDs allowed to pick for any team / run staff commands, comma-separated
- *   COMMISH_ROLE_ID     optional: a role ID with the same powers (server admins/managers always have them)
- *   DRAFT_ROLE          optional: name or ID of the draft-pool role (default "Draftable")
- *   REPO                optional, defaults to EliteTuber168/ufa-schedule
- * Bindings: KV namespace bound as VOTES (for /vote).
+ *   DISCORD_PUBLIC_KEY     General Information → Public Key
+ *   GITHUB_TOKEN           (secret) fine-grained token, Contents: Read and write on ufa-schedule
+ *   DISCORD_BOT_TOKEN      (secret) the bot token — roles, DMs, posts
+ *   DISCORD_CLIENT_SECRET  (secret) OAuth2 → Client Secret — "Log in with Discord" on the FO page
+ *   COMMISH_IDS            Discord user IDs with staff powers, comma-separated
+ *   optional: GUILD_ID, DRAFT_ROLE (default "Draftable"), FO_ROLE (default "Franchise owner"), REPO, SITE_ORIGIN
+ * Bindings: KV namespace bound as VOTES (votes, offers, requests, sessions, transaction log).
+ * Server IDs (staff role, GM/HC roles, channels) come from config.json, written by the "Set up server" Action.
  */
 const BOARD = "https://elitetuber168.github.io/ufa-schedule/draft.html";
 const SITE = "https://elitetuber168.github.io/ufa-schedule/";
+const APP_ID = "1554632978666229820";
 const TZ = "America/New_York";
+const DAY = 86400000;
 const POS = { QB: "QB", RB: "RB", HB: "RB", WR: "WR", TE: "TE", OL: "OL", DE: "DE", DL: "DE", LB: "LB", MLB: "LB", OLB: "LB",
   CB: "CB", S: "S", FS: "S", SS: "S", DB: "DB", K: "K/P", P: "K/P", KP: "K/P", KR: "KR" };
+const RANK = { fo: "Franchise Owner", gm: "General Manager", hc: "Head Coach", player: "Player" };
 
 export default {
   async fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return web(req, url, env, ctx);
     if (req.method !== "POST") return new Response("UFA draft bot is running ✅", { status: 200 });
     const sig = req.headers.get("X-Signature-Ed25519"), ts = req.headers.get("X-Signature-Timestamp");
     const body = await req.text();
     if (!sig || !ts || !(await verify(env.DISCORD_PUBLIC_KEY, sig, ts + body))) return new Response("Bad signature", { status: 401 });
     const i = JSON.parse(body);
     try {
-      if (i.type === 1) return json({ type: 1 });                                               // PING
+      if (i.type === 1) return json({ type: 1 });
       if (i.type === 4) return json({ type: 8, data: { choices: await autocomplete(i, env) } });
-      if (i.type === 3) return await component(i, env);                                         // buttons / menus
-      if (i.type === 2) {
-        const cmd = i.data.name, sub = (i.data.options || [])[0];
-        if (cmd === "pick") return defer(ctx, doPick(i, env));
-        if (cmd === "onclock") return await onClock(env);
-        if (cmd === "available") return await available(i, env);
-        if (cmd === "schedule") return await schedule(i, env);
-        if (cmd === "roster") return await roster(i, env);
-        if (cmd === "activity") return await activity(i, env);
-        if (cmd === "fa" && sub?.name === "list") return await faList(sub, env);
-        if (cmd === "fa" && sub?.name === "join") return defer(ctx, faJoin(i, sub, env));
-        if (cmd === "fa" && sub?.name === "leave") return defer(ctx, faLeave(i, env));
-        if (cmd === "vote" && sub?.name === "create") return await voteCreate(i, sub, env);
-      }
-      return reply("Unknown command.", true);
+      if (i.type === 3) return await component(i, env, ctx);
+      if (i.type === 5) return await modalSubmit(i, env, ctx);
+      if (i.type === 2) return await command(i, env, ctx);
+      return reply("Unknown interaction.", true);
     } catch (e) {
-      return reply("⚠️ Something went wrong: " + (e.message || e), true);
+      return reply("⚠️ " + (e.user ? e.message : "Something went wrong: " + (e.message || e)), true);
     }
   },
 };
 
-// ---------- helpers ----------
-const json = (o) => new Response(JSON.stringify(o), { headers: { "Content-Type": "application/json" } });
-const reply = (content, ephemeral = false) => json({ type: 4, data: { content: content.slice(0, 2000), flags: ephemeral ? 64 : 0, allowed_mentions: { parse: [] } } });
+// =====================================================================================================
+// generic helpers
+// =====================================================================================================
+const json = (o, status = 200, headers = {}) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json", ...headers } });
+const reply = (content, ephemeral = false) => json({ type: 4, data: { content: String(content).slice(0, 2000), flags: ephemeral ? 64 : 0, allowed_mentions: { parse: [] } } });
 const hex = (s) => new Uint8Array(s.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
 const opt = (opts, name) => (opts || []).find((o) => o.name === name)?.value;
 const uidOf = (i) => i.member?.user?.id || i.user?.id;
-const defer = (ctx, work) => { ctx.waitUntil(work); return json({ type: 5, data: { flags: 64 } }); };
-const followup = (i) => (content) => fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`, {
-  method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: content.slice(0, 2000), allowed_mentions: { parse: [] } }) });
+const UE = (m) => Object.assign(new Error(m), { user: true });          // error safe to show to the user
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const colorInt = (c) => parseInt(String(c || "#3d7bff").replace("#", ""), 16) || 0x3d7bff;
+const btn = (label, style, custom_id) => ({ type: 2, style, label, custom_id });
+const row = (...c) => ({ type: 1, components: c });
+/** Run `work` after answering Discord (so slow work doesn't hit the 3-second limit); its return string edits the reply. */
+function later(i, ctx, work, ephemeral = true, update = false) {
+  ctx.waitUntil((async () => {
+    let out;
+    try { out = await work(); } catch (e) { out = "⚠️ " + (e.user ? e.message : "Something went wrong: " + (e.message || e)); }
+    if (out == null) return;
+    const body = typeof out === "string" ? { content: out.slice(0, 2000) } : out;
+    await fetch(`https://discord.com/api/v10/webhooks/${i.application_id}/${i.token}/messages/@original`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allowed_mentions: { parse: [] }, ...body }) });
+  })());
+  return json(update ? { type: 6 } : { type: 5, data: { flags: ephemeral ? 64 : 0 } });
+}
+/** DM whoever made a request; password logins have no Discord user, so their FO gets it instead. */
+async function notify(env, L, uid, team, text) {
+  if (uid) return dm(env, uid, text);
+  const M = await members(env, L).catch(() => []), fo = team && foOf(L, M, team);
+  return fo ? dm(env, fo.id, text) : false;
+}
+const ref = (id, name) => (id ? `<@${id}>` : `**${name}**`);
 
 async function verify(pub, sig, msg) {
   if (!pub) return false;
@@ -82,14 +93,15 @@ async function verify(pub, sig, msg) {
   return false;
 }
 
-function isStaff(i, env) {
-  const u = uidOf(i), roles = i.member?.roles || [];
-  if (String(env.COMMISH_IDS || "").split(/[\s,]+/).includes(u)) return true;
-  if (env.COMMISH_ROLE_ID && roles.includes(env.COMMISH_ROLE_ID)) return true;
-  try { return (BigInt(i.member?.permissions || "0") & 0x28n) !== 0n; } catch { return false; }   // Administrator / Manage Server
+const CACHE = {};
+async function cached(key, ms, fn) {
+  const c = CACHE[key];
+  if (c && Date.now() - c.t < ms) return c.v;
+  const v = await fn(); CACHE[key] = { t: Date.now(), v }; return v;
 }
+const bust = (...keys) => keys.forEach((k) => delete CACHE[k]);
 
-// GitHub
+// ---------- GitHub ----------
 const repo = (env) => env.REPO || "EliteTuber168/ufa-schedule";
 async function gh(env, path, opts = {}) {
   const r = await fetch(`https://api.github.com/repos/${repo(env)}/contents/${path}`, {
@@ -105,16 +117,471 @@ async function getJSON(env, path) { const f = await gh(env, path); return { D: J
 const putJSON = (env, path, D, sha, message) => gh(env, path, { method: "PUT", body: JSON.stringify({ message, content: b64e(JSON.stringify(D, null, 1) + "\n"), sha }) });
 const loadDraft = (env) => getJSON(env, "draft.json");
 const loadSched = async (env) => (await getJSON(env, "schedule.json")).D;
-async function loadRosters(env) { try { return (await getJSON(env, "rosters.json")).D.teams || {}; } catch (e) { if (e.status === 404) return {}; throw e; } }
 
-// Discord REST (bot token)
-async function discord(env, method, path, body) {
+// ---------- Discord REST ----------
+async function discord(env, method, path, body, reason) {
+  if (!env.DISCORD_BOT_TOKEN) throw UE("The bot token isn't set up yet (DISCORD_BOT_TOKEN in the Worker settings).");
   const r = await fetch(`https://discord.com/api/v10${path}`, { method,
-    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  if (!r.ok) { const e = new Error(`Discord ${r.status}`); e.status = r.status; throw e; }
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, ...(body ? { "Content-Type": "application/json" } : {}), ...(reason ? { "X-Audit-Log-Reason": encodeURIComponent(reason).slice(0, 500) } : {}) },
+    body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 429) { const w = (await r.json().catch(() => ({}))).retry_after || 1; await new Promise((s) => setTimeout(s, w * 1000 + 200)); return discord(env, method, path, body, reason); }
+  if (!r.ok) {
+    const e = new Error(`Discord ${r.status}${r.status === 403 ? " (the bot needs Manage Roles and its role above the team/staff roles)" : ""}`); e.status = r.status; throw e;
+  }
   return r.status === 204 ? null : r.json();
 }
+async function dm(env, uid, payload) {
+  try {
+    const ch = await discord(env, "POST", "/users/@me/channels", { recipient_id: uid });
+    await discord(env, "POST", `/channels/${ch.id}/messages`, typeof payload === "string" ? { content: payload } : payload);
+    return true;
+  } catch { return false; }
+}
 
+// =====================================================================================================
+// league context
+// =====================================================================================================
+async function league(env, fresh = false) {
+  return cached("league", fresh ? 0 : 30000, async () => {
+    const [cfg, S, dr] = await Promise.all([getJSON(env, "config.json").then((x) => x.D).catch(() => ({})), loadSched(env), loadDraft(env)]);
+    const D = dr.D, guild = cfg.guild || env.GUILD_ID;
+    const R = { ...(cfg.roles || {}) }, C = { ...(cfg.channels || {}) };
+    if (guild && env.DISCORD_BOT_TOKEN && (!R.fo || !R.draftable)) {
+      const roles = await discord(env, "GET", `/guilds/${guild}/roles`).catch(() => []);
+      const byName = (n) => roles.find((r) => r.name.toLowerCase().trim() === n.toLowerCase())?.id;
+      R.fo ||= byName(env.FO_ROLE || "Franchise owner");
+      R.draftable ||= byName(env.DRAFT_ROLE || "Draftable");
+    }
+    const teams = S.teams.map((t) => {
+      const d = D.teams.find((x) => x.abbr === t.abbr) || {};
+      return { abbr: t.abbr, name: t.name, color: t.color, roleId: d.roleId || (/^\d{6,}$/.test(t.role || "") ? t.role : "") };
+    });
+    const settings = { rosterCap: 25, signingFreeze: false, minPlayers: 5, requireFO: true, ...(S.settings || {}) };
+    return { guild, R, C, teams, settings, draftStatus: D.status };
+  });
+}
+const teamOf = (L, abbr) => L.teams.find((t) => t.abbr === abbr);
+async function members(env, L, fresh = false) {
+  if (!L.guild) throw UE("The server isn't set up yet — run the \"Set up server\" Action on GitHub.");
+  return cached("members", fresh ? 0 : 15000, async () => {
+    const out = []; let after = "0";
+    for (;;) {
+      const page = await discord(env, "GET", `/guilds/${L.guild}/members?limit=1000&after=${after}`);
+      out.push(...page);
+      if (page.length < 1000) break;
+      after = page[page.length - 1].user.id;
+    }
+    return out.filter((m) => !m.user.bot);
+  });
+}
+const display = (m) => m.nick || m.user.global_name || m.user.username;
+function avatarUrl(gid, m) {
+  const u = m.user;
+  if (m.avatar) return `https://cdn.discordapp.com/guilds/${gid}/users/${u.id}/avatars/${m.avatar}.png?size=96`;
+  if (u.avatar) return `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=96`;
+  return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(u.id) >> 22n) % 6n)}.png`;
+}
+function info(L, m) {
+  const roles = m.roles || [];
+  const team = L.teams.find((t) => t.roleId && roles.includes(t.roleId));
+  const rank = !team ? null : L.R.fo && roles.includes(L.R.fo) ? "fo" : L.R.gm && roles.includes(L.R.gm) ? "gm" : L.R.hc && roles.includes(L.R.hc) ? "hc" : "player";
+  return { id: m.user.id, name: display(m), avatar: avatarUrl(L.guild, m), team: team?.abbr || null, rank, staff: !!(L.R.staff && roles.includes(L.R.staff)) };
+}
+const rosterOf = (L, M, abbr) => { const t = teamOf(L, abbr); return t?.roleId ? M.filter((m) => (m.roles || []).includes(t.roleId)).map((m) => info(L, m)) : []; };
+const foOf = (L, M, abbr) => rosterOf(L, M, abbr).find((p) => p.rank === "fo");
+function isStaff(env, L, uid, roles = [], perms) {
+  if (String(env.COMMISH_IDS || "").split(/[\s,]+/).includes(uid)) return true;
+  if (L?.R?.staff && roles.includes(L.R.staff)) return true;
+  if (env.COMMISH_ROLE_ID && roles.includes(env.COMMISH_ROLE_ID)) return true;
+  try { return perms != null && (BigInt(perms) & 0x28n) !== 0n; } catch { return false; }
+}
+async function actorFromUid(env, L, uid, perms) {
+  const M = await members(env, L), m = M.find((x) => x.user.id === uid);
+  if (!m) return { id: uid, name: "Unknown", team: null, rank: null, staff: isStaff(env, L, uid, [], perms) };
+  const a = info(L, m); a.staff = isStaff(env, L, uid, m.roles, perms); return a;
+}
+const actorFromInteraction = (env, L, i) => actorFromUid(env, L, uidOf(i), i.member?.permissions);
+const who = (a) => (a.id ? `<@${a.id}>` : `**${a.name}**`);
+const can = (a, what) => ({ offer: ["fo", "gm", "hc"], release: ["fo", "gm"], trade: ["fo", "gm"], promote: ["fo"] }[what] || []).includes(a.rank);
+
+// ---------- storage (KV) ----------
+const KV = (env) => { if (!env.VOTES) throw UE("Storage isn't set up (the Worker needs the VOTES KV binding)."); return env.VOTES; };
+const kget = async (env, k) => JSON.parse((await KV(env).get(k)) || "null");
+const kput = (env, k, v, ttl, metadata) => KV(env).put(k, JSON.stringify(v), { expirationTtl: ttl, ...(metadata ? { metadata } : {}) });
+async function klist(env, prefix) {
+  const out = []; let cursor;
+  do { const r = await KV(env).list({ prefix, cursor }); out.push(...r.keys); cursor = r.list_complete ? null : r.cursor; } while (cursor);
+  return out;
+}
+
+// ---------- roles / posts ----------
+const addRole = (env, L, uid, r, why) => r && discord(env, "PUT", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
+const delRole = (env, L, uid, r, why) => r && discord(env, "DELETE", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
+async function stripTeam(env, L, uid, abbr, why) {
+  await delRole(env, L, uid, teamOf(L, abbr)?.roleId, why);
+  for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r, why).catch(() => {});
+}
+async function logTx(env, L, { title, desc, color, teams = [] }) {
+  const ts = Date.now();
+  if (L.C.transactions) {
+    await discord(env, "POST", `/channels/${L.C.transactions}/messages`, { embeds: [{ title, description: desc, color, timestamp: new Date(ts).toISOString(), footer: { text: "UFA Transactions" } }], allowed_mentions: { parse: [] } }).catch(() => {});
+  }
+  if (env.VOTES) await kput(env, `tx:${String(9e12 - ts).padStart(13, "0")}`, { title, desc, teams, ts }, 90 * 86400).catch(() => {});
+}
+const cap = (L) => Number(L.settings.rosterCap) || 25;
+function frozen(L) {
+  if (L.settings.signingFreeze) return "🧊 Signings and trades are frozen right now.";
+  if (["live", "paused"].includes(L.draftStatus)) return "🏈 Signings and trades are paused while the draft is running.";
+  return null;
+}
+
+// =====================================================================================================
+// transactions core (shared by slash commands, buttons and the website)
+// =====================================================================================================
+async function makeOffer(env, L, actor, uid) {
+  if (!can(actor, "offer")) throw UE("Only franchise owners, GMs and head coaches can send offers.");
+  const f = frozen(L); if (f) throw UE(f);
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const t = info(L, m), team = teamOf(L, actor.team);
+  if (t.team) throw UE(`**${t.name}** is already on the ${teamOf(L, t.team).name}. Only free agents can be offered.`);
+  const n = rosterOf(L, M, actor.team).length;
+  if (n >= cap(L)) throw UE(`Your roster is full (${n}/${cap(L)}).`);
+  const open = (await klist(env, "offer:")).filter((k) => k.metadata?.uid === uid && k.metadata?.team === actor.team && k.metadata?.status === "pending" && k.metadata.exp > Date.now());
+  if (open.length) throw UE(`You already have a pending offer out to **${t.name}**.`);
+  const o = { id: rid(), team: actor.team, uid, name: t.name, by: actor.id, byName: actor.name, ts: Date.now(), exp: Date.now() + DAY, status: "pending" };
+  await saveOffer(env, o);
+  const sent = await dm(env, uid, { embeds: [{ title: `📝 Contract offer — ${team.name}`, color: colorInt(team.color),
+      description: `${who(actor)} (${RANK[actor.rank] || "front office"}) wants to sign you to the **${team.name}**.\nRoster: ${n}/${cap(L)}\n\nThis offer expires <t:${Math.floor(o.exp / 1000)}:R>.` }],
+    components: [row(btn("✅ Accept", 3, `oa:${o.id}`), btn("❌ Decline", 4, `od:${o.id}`))] });
+  return { offer: o, text: `📨 Offer sent to **${t.name}** for the ${team.name}. They have 24 hours to accept.` + (sent ? "" : "\n⚠️ Their DMs are closed — they can accept with **/offers** in the server.") };
+}
+const saveOffer = (env, o) => kput(env, `offer:${o.id}`, o, 3 * 86400, { team: o.team, uid: o.uid, status: o.status, exp: o.exp });
+
+async function answerOffer(env, id, uid, accept) {
+  const o = await kget(env, `offer:${id}`);
+  if (!o) return "This offer no longer exists.";
+  if (o.uid !== uid) return "This offer isn't for you.";
+  if (o.status !== "pending") return `You already ${o.status === "accepted" ? "accepted" : "answered"} this offer.`;
+  const L = await league(env, true), team = teamOf(L, o.team);
+  if (Date.now() > o.exp) { o.status = "expired"; await saveOffer(env, o); return "⌛ This offer has expired."; }
+  if (!accept) {
+    o.status = "declined"; await saveOffer(env, o);
+    await notify(env, L, o.by, o.team, `❌ **${o.name}** declined your offer to join the ${team.name}.`);
+    return `You declined the ${team.name}'s offer.`;
+  }
+  const f = frozen(L); if (f) return f + " Try again once they're open.";
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) return "You're not in the server anymore.";
+  const me = info(L, m);
+  if (me.team) { o.status = "void"; await saveOffer(env, o); return `You're already on the ${teamOf(L, me.team).name}.`; }
+  const n = rosterOf(L, M, o.team).length;
+  if (n >= cap(L)) return `Sorry — the ${team.name} roster is full (${n}/${cap(L)}).`;
+  await addRole(env, L, uid, team.roleId, `Signed via offer from ${o.byName}`);
+  await delRole(env, L, uid, L.R.draftable, "Signed with a team").catch(() => {});
+  o.status = "accepted"; o.answered = Date.now(); await saveOffer(env, o);
+  for (const k of await klist(env, "offer:")) if (k.metadata?.uid === uid && k.metadata?.status === "pending" && k.name !== `offer:${id}`) {
+    const x = await kget(env, k.name); if (x) { x.status = "void"; await saveOffer(env, x); }
+  }
+  bust("members");
+  await logTx(env, L, { title: "✍️ Signing", color: colorInt(team.color), teams: [o.team],
+    desc: `<@${uid}> has signed with the **${team.name}**.\nOffered by ${ref(o.by, o.byName)} · Roster ${n + 1}/${cap(L)}` });
+  await notify(env, L, o.by, o.team, `✅ **${o.name}** accepted and is now on the ${team.name}! Roster ${n + 1}/${cap(L)}.`);
+  return `🎉 Welcome to the **${team.name}**!`;
+}
+
+async function releasePlayer(env, L, actor, uid) {
+  if (!can(actor, "release") && !actor.staff) throw UE("Only franchise owners and GMs can release players.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const t = info(L, m);
+  if (!t.team || (!actor.staff && t.team !== actor.team)) throw UE(`**${t.name}** isn't on your team.`);
+  if (t.rank === "fo") throw UE("You can't release a franchise owner. Staff handle FO changes.");
+  if (actor.rank === "gm" && ["gm", "hc"].includes(t.rank)) throw UE("Only the franchise owner can release team staff.");
+  const team = teamOf(L, t.team);
+  await stripTeam(env, L, uid, t.team, `Released by ${actor.name}`);
+  bust("members");
+  await logTx(env, L, { title: "🧾 Release", color: 0x93a0bf, teams: [t.team], desc: `<@${uid}> has been released by the **${team.name}** (${who(actor)}).` });
+  await dm(env, uid, `🧾 You've been released by the **${team.name}**. You're now a free agent.`);
+  return `🧾 **${t.name}** has been released.`;
+}
+
+async function demand(env, L, actor, reason) {
+  if (!actor.team) throw UE("You're not on a team.");
+  if (actor.rank === "fo") throw UE("Franchise owners can't demand — talk to staff.");
+  const open = await kget(env, `dem:${actor.id}`);
+  if (open && (await kget(env, `req:${open}`))?.status === "staff") throw UE("You already have a demand waiting for staff.");
+  const r = { id: rid(), type: "demand", status: "staff", uid: actor.id, name: actor.name, team: actor.team, reason: reason || "", ts: Date.now() };
+  await postApproval(env, L, r);
+  await saveReq(env, r); await kput(env, `dem:${actor.id}`, r.id, 30 * 86400);
+  return "📨 Your demand was sent to staff. You'll get a DM when they decide.";
+}
+
+async function promote(env, L, actor, uid, role, reason) {
+  if (!can(actor, "promote")) throw UE("Only franchise owners can promote players.");
+  if (!["gm", "hc"].includes(role)) throw UE("Pick General Manager or Head Coach.");
+  if (!L.R[role]) throw UE("The GM/HC roles aren't set up yet — run the \"Set up server\" Action.");
+  if (!String(reason || "").trim()) throw UE("Add a reason for the promotion.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const t = info(L, m);
+  if (t.team !== actor.team) throw UE(`**${t.name}** isn't on your team.`);
+  if (t.rank === role) throw UE(`**${t.name}** is already your ${RANK[role]}.`);
+  if (t.rank === "fo") throw UE("That's the franchise owner.");
+  const r = { id: rid(), type: "promote", status: "staff", uid, name: t.name, team: actor.team, role, reason: String(reason).trim(), by: actor.id, byName: actor.name, ts: Date.now() };
+  await postApproval(env, L, r); await saveReq(env, r);
+  return `📨 Promotion of **${t.name}** to ${RANK[role]} sent to staff for approval.`;
+}
+
+async function demote(env, L, actor, uid) {
+  if (!can(actor, "promote") && !actor.staff) throw UE("Only franchise owners can demote staff.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const t = info(L, m);
+  if (!t.team || (!actor.staff && t.team !== actor.team)) throw UE(`**${t.name}** isn't on your team.`);
+  if (!["gm", "hc"].includes(t.rank)) throw UE(`**${t.name}** isn't a GM or head coach.`);
+  await delRole(env, L, uid, L.R[t.rank], `Demoted by ${actor.name}`);
+  bust("members");
+  const team = teamOf(L, t.team);
+  await logTx(env, L, { title: "📉 Staff change", color: 0x93a0bf, teams: [t.team], desc: `<@${uid}> is no longer ${RANK[t.rank]} of the **${team.name}**.` });
+  await dm(env, uid, `📉 You're no longer ${RANK[t.rank]} of the ${team.name}. You're still on the roster.`);
+  return `📉 **${t.name}** is no longer ${RANK[t.rank]}.`;
+}
+
+async function proposeTrade(env, L, actor, toAbbr, give, get) {
+  if (!can(actor, "trade")) throw UE("Only franchise owners and GMs can trade.");
+  const f = frozen(L); if (f) throw UE(f);
+  const to = teamOf(L, toAbbr), from = teamOf(L, actor.team);
+  if (!to) throw UE("Pick the team you're trading with.");
+  if (to.abbr === from.abbr) throw UE("You can't trade with yourself.");
+  give = [...new Set(give.filter(Boolean))]; get = [...new Set(get.filter(Boolean))];
+  if (!give.length && !get.length) throw UE("Add at least one player.");
+  const M = await members(env, L, true), I = (u) => { const m = M.find((x) => x.user.id === u); return m ? info(L, m) : null; };
+  for (const u of give) { const p = I(u); if (!p || p.team !== from.abbr) throw UE(`${p ? `**${p.name}**` : "A player you're giving"} isn't on your team.`); if (p.rank === "fo") throw UE("Franchise owners can't be traded."); }
+  for (const u of get) { const p = I(u); if (!p || p.team !== to.abbr) throw UE(`${p ? `**${p.name}**` : "A player you asked for"} isn't on the ${to.name}.`); if (p.rank === "fo") throw UE("Franchise owners can't be traded."); }
+  const nf = rosterOf(L, M, from.abbr).length - give.length + get.length, nt = rosterOf(L, M, to.abbr).length - get.length + give.length;
+  if (nf > cap(L)) throw UE(`That would put you over the roster cap (${nf}/${cap(L)}).`);
+  if (nt > cap(L)) throw UE(`That would put the ${to.name} over the roster cap (${nt}/${cap(L)}).`);
+  const names = (us) => us.map((u) => I(u).name);
+  const r = { id: rid(), type: "trade", status: "other", from: from.abbr, to: to.abbr, give, get, giveNames: names(give), getNames: names(get), by: actor.id, byName: actor.name, ts: Date.now() };
+  await saveReq(env, r);
+  const deciders = rosterOf(L, M, to.abbr).filter((p) => p.rank === "fo" || p.rank === "gm");
+  const payload = { embeds: [{ title: `🔁 Trade offer from the ${from.name}`, color: colorInt(from.color), description: tradeText(L, r) + `\n\nProposed by ${ref(r.by, r.byName)}. If you accept, it goes to staff for final approval.` }],
+    components: [row(btn("✅ Accept trade", 3, `ta:${r.id}`), btn("❌ Decline", 4, `td:${r.id}`))] };
+  let sent = 0; for (const d of deciders) if (await dm(env, d.id, payload)) sent++;
+  return { req: r, text: `📨 Trade sent to the ${to.name}.` + (sent ? "" : " ⚠️ Couldn't DM their FO/GM — they can answer on the FO page.") };
+}
+function tradeText(L, r) {
+  const list = (us) => us.length ? us.map((u) => `<@${u}>`).join(", ") : "nothing";
+  return `**${teamOf(L, r.from).name}** send: ${list(r.give)}\n**${teamOf(L, r.to).name}** send: ${list(r.get)}`;
+}
+async function answerTrade(env, L, actor, id, accept) {
+  const r = await kget(env, `req:${id}`);
+  if (!r || r.type !== "trade") return "This trade no longer exists.";
+  if (r.status !== "other") return "This trade was already answered.";
+  if (!(actor.team === r.to && can(actor, "trade"))) return `Only the ${teamOf(L, r.to).name} FO or GM can answer this.`;
+  if (!accept) {
+    r.status = "declined"; r.answeredBy = actor.id; await saveReq(env, r);
+    await notify(env, L, r.by, r.from, `❌ The ${teamOf(L, r.to).name} declined your trade.\n${tradeText(L, r)}`);
+    return "❌ Trade declined.";
+  }
+  r.status = "staff"; r.acceptedBy = actor.id;
+  await postApproval(env, L, r); await saveReq(env, r);
+  await notify(env, L, r.by, r.from, `✅ The ${teamOf(L, r.to).name} accepted your trade. It's now waiting for staff approval.`);
+  return "✅ Trade accepted — it's now waiting for staff approval.";
+}
+
+// ---------- staff approvals ----------
+const saveReq = (env, r) => kput(env, `req:${r.id}`, r, 60 * 86400, { type: r.type, status: r.status, team: r.team || r.from, to: r.to || null });
+function reqEmbed(L, r) {
+  const t = teamOf(L, r.team || r.from) || {};
+  const base = r.type === "demand" ? { title: "🚪 Demand request", description: `<@${r.uid}> wants to leave the **${t.name}**.` + (r.reason ? `\nReason: ${r.reason}` : "") }
+    : r.type === "promote" ? { title: "📈 Promotion request", description: `${ref(r.by, r.byName)} (FO, ${t.name}) wants to make <@${r.uid}> **${RANK[r.role]}**.\nReason: ${r.reason}` }
+    : { title: "🔁 Trade — accepted by both teams", description: tradeText(L, r) };
+  const fields = [];
+  if (r.status !== "staff") fields.push({ name: r.status === "approved" ? "✅ Approved" : r.status === "denied" ? "❌ Denied" : "⚠️ " + r.status, value: `${r.decidedByName || "Staff"}: ${r.decisionReason || "—"}`.slice(0, 1000) });
+  return { ...base, color: r.status === "approved" ? 0x4fd18b : r.status === "denied" ? 0xe8424a : colorInt(t.color), fields, timestamp: new Date(r.ts).toISOString() };
+}
+async function postApproval(env, L, r) {
+  if (!L.C.approvals) throw UE("The staff approvals channel isn't set up yet — run the \"Set up server\" Action.");
+  const msg = await discord(env, "POST", `/channels/${L.C.approvals}/messages`, { embeds: [reqEmbed(L, r)], allowed_mentions: { parse: [] },
+    components: [row(btn("✅ Approve", 3, `ra:${r.id}`), btn("❌ Deny", 4, `rd:${r.id}`))] });
+  r.msg = { ch: L.C.approvals, id: msg.id };
+}
+async function decide(env, id, approve, reason, staff) {
+  const L = await league(env, true), r = await kget(env, `req:${id}`);
+  if (!r) throw UE("That request no longer exists.");
+  if (r.status !== "staff") throw UE("That request was already handled.");
+  reason = String(reason || "").trim(); if (!reason) throw UE("A reason is required.");
+  const M = await members(env, L, true), I = (u) => { const m = M.find((x) => x.user.id === u); return m ? info(L, m) : null; };
+  let result = approve ? "approved" : "denied", note = "";
+  const t = teamOf(L, r.team || r.from);
+  if (approve) {
+    if (r.type === "demand") {
+      const p = I(r.uid);
+      if (p?.team === r.team) await stripTeam(env, L, r.uid, r.team, `Demand approved by ${staff.name}`);
+      await logTx(env, L, { title: "🚪 Demand", color: 0xffa24a, teams: [r.team], desc: `<@${r.uid}> has left the **${t.name}** (demand approved by staff).` });
+      await dm(env, r.uid, `✅ Your demand to leave the ${t.name} was approved. You're now a free agent.\nStaff note: ${reason}`);
+      const fo = foOf(L, M, r.team); if (fo) await dm(env, fo.id, `🚪 **${r.name}** has left the ${t.name} (demand approved).\nStaff note: ${reason}`);
+    } else if (r.type === "promote") {
+      const p = I(r.uid);
+      if (p?.team !== r.team) { result = "failed"; note = `${r.name} is no longer on the team.`; }
+      else {
+        await addRole(env, L, r.uid, L.R[r.role], `Promotion approved by ${staff.name}`);
+        const other = r.role === "gm" ? "hc" : "gm"; if (p.rank === other) await delRole(env, L, r.uid, L.R[other]).catch(() => {});
+        await logTx(env, L, { title: "📈 Promotion", color: colorInt(t.color), teams: [r.team], desc: `<@${r.uid}> is now **${RANK[r.role]}** of the **${t.name}**.` });
+        await dm(env, r.uid, `📈 You've been promoted to **${RANK[r.role]}** of the ${t.name}!`);
+        await notify(env, L, r.by, r.team, `✅ Your promotion of **${r.name}** to ${RANK[r.role]} was approved.\nStaff note: ${reason}`);
+      }
+    } else if (r.type === "trade") {
+      const from = teamOf(L, r.from), to = teamOf(L, r.to);
+      const bad = [...r.give.filter((u) => I(u)?.team !== r.from), ...r.get.filter((u) => I(u)?.team !== r.to)];
+      const nf = rosterOf(L, M, r.from).length - r.give.length + r.get.length, nt = rosterOf(L, M, r.to).length - r.get.length + r.give.length;
+      if (bad.length) { result = "failed"; note = "Some players aren't on those teams anymore."; }
+      else if (nf > cap(L) || nt > cap(L)) { result = "failed"; note = "A team would go over the roster cap."; }
+      else {
+        for (const u of r.give) { await stripTeam(env, L, u, r.from, "Trade"); await addRole(env, L, u, to.roleId, "Trade"); }
+        for (const u of r.get) { await stripTeam(env, L, u, r.to, "Trade"); await addRole(env, L, u, from.roleId, "Trade"); }
+        await logTx(env, L, { title: "🔁 Trade", color: colorInt(from.color), teams: [r.from, r.to], desc: tradeText(L, r) });
+        for (const u of [...r.give, ...r.get]) await dm(env, u, `🔁 You've been traded! Check #transactions for the details.`);
+      }
+      const msg = result === "approved" ? `✅ Trade approved!\n${tradeText(L, r)}\nStaff note: ${reason}` : `⚠️ The trade couldn't go through: ${note}`;
+      for (const a of [foOf(L, M, r.from), foOf(L, M, r.to)]) if (a) await dm(env, a.id, msg);
+    }
+  } else {
+    const deny = `❌ Staff denied your ${r.type === "demand" ? "demand" : r.type === "promote" ? `promotion of ${r.name}` : "trade"}.\nReason: ${reason}`;
+    if (r.type === "demand") await dm(env, r.uid, deny);
+    else if (r.type === "promote") await notify(env, L, r.by, r.team, deny);
+    else for (const a of [foOf(L, M, r.from), foOf(L, M, r.to)]) if (a) await dm(env, a.id, deny);
+  }
+  r.status = result; r.decidedBy = staff.id; r.decidedByName = staff.name; r.decisionReason = note ? `${reason} (${note})` : reason; r.decidedAt = Date.now();
+  await saveReq(env, r); bust("members");
+  if (r.msg) await discord(env, "PATCH", `/channels/${r.msg.ch}/messages/${r.msg.id}`, { embeds: [reqEmbed(L, r)], components: [] }).catch(() => {});
+  return r;
+}
+
+async function appoint(env, L, abbr, uid, staffName) {
+  const t = teamOf(L, abbr); if (!t?.roleId) throw UE("That team has no Discord role linked.");
+  if (!L.R.fo) throw UE("No Franchise owner role found.");
+  const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("That person isn't in the server.");
+  const p = info(L, m), old = foOf(L, M, abbr);
+  if (old && old.id !== uid) await delRole(env, L, old.id, L.R.fo, `FO replaced by ${staffName}`);
+  if (p.team && p.team !== abbr) await stripTeam(env, L, uid, p.team, "Appointed FO of another team");
+  await addRole(env, L, uid, t.roleId, `Appointed FO by ${staffName}`);
+  await addRole(env, L, uid, L.R.fo, `Appointed FO by ${staffName}`);
+  for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r).catch(() => {});
+  bust("members");
+  await logTx(env, L, { title: "👑 New franchise owner", color: colorInt(t.color), teams: [abbr], desc: `<@${uid}> is the new franchise owner of the **${t.name}**.` });
+  await dm(env, uid, `👑 You've been appointed franchise owner of the **${t.name}**! Manage your team at ${SITE}fo.html`);
+  return `👑 ${p.name} is now FO of the ${t.name}.`;
+}
+async function unappoint(env, L, abbr, staffName) {
+  const M = await members(env, L, true), fo = foOf(L, M, abbr), t = teamOf(L, abbr);
+  if (!fo) throw UE("That team has no FO.");
+  await delRole(env, L, fo.id, L.R.fo, `FO removed by ${staffName}`);
+  bust("members");
+  await logTx(env, L, { title: "👑 Franchise owner removed", color: 0x93a0bf, teams: [abbr], desc: `<@${fo.id}> is no longer franchise owner of the **${t.name}**.` });
+  return `${fo.name} is no longer FO of the ${t.name}.`;
+}
+
+// ---------- franchises ----------
+async function franchisesEmbeds(env, L) {
+  const M = await members(env, L, true);
+  const emojis = await cached("emojis", 600000, () => discord(env, "GET", `/guilds/${L.guild}/emojis`).catch(() => []));
+  const emo = (t) => { const k = t.name.split(" ").pop().toLowerCase(); const e = emojis.find((x) => x.name.toLowerCase().includes(k) || x.name.toLowerCase() === t.abbr.toLowerCase()); return e ? `<${e.animated ? "a" : ""}:${e.name}:${e.id}> ` : ""; };
+  const rows = L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { t, n: r.length, fo: r.find((p) => p.rank === "fo") }; });
+  const line = (x) => `${emo(x.t)}${x.t.roleId ? `<@&${x.t.roleId}>` : `**${x.t.name}**`} \`${x.n}/${cap(L)}\` ${x.fo ? `<@${x.fo.id}>` : "**No FO**"}`;
+  const act = rows.filter((x) => x.fo).sort((a, b) => a.t.name.localeCompare(b.t.name)), un = rows.filter((x) => !x.fo).sort((a, b) => a.t.name.localeCompare(b.t.name));
+  const chunk = (a, n) => { const out = []; for (let k = 0; k < a.length; k += n) out.push(a.slice(k, k + n)); return out; };
+  const embeds = [];
+  chunk(act, 10).forEach((c, k, all) => embeds.push({ title: k ? undefined : "Franchise Owner List", color: 0xffc62f,
+    description: `**Active FOs${all.length > 1 ? ` (${k + 1}/${all.length})` : ""} — ${act.length}**\n` + c.map(line).join("\n") }));
+  chunk(un, 10).forEach((c, k, all) => embeds.push({ title: k ? undefined : "Un-Franchised Teams", color: 0x93a0bf,
+    description: `**No FO${all.length > 1 ? ` (${k + 1}/${all.length})` : ""} — ${un.length}**\n` + c.map(line).join("\n") }));
+  embeds[embeds.length - 1].footer = { text: `Roster cap ${cap(L)} · ${SITE}` };
+  return embeds.slice(0, 10);
+}
+
+// =====================================================================================================
+// Discord: commands
+// =====================================================================================================
+async function command(i, env, ctx) {
+  const cmd = i.data.name, sub = (i.data.options || [])[0], o = i.data.options;
+  switch (cmd) {
+    case "pick": return later(i, ctx, () => doPick(i, env));
+    case "onclock": return await onClock(env);
+    case "available": return await available(i, env);
+    case "schedule": return await schedule(i, env);
+    case "roster": return later(i, ctx, () => roster(i, env), false);
+    case "franchises": return later(i, ctx, async () => ({ embeds: await franchisesEmbeds(env, await league(env)) }), false);
+    case "activity": return await activity(i, env);
+    case "fa":
+      if (sub?.name === "list") return await faList(sub, env);
+      if (sub?.name === "join") return later(i, ctx, () => faJoin(i, sub, env));
+      if (sub?.name === "leave") return later(i, ctx, () => faLeave(i, env));
+      break;
+    case "vote": if (sub?.name === "create") return await voteCreate(i, sub, env); break;
+    case "offer": return later(i, ctx, async () => { const L = await league(env); return (await makeOffer(env, L, await actorFromInteraction(env, L, i), opt(o, "player"))).text; });
+    case "offers": return later(i, ctx, () => myOffers(i, env));
+    case "release": return later(i, ctx, async () => { const L = await league(env); return releasePlayer(env, L, await actorFromInteraction(env, L, i), opt(o, "player")); });
+    case "demand": return later(i, ctx, async () => { const L = await league(env); return demand(env, L, await actorFromInteraction(env, L, i), opt(o, "reason")); });
+    case "promote": return later(i, ctx, async () => { const L = await league(env); return promote(env, L, await actorFromInteraction(env, L, i), opt(o, "player"), opt(o, "role"), opt(o, "reason")); });
+    case "demote": return later(i, ctx, async () => { const L = await league(env); return demote(env, L, await actorFromInteraction(env, L, i), opt(o, "player")); });
+    case "trade": return later(i, ctx, async () => {
+      const L = await league(env), a = await actorFromInteraction(env, L, i);
+      const t = findTeamL(L, opt(o, "team"));
+      return (await proposeTrade(env, L, a, t?.abbr, ["give1", "give2", "give3"].map((k) => opt(o, k)), ["get1", "get2", "get3"].map((k) => opt(o, k)))).text;
+    });
+  }
+  return reply("Unknown command.", true);
+}
+const findTeamL = (L, q) => { q = String(q || "").trim().toLowerCase(); return L.teams.find((t) => t.abbr.toLowerCase() === q) || L.teams.find((t) => t.name.toLowerCase() === q) || L.teams.find((t) => t.name.toLowerCase().includes(q)); };
+
+async function myOffers(i, env) {
+  const uid = uidOf(i), L = await league(env);
+  const list = [];
+  for (const k of await klist(env, "offer:")) if (k.metadata?.uid === uid && k.metadata?.status === "pending" && k.metadata.exp > Date.now()) list.push(await kget(env, k.name));
+  if (!list.length) return "You have no open offers.";
+  return { content: "📨 **Your open offers:**", components: list.filter(Boolean).slice(0, 5).map((x) => row(
+    { type: 2, style: 2, label: teamOf(L, x.team)?.name.slice(0, 70) || x.team, custom_id: `noop:${x.id}`, disabled: true },
+    btn("Accept", 3, `oa:${x.id}`), btn("Decline", 4, `od:${x.id}`))) };
+}
+
+// ---------- components (buttons / menus) ----------
+async function component(i, env, ctx) {
+  const [kind, id, k] = String(i.data.custom_id || "").split(":");
+  if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
+  if (kind === "oa" || kind === "od") return later(i, ctx, async () => {
+    return { content: await answerOffer(env, id, uidOf(i), kind === "oa"), components: [] };
+  }, true, true);
+  if (kind === "ta" || kind === "td") return later(i, ctx, async () => {
+    const L = await league(env);
+    return { content: await answerTrade(env, L, await actorFromUid(env, L, uidOf(i)), id, kind === "ta"), components: [] };
+  }, true, true);
+  if (kind === "ra" || kind === "rd") {
+    const L = await league(env);
+    if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can decide requests.", true);
+    return json({ type: 9, data: { custom_id: `rm:${id}:${kind === "ra" ? "a" : "d"}`, title: kind === "ra" ? "Approve request" : "Deny request",
+      components: [row({ type: 4, custom_id: "reason", style: 2, label: "Reason (sent to the people involved)", min_length: 2, max_length: 500, required: true })] } });
+  }
+  return reply("That button doesn't do anything anymore.", true);
+}
+async function modalSubmit(i, env, ctx) {
+  const [kind, id, ad] = String(i.data.custom_id || "").split(":");
+  if (kind !== "rm") return reply("Unknown form.", true);
+  const reason = i.data.components?.[0]?.components?.[0]?.value || "";
+  return later(i, ctx, async () => {
+    const L = await league(env), staff = await actorFromInteraction(env, L, i);
+    if (!staff.staff) return "Only staff can decide requests.";
+    const r = await decide(env, id, ad === "a", reason, staff);
+    return r.status === "approved" ? "✅ Approved." : r.status === "denied" ? "❌ Denied." : `⚠️ Couldn't complete it: ${r.decisionReason}`;
+  });
+}
+
+// =====================================================================================================
+// draft / schedule / roster / fa (unchanged behavior)
+// =====================================================================================================
 function helpers(D) {
   const order = D.teams.filter((t) => t.in).map((t) => t.abbr), T = order.length, total = T * D.rounds;
   const slot = (n) => { const r = Math.floor(n / T), k = n % T; return { round: r + 1, pick: k + 1, overall: n + 1, team: order[D.snake && r % 2 ? T - 1 - k : k] }; };
@@ -142,14 +609,7 @@ function parsePos(raw) {
   return out;
 }
 const cleanName = (s) => String(s || "").replace(/[\(\[\{].*?[\)\]\}]/g, "").replace(/[^\w .\-]/g, "").trim();
-function avatarUrl(gid, m) {
-  const u = m.user;
-  if (m.avatar) return `https://cdn.discordapp.com/guilds/${gid}/users/${u.id}/avatars/${m.avatar}.png?size=96`;
-  if (u.avatar) return `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=96`;
-  return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(u.id) >> 22n) % 6n)}.png`;
-}
 
-// ---------- autocomplete ----------
 async function autocomplete(i, env) {
   const focused = (i.data.options || []).flatMap((o) => o.options ? o.options : [o]).find((o) => o.focused);
   const q = String(focused?.value || "").toLowerCase();
@@ -164,7 +624,6 @@ async function autocomplete(i, env) {
     .map((p) => ({ name: `${p.rank ? "#" + p.rank + " " : ""}${p.name}${posTxt(p) ? " — " + posTxt(p) : ""}`.slice(0, 100), value: String(p.id) }));
 }
 
-// ---------- draft ----------
 async function onClock(env) {
   const { D } = await loadDraft(env), H = helpers(D), N = names(await loadSched(env)), n = D.picks.length;
   if (D.status === "setup") return reply("The draft hasn't started yet.");
@@ -185,36 +644,35 @@ async function available(i, env) {
 }
 
 async function doPick(i, env) {
-  const say = followup(i);
   try {
-    const user = uidOf(i), raw = String(opt(i.data.options, "player") || "").trim(), commish = isStaff(i, env);
+    const user = uidOf(i), raw = String(opt(i.data.options, "player") || "").trim();
+    const L = await league(env).catch(() => null), commish = isStaff(env, L, user, i.member?.roles || [], i.member?.permissions);
     const N = names(await loadSched(env));
     for (let attempt = 0; attempt < 3; attempt++) {
       const { D, sha } = await loadDraft(env), H = helpers(D), n = D.picks.length;
-      if (D.status === "setup") return say("The draft hasn't started yet.");
-      if (D.status === "paused") return say("⏸️ The draft is paused right now.");
-      if (D.status === "done" || n >= H.total) return say("🏁 The draft is already complete.");
+      if (D.status === "setup") return "The draft hasn't started yet.";
+      if (D.status === "paused") return "⏸️ The draft is paused right now.";
+      if (D.status === "done" || n >= H.total) return "🏁 The draft is already complete.";
       const s = H.slot(n), fo = H.team(s.team).foId;
-      if (user !== fo && !commish) return say(`❌ You're not on the clock. It's **${N[s.team] || s.team}**'s pick${fo ? ` (<@${fo}>)` : ""}.`);
+      if (user !== fo && !commish) return `❌ You're not on the clock. It's **${N[s.team] || s.team}**'s pick${fo ? ` (<@${fo}>)` : ""}.`;
       let p = /^\d+$/.test(raw) ? D.pool.find((x) => x.id === +raw) : null;
       if (!p) { const q = raw.toLowerCase(); const m = H.avail.filter((x) => x.name.toLowerCase() === q); p = m.length === 1 ? m[0] : null;
         if (!p) { const c = H.avail.filter((x) => x.name.toLowerCase().includes(q)); if (c.length === 1) p = c[0];
-          else return say(c.length ? `More than one player matches "${raw}": ${c.slice(0, 8).map((x) => x.name).join(", ")}. Pick one from the list.` : `No available player called "${raw}".`); } }
-      if (H.taken.has(p.id)) return say(`❌ **${p.name}** has already been drafted.`);
+          else return c.length ? `More than one player matches "${raw}": ${c.slice(0, 8).map((x) => x.name).join(", ")}. Pick one from the list.` : `No available player called "${raw}".`; } }
+      if (H.taken.has(p.id)) return `❌ **${p.name}** has already been drafted.`;
       D.picks.push({ player: p.id, at: Date.now(), by: user });
       D.clockStart = Date.now();
       if (D.picks.length >= H.total) D.status = "done";
       try { await putJSON(env, "draft.json", D, sha, `Pick #${s.overall}: ${s.team} select ${p.name} (via /pick)`); }
       catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
-      return say(`✅ **Pick is in!** ${N[s.team] || s.team} select **${p.name}**${posTxt(p) ? " (" + posTxt(p) + ")" : ""} — Round ${s.round}, Pick ${s.pick}.\nThe bot will announce it in the draft channel in a few seconds.`);
+      return `✅ **Pick is in!** ${N[s.team] || s.team} select **${p.name}**${posTxt(p) ? " (" + posTxt(p) + ")" : ""} — Round ${s.round}, Pick ${s.pick}.\nThe bot will announce it in the draft channel in a few seconds.`;
     }
-    return say("⚠️ The draft was busy — try /pick again.");
+    return "⚠️ The draft was busy — try /pick again.";
   } catch (e) {
-    return say("⚠️ Couldn't save the pick: " + (e.message || e) + ([401, 403, 404].includes(e.status) ? " (check the Worker's GITHUB_TOKEN)" : ""));
+    return "⚠️ Couldn't save the pick: " + (e.message || e) + ([401, 403, 404].includes(e.status) ? " (check the Worker's GITHUB_TOKEN)" : "");
   }
 }
 
-// ---------- schedule ----------
 async function schedule(i, env) {
   const S = await loadSched(env), N = names(S), q = opt(i.data.options, "team");
   if (q) {
@@ -236,24 +694,15 @@ async function schedule(i, env) {
     ...(cu.length ? ["**Catch-up games**", ...cu.map(line)] : []), SITE].join("\n"));
 }
 
-// ---------- rosters / free agents ----------
 async function roster(i, env) {
-  const S = await loadSched(env), t = findTeam(S, opt(i.data.options, "team"));
-  if (!t) return reply("No team by that name.", true);
-  const [{ D }, R] = await Promise.all([loadDraft(env), loadRosters(env)]), H = helpers(D);
+  const L = await league(env), t = findTeamL(L, opt(i.data.options, "team"));
+  if (!t) return "No team by that name.";
+  const [{ D }, M] = await Promise.all([loadDraft(env), members(env, L)]);
   const byDiscord = Object.fromEntries(D.pool.filter((p) => p.discord).map((p) => [p.discord, p]));
-  const picks = {};
-  D.picks.forEach((pk, n) => { const s = H.slot(n); if (s.team === t.abbr) picks[pk.player] = `R${s.round}P${s.pick}`; });
-  const members = R[t.abbr] || [], seen = new Set();
-  const lines = members.map((m) => {
-    const p = byDiscord[m.id]; if (p) seen.add(p.id);
-    return `${m.fo ? "👑" : "•"} <@${m.id}>${m.fo ? " — FO" : ""}${p && posTxt(p) ? ` (${posTxt(p)})` : ""}${p && picks[p.id] ? ` · ${picks[p.id]}` : ""}`;
-  });
-  for (const [pid, where] of Object.entries(picks)) if (!seen.has(+pid)) {
-    const p = D.pool.find((x) => x.id === +pid) || { name: "?" };
-    lines.push(`• ${p.discord ? `<@${p.discord}>` : `**${p.name}**`}${posTxt(p) ? ` (${posTxt(p)})` : ""} · ${where}`);
-  }
-  return reply(`🏈 **${t.name}** — ${lines.length} player${lines.length === 1 ? "" : "s"}\n` + (lines.length ? lines.join("\n") : "No players yet.") + `\n-# Rosters update hourly · ${BOARD}#/teams`);
+  const icon = { fo: "👑", gm: "🧠", hc: "📋", player: "•" };
+  const r = rosterOf(L, M, t.abbr).sort((a, b) => ["fo", "gm", "hc", "player"].indexOf(a.rank) - ["fo", "gm", "hc", "player"].indexOf(b.rank) || a.name.localeCompare(b.name));
+  const lines = r.map((p) => `${icon[p.rank]} <@${p.id}>${p.rank !== "player" ? ` — ${RANK[p.rank]}` : ""}${byDiscord[p.id] && posTxt(byDiscord[p.id]) ? ` (${posTxt(byDiscord[p.id])})` : ""}`);
+  return { embeds: [{ title: `${t.name} — ${r.length}/${cap(L)}`, color: colorInt(t.color), description: lines.join("\n") || "No players yet." }] };
 }
 
 async function faList(sub, env) {
@@ -265,104 +714,77 @@ async function faList(sub, env) {
     + (all.length > list.length ? `\n…and ${all.length - list.length} more: ${BOARD}#/players` : "") + "\nNot on a team? Sign up with **/fa join**.", true);
 }
 
-async function draftRole(env, gid) {
-  const want = String(env.DRAFT_ROLE || "Draftable").toLowerCase().trim();
-  const roles = await discord(env, "GET", `/guilds/${gid}/roles`);
-  return roles.find((r) => r.id === want || r.name.toLowerCase().trim() === want);
-}
-
 async function faJoin(i, sub, env) {
-  const say = followup(i);
-  try {
-    if (!env.DISCORD_BOT_TOKEN) return say("⚠️ Sign-ups aren't switched on yet — the commissioner needs to add DISCORD_BOT_TOKEN to the bot's settings.");
-    const m = i.member, uid = m.user.id, gid = i.guild_id;
-    const raw = String(opt(sub.options, "positions") || ""), pos = parsePos(raw);
-    if (!pos.length) return say(`Couldn't read any positions from "${raw}". Try something like **WR/CB** or **QB, LB**.`);
-    const N = names(await loadSched(env));
-    let name = "";
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { D, sha } = await loadDraft(env), H = helpers(D);
-      const onTeam = D.teams.find((t) => t.roleId && (m.roles || []).includes(t.roleId));
-      if (onTeam) return say(`You're already on the **${N[onTeam.abbr] || onTeam.abbr}** roster.`);
-      let p = D.pool.find((x) => x.discord === uid);
-      if (p && H.taken.has(p.id)) return say("You've already been drafted.");
-      if (attempt === 0) {
-        const role = await draftRole(env, gid);
-        if (!role) return say("⚠️ Couldn't find the draft-pool role. Ask the commissioner to check the DRAFT_ROLE setting.");
-        await discord(env, "PUT", `/guilds/${gid}/members/${uid}/roles/${role.id}`);
-      }
-      if (!p) { p = { id: Math.max(0, ...D.pool.map((x) => x.id)) + 1, name: cleanName(m.nick || m.user.global_name || m.user.username) || m.user.username, pos: [], discord: uid }; D.pool.push(p); }
-      p.pos = pos; p.avatar = avatarUrl(gid, m); p.locked = true; name = p.name;
-      D.positions = D.positions || [];
-      for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
-      try { await putJSON(env, "draft.json", D, sha, `Free agent sign-up: ${p.name} (${pos.join("/")})`); }
-      catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
-      return say(`✅ You're in the player pool as **${name}** (${pos.join("/")}). FOs can find you on the board: ${BOARD}#/players\nChange positions any time by running **/fa join** again.`);
+  const m = i.member, uid = m.user.id, gid = i.guild_id;
+  const raw = String(opt(sub.options, "positions") || ""), pos = parsePos(raw);
+  if (!pos.length) return `Couldn't read any positions from "${raw}". Try something like **WR/CB** or **QB, LB**.`;
+  const L = await league(env);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { D, sha } = await loadDraft(env), H = helpers(D);
+    const onTeam = L.teams.find((t) => t.roleId && (m.roles || []).includes(t.roleId));
+    if (onTeam) return `You're already on the **${onTeam.name}** roster.`;
+    let p = D.pool.find((x) => x.discord === uid);
+    if (p && H.taken.has(p.id)) return "You've already been drafted.";
+    if (attempt === 0) {
+      if (!L.R.draftable) return "⚠️ Couldn't find the draft-pool role. Ask the commissioner to check the DRAFT_ROLE setting.";
+      await discord(env, "PUT", `/guilds/${gid}/members/${uid}/roles/${L.R.draftable}`);
     }
-    return say("⚠️ Busy right now — try again.");
-  } catch (e) {
-    return say("⚠️ Couldn't sign you up: " + (e.message || e) + (e.status === 403 ? " (the bot needs Manage Roles, above the Draftable role)" : ""));
+    if (!p) { p = { id: Math.max(0, ...D.pool.map((x) => x.id)) + 1, name: cleanName(m.nick || m.user.global_name || m.user.username) || m.user.username, pos: [], discord: uid }; D.pool.push(p); }
+    p.pos = pos; p.avatar = avatarUrl(gid, m); p.locked = true;
+    D.positions = D.positions || [];
+    for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
+    try { await putJSON(env, "draft.json", D, sha, `Free agent sign-up: ${p.name} (${pos.join("/")})`); }
+    catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+    return `✅ You're in the player pool as **${p.name}** (${pos.join("/")}). FOs can find you on the board: ${BOARD}#/players\nChange positions any time by running **/fa join** again.`;
   }
+  return "⚠️ Busy right now — try again.";
 }
 
 async function faLeave(i, env) {
-  const say = followup(i);
-  try {
-    if (!env.DISCORD_BOT_TOKEN) return say("⚠️ The commissioner needs to add DISCORD_BOT_TOKEN to the bot's settings first.");
-    const uid = uidOf(i), gid = i.guild_id;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { D, sha } = await loadDraft(env), H = helpers(D);
-      const p = D.pool.find((x) => x.discord === uid);
-      if (p && H.taken.has(p.id)) return say("You've already been drafted — talk to your FO or a commissioner.");
-      if (attempt === 0) { const role = await draftRole(env, gid); if (role) await discord(env, "DELETE", `/guilds/${gid}/members/${uid}/roles/${role.id}`); }
-      if (!p) return say("👋 You're not in the player pool.");
-      D.pool = D.pool.filter((x) => x !== p);
-      try { await putJSON(env, "draft.json", D, sha, `Free agent left the pool: ${p.name}`); }
-      catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
-      return say("👋 You've been taken out of the player pool. Rejoin any time with **/fa join**.");
-    }
-    return say("⚠️ Busy right now — try again.");
-  } catch (e) { return say("⚠️ Couldn't remove you: " + (e.message || e)); }
-}
-
-// ---------- staff: activity ----------
-async function activity(i, env) {
-  if (!isStaff(i, env)) return reply("Only commissioners can use this.", true);
-  const [S, R] = await Promise.all([loadSched(env), loadRosters(env)]);
-  const cfg = { minPlayers: 5, requireFO: true, ...(S.settings || {}) };
-  const under = [], noFo = [], empty = [];
-  for (const t of S.teams) {
-    const r = R[t.abbr]; if (!r) continue;
-    if (!r.length) { empty.push(t.abbr); continue; }
-    if (r.length < cfg.minPlayers) under.push(`${t.abbr} (${r.length})`);
-    if (!r.some((m) => m.fo)) noFo.push(t.abbr);
+  const uid = uidOf(i), gid = i.guild_id, L = await league(env);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { D, sha } = await loadDraft(env), H = helpers(D);
+    const p = D.pool.find((x) => x.discord === uid);
+    if (p && H.taken.has(p.id)) return "You've already been drafted — talk to your FO or a commissioner.";
+    if (attempt === 0 && L.R.draftable) await discord(env, "DELETE", `/guilds/${gid}/members/${uid}/roles/${L.R.draftable}`).catch(() => {});
+    if (!p) return "👋 You're not in the player pool.";
+    D.pool = D.pool.filter((x) => x !== p);
+    try { await putJSON(env, "draft.json", D, sha, `Free agent left the pool: ${p.name}`); }
+    catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+    return "👋 You've been taken out of the player pool. Rejoin any time with **/fa join**.";
   }
-  const big = S.teams.filter((t) => (R[t.abbr] || []).length >= cfg.minPlayers).length;
-  return reply([`📋 **Activity** — minimum ${cfg.minPlayers} players`,
-    under.length ? `⚠️ Under the minimum: ${under.join(", ")}` : "✅ No teams under the minimum",
-    noFo.length ? `👤 No FO: ${noFo.join(", ")}` : "", empty.length ? `🫥 Empty: ${empty.join(", ")}` : "",
-    `${big} teams at or above the minimum. (From Discord roles, updated hourly.)`].filter(Boolean).join("\n"), true);
+  return "⚠️ Busy right now — try again.";
 }
 
-// ---------- staff: votes ----------
-const TTL = 60 * 60 * 24 * 90;
-function pollText(p) {
-  return `🗳️ **${p.title}**\nOne vote per person — you can change it until voting closes.` + (p.ends ? ` Closes <t:${Math.floor(p.ends / 1000)}:R>.` : "");
+async function activity(i, env) {
+  const L = await league(env);
+  if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can use this.", true);
+  const M = await members(env, L), min = L.settings.minPlayers;
+  const under = [], noFo = [], empty = [];
+  for (const t of L.teams) {
+    const r = rosterOf(L, M, t.abbr);
+    if (!r.length) { empty.push(t.abbr); continue; }
+    if (r.length < min) under.push(`${t.abbr} (${r.length})`);
+    if (!r.some((p) => p.rank === "fo")) noFo.push(t.abbr);
+  }
+  return reply([`📋 **Activity** — minimum ${min} players`,
+    under.length ? `⚠️ Under the minimum: ${under.join(", ")}` : "✅ No teams under the minimum",
+    noFo.length ? `👤 No FO: ${noFo.join(", ")}` : "", empty.length ? `🫥 Empty: ${empty.join(", ")}` : ""].filter(Boolean).join("\n"), true);
 }
+
+// ---------- votes ----------
+const TTL = 60 * 60 * 24 * 90;
+const pollText = (p) => `🗳️ **${p.title}**\nOne vote per person — you can change it until voting closes.` + (p.ends ? ` Closes <t:${Math.floor(p.ends / 1000)}:R>.` : "");
 function pollRows(id, options) {
   const rows = options.length <= 5
-    ? [{ type: 1, components: options.map((o, k) => ({ type: 2, style: 1, label: o.slice(0, 80), custom_id: `v:${id}:${k}` })) }]
-    : [{ type: 1, components: [{ type: 3, custom_id: `vs:${id}`, placeholder: "Choose your vote", options: options.map((o, k) => ({ label: o.slice(0, 100), value: String(k) })) }] }];
-  rows.push({ type: 1, components: [{ type: 2, style: 2, label: "📊 Results (staff)", custom_id: `vr:${id}` }, { type: 2, style: 4, label: "🔒 Close voting (staff)", custom_id: `vc:${id}` }] });
+    ? [row(...options.map((o, k) => btn(o.slice(0, 80), 1, `v:${id}:${k}`)))]
+    : [row({ type: 3, custom_id: `vs:${id}`, placeholder: "Choose your vote", options: options.map((o, k) => ({ label: o.slice(0, 100), value: String(k) })) })];
+  rows.push(row(btn("📊 Results (staff)", 2, `vr:${id}`), btn("🔒 Close voting (staff)", 4, `vc:${id}`)));
   return rows;
 }
 async function tally(env, id, n) {
-  const counts = Array(n).fill(0); let cursor;
-  do {
-    const r = await env.VOTES.list({ prefix: `vote:${id}:`, cursor });
-    for (const k of r.keys) { const x = k.metadata?.i; if (x >= 0 && x < n) counts[x]++; }
-    cursor = r.list_complete ? null : r.cursor;
-  } while (cursor);
+  const counts = Array(n).fill(0);
+  for (const k of await klist(env, `vote:${id}:`)) { const x = k.metadata?.i; if (x >= 0 && x < n) counts[x]++; }
   return counts;
 }
 function resultsText(p, counts, final) {
@@ -371,37 +793,173 @@ function resultsText(p, counts, final) {
     .map(([o, c]) => `${final && total && c === top ? "🏆" : "▫️"} **${o}** — ${c} vote${c === 1 ? "" : "s"}` + (total ? ` (${Math.round((c / total) * 100)}%) ` + "█".repeat(Math.round((c / total) * 10)) : ""));
   return `${final ? "🔒 **Final results" : "📊 **Results so far"} — ${p.title}**\n${rows.join("\n")}\n${total} total vote${total === 1 ? "" : "s"}.` + (final ? "" : "\n-# Votes from the last minute may not show yet.");
 }
-
 async function voteCreate(i, sub, env) {
-  if (!isStaff(i, env)) return reply("Only commissioners can start a vote.", true);
-  if (!env.VOTES) return reply("⚠️ Voting storage isn't set up yet (the Worker needs a KV namespace bound as VOTES).", true);
+  const L = await league(env).catch(() => null);
+  if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can start a vote.", true);
   const title = String(opt(sub.options, "title") || "").trim().slice(0, 200);
   const options = [...new Set(String(opt(sub.options, "options") || "").split(/[,|\n]/).map((s) => s.trim()).filter(Boolean))];
   const hours = Number(opt(sub.options, "hours") || 0);
   if (options.length < 2 || options.length > 25) return reply("Give between 2 and 25 options, separated by commas.", true);
-  const id = Date.now().toString(36);
+  const id = rid();
   const poll = { title, options, ends: hours > 0 ? Date.now() + hours * 3600000 : null, by: uidOf(i) };
-  await env.VOTES.put(`poll:${id}`, JSON.stringify(poll), { expirationTtl: TTL });
+  await kput(env, `poll:${id}`, poll, TTL);
   return json({ type: 4, data: { content: pollText(poll), components: pollRows(id, options), allowed_mentions: { parse: [] } } });
 }
-
-async function component(i, env) {
-  const [kind, id, k] = String(i.data.custom_id || "").split(":");
-  if (!["v", "vs", "vr", "vc"].includes(kind)) return reply("That button doesn't do anything anymore.", true);
-  if (!env.VOTES) return reply("⚠️ Voting storage isn't set up.", true);
-  const poll = JSON.parse((await env.VOTES.get(`poll:${id}`)) || "null");
+async function voteComponent(i, env, kind, id, k) {
+  const poll = await kget(env, `poll:${id}`);
   if (!poll) return reply("This vote has expired.", true);
   if (kind === "v" || kind === "vs") {
     const idx = kind === "vs" ? Number(i.data.values?.[0]) : Number(k);
     if (poll.closed || (poll.ends && Date.now() > poll.ends)) return reply("🔒 Voting is closed.", true);
     if (!(idx >= 0 && idx < poll.options.length)) return reply("That option doesn't exist.", true);
-    await env.VOTES.put(`vote:${id}:${uidOf(i)}`, String(idx), { metadata: { i: idx }, expirationTtl: TTL });
+    await kput(env, `vote:${id}:${uidOf(i)}`, idx, TTL, { i: idx });
     return reply(`✅ Your vote: **${poll.options[idx]}**. You can change it until voting closes.`, true);
   }
-  if (!isStaff(i, env)) return reply("Only commissioners can do that.", true);
+  const L = await league(env).catch(() => null);
+  if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
   const counts = await tally(env, id, poll.options.length);
   if (kind === "vr") return reply(resultsText(poll, counts, false), true);
-  poll.closed = true;
-  await env.VOTES.put(`poll:${id}`, JSON.stringify(poll), { expirationTtl: TTL });
+  poll.closed = true; await kput(env, `poll:${id}`, poll, TTL);
   return json({ type: 7, data: { content: resultsText(poll, counts, true), components: [], allowed_mentions: { parse: [] } } });
+}
+
+// =====================================================================================================
+// Website API (FO portal + admin)
+// =====================================================================================================
+async function sha256(s) { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+const randToken = () => [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function web(req, url, env, ctx) {
+  const origin = env.SITE_ORIGIN || "https://elitetuber168.github.io";
+  const cors = { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Max-Age": "86400" };
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  const out = (o, s = 200) => json(o, s, cors);
+  const p = url.pathname;
+  try {
+    // ----- Discord login -----
+    if (p === "/auth/discord") {
+      const back = url.searchParams.get("return") || `${SITE}fo.html`;
+      if (!back.startsWith(origin)) return new Response("Bad return URL", { status: 400 });
+      const state = randToken(); await kput(env, `st:${state}`, back, 600);
+      const q = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID || APP_ID, response_type: "code", scope: "identify", redirect_uri: `${url.origin}/auth/callback`, state, prompt: "none" });
+      return Response.redirect(`https://discord.com/oauth2/authorize?${q}`, 302);
+    }
+    if (p === "/auth/callback") {
+      const back = await kget(env, `st:${url.searchParams.get("state")}`);
+      if (!back) return new Response("Login expired — go back and try again.", { status: 400 });
+      if (!url.searchParams.get("code")) return Response.redirect(`${back}#error=cancelled`, 302);
+      if (!env.DISCORD_CLIENT_SECRET) return Response.redirect(`${back}#error=nosecret`, 302);
+      const tr = await fetch("https://discord.com/api/oauth2/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID || APP_ID, client_secret: env.DISCORD_CLIENT_SECRET, grant_type: "authorization_code", code: url.searchParams.get("code"), redirect_uri: `${url.origin}/auth/callback` }) });
+      if (!tr.ok) return Response.redirect(`${back}#error=login`, 302);
+      const tok = await tr.json();
+      const me = await (await fetch("https://discord.com/api/v10/users/@me", { headers: { Authorization: `Bearer ${tok.access_token}` } })).json();
+      const s = randToken(); await kput(env, `sess:${s}`, { uid: me.id, name: me.global_name || me.username, ts: Date.now() }, 30 * 86400);
+      return Response.redirect(`${back}#session=${s}`, 302);
+    }
+    if (p === "/api/login" && req.method === "POST") {
+      const { team, password } = await req.json();
+      const rec = await kget(env, `pw:${String(team || "").toUpperCase()}`);
+      if (!rec || rec.hash !== await sha256(rec.salt + String(password || ""))) return out({ error: "Wrong team or password." }, 401);
+      const s = randToken(); await kput(env, `sess:${s}`, { team: String(team).toUpperCase(), pw: true, ts: Date.now() }, 30 * 86400);
+      return out({ session: s });
+    }
+
+    const L = await league(env);
+    const auth = req.headers.get("Authorization") || "";
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+
+    // ----- admin (GitHub token with push access to the repo, or a staff Discord session) -----
+    if (p.startsWith("/api/admin/")) {
+      const admin = await adminFrom(env, L, auth);
+      if (!admin) return out({ error: "Not allowed — sign in with a GitHub token that can edit the site." }, 401);
+      if (p === "/api/admin/requests") {
+        const list = [];
+        for (const k of await klist(env, "req:")) if (["staff", "other"].includes(k.metadata?.status) || url.searchParams.get("all")) list.push(await kget(env, k.name));
+        return out({ requests: list.filter(Boolean).sort((a, b) => b.ts - a.ts).map((r) => ({ ...r, text: plain(L, r) })) });
+      }
+      if (p === "/api/admin/decide") { const r = await decide(env, body.id, !!body.approve, body.reason, admin); return out({ ok: true, status: r.status, note: r.decisionReason }); }
+      if (p === "/api/admin/appoint") return out({ ok: true, text: await appoint(env, L, body.team, body.uid, admin.name) });
+      if (p === "/api/admin/unappoint") return out({ ok: true, text: await unappoint(env, L, body.team, admin.name) });
+      if (p === "/api/admin/password") {
+        const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
+        if (!body.password) { await KV(env).delete(`pw:${abbr}`); return out({ ok: true }); }
+        if (String(body.password).length < 8) return out({ error: "Use at least 8 characters." }, 400);
+        const salt = randToken(); await kput(env, `pw:${abbr}`, { salt, hash: await sha256(salt + body.password), ts: Date.now() }, 365 * 86400);
+        return out({ ok: true });
+      }
+      if (p === "/api/admin/passwords") { const ks = await klist(env, "pw:"); return out({ teams: ks.map((k) => k.name.slice(3)) }); }
+      if (p === "/api/admin/members") { const M = await members(env, L); return out({ members: M.map((m) => info(L, m)) }); }
+      if (p === "/api/admin/release") return out({ ok: true, text: await releasePlayer(env, L, admin, body.uid) });
+      return out({ error: "Unknown admin route." }, 404);
+    }
+
+    // ----- FO / player session -----
+    const s = auth.startsWith("Session ") ? await kget(env, `sess:${auth.slice(8)}`) : null;
+    if (!s) return out({ error: "Please log in." }, 401);
+    if (p === "/api/logout") { await KV(env).delete(`sess:${auth.slice(8)}`); return out({ ok: true }); }
+    let actor;
+    if (s.pw) actor = { id: null, name: `${teamOf(L, s.team)?.name || s.team} front office`, team: s.team, rank: "fo", staff: false, pw: true };
+    else actor = await actorFromUid(env, L, s.uid);
+    const M = await members(env, L);
+
+    if (p === "/api/me") return out({ me: actor, teams: L.teams.map(({ abbr, name, color }) => ({ abbr, name, color })), cap: cap(L), frozen: frozen(L) });
+    if (p === "/api/team") {
+      const abbr = url.searchParams.get("team") || actor.team;
+      if (!teamOf(L, abbr)) return out({ error: "No team." }, 404);
+      const offers = [], reqs = [];
+      for (const k of await klist(env, "offer:")) if (k.metadata?.team === abbr && k.metadata?.status === "pending" && k.metadata.exp > Date.now()) offers.push(await kget(env, k.name));
+      for (const k of await klist(env, "req:")) if ((k.metadata?.team === abbr || k.metadata?.to === abbr) && ["staff", "other"].includes(k.metadata?.status)) reqs.push(await kget(env, k.name));
+      return out({ team: teamOf(L, abbr), roster: rosterOf(L, M, abbr), offers: offers.filter(Boolean), requests: reqs.filter(Boolean).map((r) => ({ ...r, text: plain(L, r) })) });
+    }
+    if (p === "/api/players") return out({ players: M.map((m) => info(L, m)) });
+    if (p === "/api/franchises") return out({ teams: L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { ...t, count: r.length, fo: r.find((x) => x.rank === "fo") || null }; }), cap: cap(L) });
+    if (p === "/api/transactions") {
+      const ks = (await klist(env, "tx:")).slice(0, 40);
+      return out({ tx: (await Promise.all(ks.map((k) => kget(env, k.name)))).filter(Boolean).map((t) => ({ ...t, text: mentionsToNames(M, L, t.desc) })) });
+    }
+    if (req.method !== "POST") return out({ error: "Unknown route." }, 404);
+    if (p === "/api/offer") return out({ ok: true, ...(await makeOffer(env, L, actor, body.uid)) });
+    if (p === "/api/offer/cancel") {
+      const o = await kget(env, `offer:${body.id}`);
+      if (!o || o.team !== actor.team || !can(actor, "offer")) return out({ error: "Can't cancel that offer." }, 400);
+      o.status = "cancelled"; await saveOffer(env, o); return out({ ok: true });
+    }
+    if (p === "/api/release") return out({ ok: true, text: await releasePlayer(env, L, actor, body.uid) });
+    if (p === "/api/promote") return out({ ok: true, text: await promote(env, L, actor, body.uid, body.role, body.reason) });
+    if (p === "/api/demote") return out({ ok: true, text: await demote(env, L, actor, body.uid) });
+    if (p === "/api/trade") return out({ ok: true, ...(await proposeTrade(env, L, actor, body.to, body.give || [], body.get || [])) });
+    if (p === "/api/trade/respond") return out({ ok: true, text: await answerTrade(env, L, actor, body.id, !!body.accept) });
+    if (p === "/api/demand") return out({ ok: true, text: await demand(env, L, actor, body.reason) });
+    return out({ error: "Unknown route." }, 404);
+  } catch (e) {
+    return json({ error: e.user ? e.message : "Something went wrong: " + (e.message || e) }, e.user ? 400 : 500, cors);
+  }
+}
+async function adminFrom(env, L, auth) {
+  if (auth.startsWith("Session ")) {
+    const s = await kget(env, `sess:${auth.slice(8)}`);
+    if (s?.uid) { const a = await actorFromUid(env, L, s.uid); if (a.staff) return a; }
+    return null;
+  }
+  if (!auth.startsWith("GitHub ")) return null;
+  const tok = auth.slice(7), key = "gh:" + (await sha256(tok));
+  return cached(key, 600000, async () => {
+    const r = await fetch(`https://api.github.com/repos/${repo(env)}`, { headers: { Authorization: `Bearer ${tok}`, Accept: "application/vnd.github+json", "User-Agent": "ufa-draft-worker" } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j.permissions?.push) return null;
+    const u = await fetch("https://api.github.com/user", { headers: { Authorization: `Bearer ${tok}`, "User-Agent": "ufa-draft-worker" } }).then((x) => x.ok ? x.json() : {}).catch(() => ({}));
+    return { id: null, name: `${u.login || "Admin"} (website)`, staff: true, team: null, rank: null };
+  });
+}
+function mentionsToNames(M, L, s) {
+  return String(s || "").replace(/<@&(\d+)>/g, (_, id) => "@" + (L.teams.find((t) => t.roleId === id)?.name || "role"))
+    .replace(/<@(\d+)>/g, (_, id) => "@" + (M.find((m) => m.user.id === id) ? display(M.find((m) => m.user.id === id)) : "user")).replace(/\*\*/g, "");
+}
+function plain(L, r) {
+  const t = teamOf(L, r.team || r.from)?.name || "";
+  if (r.type === "demand") return `${r.name} wants to leave the ${t}.` + (r.reason ? ` Reason: ${r.reason}` : "");
+  if (r.type === "promote") return `${r.byName} wants to make ${r.name} ${RANK[r.role]} of the ${t}. Reason: ${r.reason}`;
+  return `${teamOf(L, r.from).name} send ${r.giveNames.join(", ") || "nothing"} · ${teamOf(L, r.to).name} send ${r.getNames.join(", ") || "nothing"}`;
 }
