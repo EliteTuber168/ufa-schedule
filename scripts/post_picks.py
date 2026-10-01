@@ -10,6 +10,7 @@ from discord_api import call
 from league import GUILD, BOARD, load, dm
 
 CHANNEL = os.environ.get("DRAFT_CHANNEL_ID", "").strip()
+FO_PORTAL = "https://elitetuber168.github.io/ufa-schedule/fo.html"
 
 def load_prev():
     try:
@@ -80,8 +81,10 @@ def main():
     for n in range(pn, cn):
         rd, pk, team = slot(n); p = pool.get(cur["picks"][n]["player"], {"name": "?", "pos": []})
         pos = "/".join(p.get("pos") or [])
+        auto = cur["picks"][n].get("auto")
+        tag = " 🤖 *auto-pick from their queue*" if auto == "queue" else " 🤖 *auto-pick (clock ran out)*" if auto else ""
         msgs.append(f"**Round {rd}, Pick {pk}** (#{n + 1}) — {mention(team)} select **{p['name']}**" + (f" ({pos})" if pos else "")
-                    + (f" <@{p['discord']}>" if p.get("discord") else ""))
+                    + (f" <@{p['discord']}>" if p.get("discord") else "") + tag)
         if p.get("discord"):
             fo = DT.get(team, {}).get("foId")
             drafted_dms.append((p["discord"], f"🎉 **You've been drafted!** The **{tname(team)}** took you in Round {rd}, Pick {pk} (#{n + 1} overall)."
@@ -113,7 +116,9 @@ def main():
         fo, team, rd, pk, ov = dm_to
         if dm(fo, f"⏰ **You're on the clock!** {tname(team)} — Round {rd}, Pick {pk} (#{ov})."
                   + (f" You have {cur['pickMinutes']} minutes." if cur.get("pickMinutes") else "")
-                  + f"\nMake your pick in the server with **/pick** (it autocompletes available players).\nBoard: {BOARD}"):
+                  + f"\nMake your pick in the server with **/pick** (it autocompletes available players)."
+                  + (f"\nIf the clock runs out, the bot picks for you from your draft queue (set it on the FO portal: {FO_PORTAL})." if cur.get("pickMinutes") else "")
+                  + f"\nBoard: {BOARD}"):
             print(f"DMed FO {fo}")
 
 if __name__ == "__main__":
