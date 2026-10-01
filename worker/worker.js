@@ -134,6 +134,8 @@ async function dm(env, uid, payload) {
   try {
     const ch = await discord(env, "POST", "/users/@me/channels", { recipient_id: uid });
     await discord(env, "POST", `/channels/${ch.id}/messages`, typeof payload === "string" ? { content: payload } : payload);
+    // remember the DM channel so the admin inbox can show replies people send back
+    if (env.VOTES) await kput(env, `dmch:${uid}`, { ch: ch.id, ts: Date.now() }, 120 * 86400).catch(() => {});
     return true;
   } catch { return false; }
 }
@@ -712,6 +714,8 @@ async function myOffers(i, env) {
 async function component(i, env, ctx) {
   const [kind, id, k] = String(i.data.custom_id || "").split(":");
   if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
+  if (kind === "rp") return json({ type: 9, data: { custom_id: `rpm:${id || ""}`, title: "Reply to UFA Staff",
+    components: [row({ type: 4, custom_id: "text", style: 2, label: "Your reply", min_length: 1, max_length: 1500, required: true })] } });
   if (kind === "oa" || kind === "od") return later(i, ctx, async () => {
     return { content: await answerOffer(env, id, uidOf(i), kind === "oa"), components: [] };
   }, true, true);
@@ -729,6 +733,15 @@ async function component(i, env, ctx) {
 }
 async function modalSubmit(i, env, ctx) {
   const [kind, id, ad] = String(i.data.custom_id || "").split(":");
+  if (kind === "rpm") return later(i, ctx, async () => {
+    const text = i.data.components?.[0]?.components?.[0]?.value || "", uid = uidOf(i), L = await league(env);
+    const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === uid), name = m ? display(m) : (i.user?.global_name || i.user?.username || uid);
+    const log = id ? await kget(env, `dmlog:${id}`) : null;
+    await kput(env, `inbox:${String(9e12 - Date.now()).padStart(13, "0")}`, { uid, name, text, ts: Date.now(), about: log?.title || "" }, 120 * 86400);
+    if (L.C.staffChat) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { allowed_mentions: { parse: [] },
+      embeds: [{ author: { name: `Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Inbox" }, timestamp: new Date().toISOString() }] }).catch(() => {});
+    return { content: "✅ Thanks — your reply was sent to UFA Staff.", components: [] };
+  }, false);
   if (kind !== "rm") return reply("Unknown form.", true);
   const reason = i.data.components?.[0]?.components?.[0]?.value || "";
   return later(i, ctx, async () => {
@@ -1059,6 +1072,7 @@ async function web(req, url, env, ctx) {
         if (!text) return out({ error: "Write a message first." }, 400);
         if (text.length > 1800) return out({ error: "Keep it under 1800 characters." }, 400);
         const M = await members(env, L), icon = body.embed ? await brandIcon(env, L) : null, results = [];
+        const replyRow = body.logId ? [row(btn("💬 Reply to staff", 2, `rp:${body.logId}`))] : [];
         for (const uid of uids) {
           const m = M.find((x) => x.user.id === uid);
           if (!m) { results.push({ id: uid, ok: false, why: "not in server" }); continue; }
@@ -1066,15 +1080,38 @@ async function web(req, url, env, ctx) {
           const txt = text.replace(/\{name\}/gi, pi.name).replace(/\{team\}/gi, t ? t.name : "free agency").replace(/\{mention\}/gi, `<@${uid}>`);
           const payload = body.embed
             ? { embeds: [{ author: { name: "UFA League", ...(icon ? { icon_url: icon } : {}) }, ...(body.title ? { title: String(body.title).slice(0, 200) } : {}), description: txt,
-                color: t ? colorInt(t.color) : 0xe8424a, footer: { text: `Sent by ${admin.name.replace(/ \(website\)$/, "")} · UFA Staff` }, timestamp: new Date().toISOString() }] }
-            : { content: `${body.title ? `**${body.title}**\n` : ""}${txt}\n-# Sent by UFA Staff` };
+                color: t ? colorInt(t.color) : 0xe8424a, footer: { text: `Sent by ${admin.name.replace(/ \(website\)$/, "")} · UFA Staff` }, timestamp: new Date().toISOString() }], components: replyRow }
+            : { content: `${body.title ? `**${body.title}**\n` : ""}${txt}\n-# Sent by UFA Staff`, components: replyRow };
           const ok = await dm(env, uid, payload);
           results.push({ id: uid, name: pi.name, ok, why: ok ? "" : "DMs closed" });
         }
         return out({ results });
       }
+      if (p === "/api/admin/inbox") {
+        // replies sent with the Reply button, plus anything people typed straight into their DM with the bot
+        const replies = (await Promise.all((await klist(env, "inbox:")).slice(0, 50).map((k) => kget(env, k.name)))).filter(Boolean).map((r) => ({ ...r, via: "button" }));
+        const chans = (await Promise.all((await klist(env, "dmch:")).map(async (k) => ({ uid: k.name.slice(5), ...(await kget(env, k.name)) })))).filter((c) => c.ch).sort((a, b) => b.ts - a.ts);
+        const page = Math.max(0, Number(url.searchParams.get("page") || 0)), slice = chans.slice(page * 25, page * 25 + 25), M = await members(env, L).catch(() => []);
+        const typed = [];
+        for (const c of slice) {
+          const msgs = await discord(env, "GET", `/channels/${c.ch}/messages?limit=10`).catch(() => []);
+          for (const m of msgs || []) if (!m.author?.bot && m.content) {
+            const mm = M.find((x) => x.user.id === c.uid);
+            typed.push({ uid: c.uid, name: mm ? display(mm) : (m.author.global_name || m.author.username), text: m.content, ts: Date.parse(m.timestamp), via: "dm", avatar: mm ? avatarUrl(L.guild, mm) : null });
+          }
+        }
+        return out({ messages: [...replies, ...typed].sort((a, b) => b.ts - a.ts), checked: slice.length, total: chans.length, more: (page + 1) * 25 < chans.length });
+      }
+      if (p === "/api/admin/inbox/reply") {
+        const text = String(body.text || "").trim(); if (!text || !body.uid) return out({ error: "Write a reply first." }, 400);
+        const ok = await dm(env, body.uid, { embeds: [{ author: { name: "UFA Staff" }, description: text.slice(0, 1800), color: 0xe8424a, footer: { text: `From ${admin.name.replace(/ \(website\)$/, "")}` }, timestamp: new Date().toISOString() }],
+          components: [row(btn("💬 Reply to staff", 2, "rp:"))] });
+        return ok ? out({ ok: true }) : out({ error: "Couldn't DM them (DMs closed?)." }, 400);
+      }
       if (p === "/api/admin/dm/log") {
         if (req.method === "POST") {
+          if (body.start) { const id = String(9e12 - Date.now()).padStart(13, "0"); await kput(env, `dmlog:${id}`, { ts: Date.now(), by: admin.name, title: String(body.title || "").slice(0, 200), text: "", audience: "", sent: 0, failed: [] }, 120 * 86400); return out({ id }); }
+          if (body.id) { const e = await kget(env, `dmlog:${body.id}`) || {}; Object.assign(e, { text: String(body.text || "").slice(0, 1800), audience: String(body.audience || "").slice(0, 100), sent: body.sent | 0, failed: (body.failed || []).slice(0, 200) }); await kput(env, `dmlog:${body.id}`, e, 120 * 86400); return out({ ok: true }); }
           const e = { ts: Date.now(), by: admin.name, title: String(body.title || "").slice(0, 200), text: String(body.text || "").slice(0, 1800), audience: String(body.audience || "").slice(0, 100), sent: body.sent | 0, failed: (body.failed || []).slice(0, 200) };
           await kput(env, `dmlog:${String(9e12 - e.ts).padStart(13, "0")}`, e, 120 * 86400); return out({ ok: true });
         }
