@@ -158,7 +158,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <nav class="tabs" role="tablist" id="tabs">
       <button role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
       <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
-      <button role="tab" data-tab="dm" aria-selected="false">Messages</button>
+      <button role="tab" data-tab="dm" aria-selected="false">Messages <span class="count hide" id="icount"></span></button>
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
@@ -232,6 +232,11 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           <div id="dmres"></div>
         </section>
       </div>
+      <section class="panel">
+        <div class="row between"><h2>Inbox</h2><div class="row"><button class="btn sm" id="inboxload">↻ Check for replies</button><button class="btn sm hide" id="inboxmore">Check older conversations</button></div></div>
+        <div class="note">Replies people send with the <b>Reply to staff</b> button on your DMs (these also pop up in #staff-chat), plus anything they type straight into their DM with the bot. Answer right here — it goes to them as a DM.</div>
+        <div id="inbox" style="display:flex;flex-direction:column;gap:10px"><div class="note">Press "Check for replies".</div></div>
+      </section>
       <section class="panel"><h2>Sent messages</h2><div id="dmlog" style="display:flex;flex-direction:column;gap:8px"></div></section>
     </div>
 
@@ -776,7 +781,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   $("#tpl").onchange = e => { const t = loadTpl()[+e.target.value]; if (e.target.value !== "" && t){ $("#dmtitle").value = t[1]; $("#dmtext").value = t[2]; renderPrev2(); } };
   $("#tplsave").onclick = () => { const n = prompt("Template name?"); if (!n) return; const l = loadTpl(); l.push([n, $("#dmtitle").value, $("#dmtext").value]); saveTpl(l); renderTpl(); toast("Template saved (on this browser)."); };
   $("#tpldel").onclick = () => { const v = $("#tpl").value; if (v === "") return; const l = loadTpl(); l.splice(+v, 1); saveTpl(l); renderTpl(); };
-  function renderDM(){ renderTpl(); renderRcp(); renderPrev2(); loadDmLog(); }
+  function renderDM(){ renderTpl(); renderRcp(); renderPrev2(); loadDmLog(); if (INBOX.length) renderInbox(); else loadInbox(false); }
   function audPool(a){
     const ms = members();
     return a === "fos" ? ms.filter(m => m.rank === "fo") : a === "fronts" ? ms.filter(m => ["fo","gm","hc"].includes(m.rank)) : a === "fa" ? ms.filter(m => !m.team)
@@ -822,8 +827,9 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     const btn = $("#dmsend"); btn.disabled = true; $("#dmbar").classList.remove("hide"); $("#dmres").innerHTML = "";
     const res = [];
     try{
+      const {id: logId} = await bot("/api/admin/dm/log", {start: true, title}).catch(() => ({}));
       for (let i = 0; i < ids.length; i += 12){
-        const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title, embed: $("#dmembed").checked});
+        const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title, embed: $("#dmembed").checked, logId});
         res.push(...j.results); $("#dmbar i").style.width = `${res.length / ids.length * 100}%`; msg($("#dmmsg"), `Sent ${res.length} / ${ids.length}…`);
       }
       const bad = res.filter(r => !r.ok);
@@ -831,11 +837,45 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       $("#dmres").innerHTML = bad.length ? `<div class="panel" style="background:var(--panel2)"><b>Couldn't DM (DMs closed or left):</b><div>${bad.map(r => esc(r.name || byId(r.id)?.name || r.id)).join(", ")}</div>
         <div class="row"><button class="btn sm" id="dmcopy">Copy as @mentions for a channel post</button></div></div>` : "";
       $("#dmcopy")?.addEventListener("click", async () => { await navigator.clipboard.writeText(bad.map(r => `<@${r.id}>`).join(" ")); toast("Copied — paste it in a channel to ping them."); });
-      await bot("/api/admin/dm/log", {title, text, audience: $("#aud button[aria-pressed=true]")?.textContent || "", sent: res.length - bad.length, failed: bad.map(r => r.name || r.id)}).catch(() => {});
+      await bot("/api/admin/dm/log", {id: logId, title, text, audience: $("#aud button[aria-pressed=true]")?.textContent || "", sent: res.length - bad.length, failed: bad.map(r => r.name || r.id)}).catch(() => {});
       loadDmLog();
     }catch(e){ msg($("#dmmsg"), `Stopped after ${res.length}: ${e.message}`, false); }
     btn.disabled = false;
   };
+  let INBOX = [], IPAGE = 0;
+  const seenTs = () => { try{ return +localStorage.getItem("ufa_inbox_seen") || 0; }catch{ return 0; } };
+  async function loadInbox(more){
+    IPAGE = more ? IPAGE + 1 : 0; $("#inboxload").disabled = true;
+    try{
+      const j = await bot("/api/admin/inbox?page=" + IPAGE);
+      INBOX = more ? [...INBOX, ...j.messages] : j.messages;
+      const seen = new Set(); INBOX = INBOX.filter(m => { const k = m.uid + m.ts + m.text; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a,b) => b.ts - a.ts);
+      $("#inboxmore").classList.toggle("hide", !j.more);
+      const unread = INBOX.filter(m => m.ts > seenTs()).length, ic = $("#icount"); ic.textContent = unread || ""; ic.classList.toggle("hide", !unread);
+      if (TAB === "dm") renderInbox();
+    }catch(e){ if (TAB === "dm") $("#inbox").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+    $("#inboxload").disabled = false;
+  }
+  function renderInbox(){
+    const last = seenTs(), by = new Map();
+    for (const m of INBOX){ if (!by.has(m.uid)) by.set(m.uid, []); by.get(m.uid).push(m); }
+    $("#inbox").innerHTML = [...by.entries()].map(([uid, ms]) => { const p = byId(uid), av = p?.avatar || ms.find(m => m.avatar)?.avatar || "";
+      return `<div class="panel" style="background:var(--panel2);gap:8px" data-uid="${uid}">
+        <div class="row between"><div class="row" style="align-items:center">${av ? `<img src="${esc(av)}" alt="" style="width:28px;height:28px;border-radius:50%">` : ""}<b>${esc(p?.name || ms[0].name)}</b>${p?.team ? `<span class="tag">${esc(p.team)}</span>` : ""}${p?.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}${ms.some(m => m.ts > last) ? `<span class="tag staff">New</span>` : ""}</div></div>
+        ${ms.slice(0, 5).map(m => `<div class="tx" style="background:var(--panel)">${m.about ? `<small>Re: ${esc(m.about)}</small><br>` : ""}${esc(m.text).replace(/\n/g,"<br>")}<br><small>${new Date(m.ts).toLocaleString()} · ${m.via === "button" ? "via Reply button" : "typed in DM"}</small></div>`).join("")}
+        <div class="row"><input type="text" class="irep" placeholder="Write a reply…" style="flex:1 1 220px" maxlength="1800"><button class="btn sm red" data-irep="${uid}">Send DM</button></div></div>`; }).join("")
+      || `<div class="note">No replies yet.</div>`;
+    try{ localStorage.setItem("ufa_inbox_seen", String(Date.now())); }catch{} $("#icount").classList.add("hide");
+  }
+  $("#inboxload").onclick = () => loadInbox(false);
+  $("#inboxmore").onclick = () => loadInbox(true);
+  $("#inbox").addEventListener("click", async e => {
+    const b = e.target.closest("[data-irep]"); if (!b) return; const box = b.closest("[data-uid]"), inp = box.querySelector(".irep"), text = inp.value.trim();
+    if (!text) return toast("Write a reply first.", false);
+    b.disabled = true;
+    try{ await bot("/api/admin/inbox/reply", {uid: b.dataset.irep, text}); inp.value = ""; toast("Reply sent."); }catch(err){ toast(err.message, false); }
+    b.disabled = false;
+  });
   async function loadDmLog(){
     try{ const {log} = await bot("/api/admin/dm/log");
       $("#dmlog").innerHTML = log.map(e => `<div class="tx"><b>${esc(e.title || "Message")} → ${esc(e.audience)} (${e.sent} sent${e.failed.length ? `, ${e.failed.length} failed` : ""})</b>${esc(e.text).slice(0, 220)}${e.text.length > 220 ? "…" : ""}<br><small>${new Date(e.ts).toLocaleString()} · ${esc(e.by)}</small></div>`).join("") || `<div class="note">Nothing sent yet.</div>`;
@@ -915,7 +955,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       msg($("#gmsg"), "Loading…"); await loadSchedule();
       $("#gate").classList.add("hide"); $("#app").classList.remove("hide");
       $("#who").textContent = `Signed in · ${OWNER}/${REPO}`;
-      await loadLive(); go("dash");
+      await loadLive(); go("dash"); if (LIVE) loadInbox(false);
     }catch(e){ msg($("#gmsg"), e.message, false); }
   }
   $("#signin").onclick = () => { TOKEN = $("#tok").value.trim(); if (!TOKEN) return; try{ localStorage.setItem("vk_token", TOKEN); }catch{} boot(); };
