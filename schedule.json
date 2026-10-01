@@ -37,10 +37,10 @@
    "name": "Buffalo Bills",
    "abbr": "BUF",
    "color": "#00338D",
-   "active": true,
+   "active": false,
    "role": "1548502233669443686",
-   "players": 9,
-   "fo": "KA1♠️"
+   "players": 6,
+   "fo": ""
   },
   {
    "name": "Carolina Panthers",
