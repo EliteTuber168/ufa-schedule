@@ -132,6 +132,27 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .dmprev{background:#313338;color:#dbdee1;border-radius:10px;padding:12px;font-family:"gg sans","Noto Sans",system-ui,sans-serif;font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
 .dmprev .emb{border-left:4px solid var(--red);background:#2b2d31;border-radius:4px;padding:10px 12px;white-space:pre-wrap}
 .dmprev small{color:#949ba4;font-size:12px}
+.tk{display:grid;grid-template-columns:auto 34px minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;color:var(--fg);text-align:left;width:100%}
+.tk:hover,.tk:focus-visible{border-color:var(--gold)}
+.tk.unread{border-color:var(--gold);background:rgba(255,198,47,.06)}
+.tk .no{font-family:ui-monospace,Consolas,monospace;font-size:13px;color:var(--mute)}
+.tk img{width:34px;height:34px;border-radius:50%;background:#223}
+.tk .pv{font-size:14px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk .when{font-size:12px;color:var(--mute);text-align:right;white-space:nowrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--gold);margin-left:6px}
+dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24px))}
+.chatwrap{display:flex;flex-direction:column;height:100%;padding:0}
+.chathead{display:flex;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.chathead img{width:38px;height:38px;border-radius:50%;background:#223}
+.chatlog{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+.bub{max-width:78%;padding:9px 12px;border-radius:14px;white-space:pre-wrap;word-break:break-word;font-size:15px;line-height:1.4}
+.bub.them{align-self:flex-start;background:var(--panel3);border-bottom-left-radius:4px}
+.bub.staff{align-self:flex-end;background:rgba(232,66,74,.22);border:1px solid rgba(232,66,74,.45);border-bottom-right-radius:4px}
+.bub.bot{align-self:center;max-width:90%;background:transparent;border:1px dashed var(--line);color:var(--mute);font-size:13px}
+.bub small{display:block;font-size:11px;color:var(--mute);margin-top:4px}
+.chatday{align-self:center;font-size:12px;color:var(--mute);letter-spacing:.08em}
+.chatfoot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);align-items:flex-end}
+.chatfoot textarea{flex:1;min-height:44px;max-height:160px;font-family:inherit;font-size:15px;font-weight:600}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-color:var(--red);color:#ffb3b7}
 </style></head><body>
@@ -199,6 +220,15 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     </div>
 
     <div id="tab-dm" class="hide" style="display:flex;flex-direction:column;gap:16px">
+      <section class="panel">
+        <div class="row between"><h2>Tickets</h2><div class="row"><button class="btn sm" id="tkscan">↻ Check for new messages</button><button class="btn sm red" id="tknew">+ New ticket</button></div></div>
+        <div class="note">Every person who talks to the bot gets a ticket. Click one to open the chat — you see what they sent <b>and</b> what you sent. Your messages go to them as a DM from the bot.</div>
+        <div class="filters"><input type="search" id="tkq" placeholder="Search tickets…" aria-label="Search tickets" style="flex:1 1 200px">
+          <select id="tkf" aria-label="Filter tickets"><option value="open">Open</option><option value="closed">Closed</option><option value="all">All</option></select></div>
+        <div id="tklist" style="display:flex;flex-direction:column;gap:8px"><div class="note">Loading…</div></div>
+        <button class="btn sm hide" id="tkmore" style="align-self:flex-start">Check older conversations</button>
+      </section>
+      <h2 style="margin-top:8px">Send a message</h2>
       <div class="note">Send a DM from the bot to a group of people. Pick who gets it, untick anyone you want to skip, write the message, check the preview, send. People with DMs closed are listed at the end so you can ping them instead.</div>
       <div class="dmgrid">
         <section class="panel">
@@ -232,11 +262,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
           <div id="dmres"></div>
         </section>
       </div>
-      <section class="panel">
-        <div class="row between"><h2>Inbox</h2><div class="row"><button class="btn sm" id="inboxload">↻ Check for replies</button><button class="btn sm hide" id="inboxmore">Check older conversations</button></div></div>
-        <div class="note">Replies people send with the <b>Reply to staff</b> button on your DMs (these also pop up in #staff-chat), plus anything they type straight into their DM with the bot. Answer right here — it goes to them as a DM.</div>
-        <div id="inbox" style="display:flex;flex-direction:column;gap:10px"><div class="note">Press "Check for replies".</div></div>
-      </section>
       <section class="panel"><h2>Sent messages</h2><div id="dmlog" style="display:flex;flex-direction:column;gap:8px"></div></section>
     </div>
 
@@ -354,6 +379,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </div>
 <div class="sticky hide" id="bar"><span class="dirty" id="dirty"></span><button class="btn red" id="save">Save &amp; publish</button><span class="msg" id="smsg"></span></div>
 <dialog id="dlg"><div class="wz" id="wz"></div></dialog>
+<dialog id="chat" class="chat"><div class="chatwrap"><div class="chathead" id="chathead"></div><div class="chatlog" id="chatlog"></div>
+  <div class="chatfoot"><textarea id="chatin" placeholder="Message… (Enter to send, Shift+Enter for a new line)" maxlength="1800" aria-label="Message"></textarea><button class="btn red" id="chatsend">Send</button></div></div></dialog>
 <div class="toast hide" id="toast" role="status"></div>
 
 <script>
@@ -781,7 +808,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   $("#tpl").onchange = e => { const t = loadTpl()[+e.target.value]; if (e.target.value !== "" && t){ $("#dmtitle").value = t[1]; $("#dmtext").value = t[2]; renderPrev2(); } };
   $("#tplsave").onclick = () => { const n = prompt("Template name?"); if (!n) return; const l = loadTpl(); l.push([n, $("#dmtitle").value, $("#dmtext").value]); saveTpl(l); renderTpl(); toast("Template saved (on this browser)."); };
   $("#tpldel").onclick = () => { const v = $("#tpl").value; if (v === "") return; const l = loadTpl(); l.splice(+v, 1); saveTpl(l); renderTpl(); };
-  function renderDM(){ renderTpl(); renderRcp(); renderPrev2(); loadDmLog(); if (INBOX.length) renderInbox(); else loadInbox(false); }
+  function renderDM(){ renderTpl(); renderRcp(); renderPrev2(); loadDmLog(); if (TICKETS.length) renderTickets(); loadTickets(); }
   function audPool(a){
     const ms = members();
     return a === "fos" ? ms.filter(m => m.rank === "fo") : a === "fronts" ? ms.filter(m => ["fo","gm","hc"].includes(m.rank)) : a === "fa" ? ms.filter(m => !m.team)
@@ -842,40 +869,75 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     }catch(e){ msg($("#dmmsg"), `Stopped after ${res.length}: ${e.message}`, false); }
     btn.disabled = false;
   };
-  let INBOX = [], IPAGE = 0;
-  const seenTs = () => { try{ return +localStorage.getItem("ufa_inbox_seen") || 0; }catch{ return 0; } };
-  async function loadInbox(more){
-    IPAGE = more ? IPAGE + 1 : 0; $("#inboxload").disabled = true;
+  // ---------- tickets ----------
+  let TICKETS = [], SCANP = 0, OPENT = null;
+  const seenMap = () => { try{ return JSON.parse(localStorage.getItem("ufa_tk_seen") || "{}"); }catch{ return {}; } };
+  const markSeen = (uid, ts) => { const m = seenMap(); m[uid] = ts; try{ localStorage.setItem("ufa_tk_seen", JSON.stringify(m)); }catch{} };
+  const isUnread = t => t.lastFrom === "them" && t.updated > (seenMap()[t.uid] || 0);
+  const ago = ts => { const s = (Date.now() - ts) / 1000; return s < 60 ? "now" : s < 3600 ? `${Math.floor(s/60)}m` : s < 86400 ? `${Math.floor(s/3600)}h` : new Date(ts).toLocaleDateString([], {month:"short", day:"numeric"}); };
+  async function loadTickets(scan){
     try{
-      const j = await bot("/api/admin/inbox?page=" + IPAGE);
-      INBOX = more ? [...INBOX, ...j.messages] : j.messages;
-      const seen = new Set(); INBOX = INBOX.filter(m => { const k = m.uid + m.ts + m.text; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a,b) => b.ts - a.ts);
-      $("#inboxmore").classList.toggle("hide", !j.more);
-      const unread = INBOX.filter(m => m.ts > seenTs()).length, ic = $("#icount"); ic.textContent = unread || ""; ic.classList.toggle("hide", !unread);
-      if (TAB === "dm") renderInbox();
-    }catch(e){ if (TAB === "dm") $("#inbox").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
-    $("#inboxload").disabled = false;
+      const j = await bot("/api/admin/tickets" + (scan != null ? `?scan=${scan}` : ""));
+      TICKETS = j.tickets; if (j.scan) $("#tkmore").classList.toggle("hide", !j.scan.more);
+      const n = TICKETS.filter(isUnread).length, ic = $("#icount"); ic.textContent = n || ""; ic.classList.toggle("hide", !n);
+      if (TAB === "dm") renderTickets();
+      return j;
+    }catch(e){ if (TAB === "dm") $("#tklist").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
   }
-  function renderInbox(){
-    const last = seenTs(), by = new Map();
-    for (const m of INBOX){ if (!by.has(m.uid)) by.set(m.uid, []); by.get(m.uid).push(m); }
-    $("#inbox").innerHTML = [...by.entries()].map(([uid, ms]) => { const p = byId(uid), av = p?.avatar || ms.find(m => m.avatar)?.avatar || "";
-      return `<div class="panel" style="background:var(--panel2);gap:8px" data-uid="${uid}">
-        <div class="row between"><div class="row" style="align-items:center">${av ? `<img src="${esc(av)}" alt="" style="width:28px;height:28px;border-radius:50%">` : ""}<b>${esc(p?.name || ms[0].name)}</b>${p?.team ? `<span class="tag">${esc(p.team)}</span>` : ""}${p?.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}${ms.some(m => m.ts > last) ? `<span class="tag staff">New</span>` : ""}</div></div>
-        ${ms.slice(0, 5).map(m => `<div class="tx" style="background:var(--panel)">${m.about ? `<small>Re: ${esc(m.about)}</small><br>` : ""}${esc(m.text).replace(/\n/g,"<br>")}<br><small>${new Date(m.ts).toLocaleString()} · ${m.via === "button" ? "via Reply button" : "typed in DM"}</small></div>`).join("")}
-        <div class="row"><input type="text" class="irep" placeholder="Write a reply…" style="flex:1 1 220px" maxlength="1800"><button class="btn sm red" data-irep="${uid}">Send DM</button></div></div>`; }).join("")
-      || `<div class="note">No replies yet.</div>`;
-    try{ localStorage.setItem("ufa_inbox_seen", String(Date.now())); }catch{} $("#icount").classList.add("hide");
+  function renderTickets(){
+    const q = $("#tkq").value.trim().toLowerCase(), f = $("#tkf").value;
+    const list = TICKETS.filter(t => (f === "all" || t.status === f) && (!q || (t.name + " " + t.ticket + " " + (t.preview || "") + " " + (t.team || "")).toLowerCase().includes(q)));
+    $("#tklist").innerHTML = list.map(t => `<button class="tk ${isUnread(t) ? "unread" : ""}" data-tk="${t.uid}">
+        <span class="no">${esc(t.ticket)}</span>${t.avatar ? `<img src="${esc(t.avatar)}" alt="" loading="lazy">` : `<span></span>`}
+        <span style="min-width:0"><b>${esc(t.name)}</b>${t.team ? ` <span class="tag">${esc(t.team)}</span>` : ""}${t.rank && t.rank !== "player" ? ` <span class="tag ${t.rank}">${RANK[t.rank]}</span>` : ""}${t.status === "closed" ? ` <span class="tag">Closed</span>` : ""}${isUnread(t) ? `<span class="dot" title="New"></span>` : ""}
+          <div class="pv">${t.lastFrom === "staff" ? "You: " : ""}${esc(t.preview || "")}</div></span>
+        <span class="when">${ago(t.updated)}</span></button>`).join("") || `<div class="note">${f === "open" ? "No open tickets." : "No tickets."}</div>`;
   }
-  $("#inboxload").onclick = () => loadInbox(false);
-  $("#inboxmore").onclick = () => loadInbox(true);
-  $("#inbox").addEventListener("click", async e => {
-    const b = e.target.closest("[data-irep]"); if (!b) return; const box = b.closest("[data-uid]"), inp = box.querySelector(".irep"), text = inp.value.trim();
-    if (!text) return toast("Write a reply first.", false);
-    b.disabled = true;
-    try{ await bot("/api/admin/inbox/reply", {uid: b.dataset.irep, text}); inp.value = ""; toast("Reply sent."); }catch(err){ toast(err.message, false); }
-    b.disabled = false;
+  $("#tkq").oninput = renderTickets; $("#tkf").onchange = renderTickets;
+  $("#tklist").onclick = e => { const b = e.target.closest("[data-tk]"); if (b) openTicket(b.dataset.tk); };
+  $("#tkscan").onclick = async () => { $("#tkscan").disabled = true; SCANP = 0; const j = await loadTickets(0); toast(j?.scan ? (j.scan.found ? `${j.scan.found} conversation(s) with new messages.` : "No new messages.") : "Checked."); $("#tkscan").disabled = false; };
+  $("#tkmore").onclick = async () => { SCANP++; await loadTickets(SCANP); };
+  $("#tknew").onclick = () => {
+    if (!LIVE) return toast("The bot isn't reachable right now.", false);
+    wz.innerHTML = `<div class="row between"><h2>New ticket</h2><button class="btn sm" data-close aria-label="Close">✕</button></div><div class="note">Who do you want to message?</div>
+      <input type="search" id="pq" placeholder="Search by Discord name…" autocomplete="off" aria-label="Search people"><div class="pick" id="plist">${members().slice().sort((a,b) => a.name.localeCompare(b.name)).map(m => `<button class="opt" data-new="${m.id}" data-name="${esc(m.name.toLowerCase())}"><img src="${esc(m.avatar)}" alt="" loading="lazy"><span class="pn">${esc(m.name)}</span>${m.team ? `<span class="tag">${esc(m.team)}</span>` : ""}</button>`).join("")}</div>`;
+    const pq = $("#pq"); pq.oninput = () => { const q = pq.value.trim().toLowerCase(); $$("#plist .opt").forEach(o => o.classList.toggle("hide", !!q && !o.dataset.name.includes(q))); };
+    wz.onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.hasAttribute("data-close")) return dlg.close(); if (b.dataset.new){ dlg.close(); openTicket(b.dataset.new, true); } };
+    dlg.showModal(); pq.focus();
+  };
+  async function openTicket(uid, fresh){
+    OPENT = uid; const cd = $("#chat"); if (!cd.open) cd.showModal();
+    const p = byId(uid);
+    $("#chathead").innerHTML = `<b>${esc(p?.name || "…")}</b>`; $("#chatlog").innerHTML = `<div class="note">Loading…</div>`; $("#chatin").value = ""; $("#chatin").focus();
+    let j = null;
+    try{ j = await bot("/api/admin/ticket?uid=" + uid); }catch(e){ if (!fresh) return ($("#chatlog").innerHTML = `<div class="msg err">${esc(e.message)}</div>`); }
+    const t = j?.ticket || {ticket: "new ticket", name: p?.name, avatar: p?.avatar, team: p?.team, rank: p?.rank, status: "open"};
+    $("#chathead").innerHTML = `${t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : ""}<div style="flex:1;min-width:0"><b>${esc(t.name)}</b> ${t.team ? `<span class="tag">${esc(t.team)}</span>` : ""}${t.rank && t.rank !== "player" ? ` <span class="tag ${t.rank}">${RANK[t.rank]}</span>` : ""}<div class="note" style="font-family:ui-monospace,Consolas,monospace">${esc(t.ticket)} · ${t.status === "closed" ? "closed" : "open"}</div></div>
+      ${j ? `<button class="btn sm" data-tstatus="${t.status === "closed" ? "open" : "closed"}">${t.status === "closed" ? "Reopen" : "Close ticket"}</button>` : ""}<button class="btn sm" data-chatclose aria-label="Close chat">✕</button>`;
+    const tl = j?.timeline || [];
+    let day = "";
+    $("#chatlog").innerHTML = tl.map(m => { const d = new Date(m.ts).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}); const sep = d !== day ? `<div class="chatday">${(day = d)}</div>` : "";
+      const time = new Date(m.ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+      return sep + `<div class="bub ${m.from}">${m.from === "bot" ? "🤖 " : ""}${esc(m.text)}<small>${m.from === "staff" ? `You${m.by ? ` (${esc(m.by)})` : ""} · ` : m.from === "them" && m.via === "button" ? `Reply button${m.about ? ` · re: ${esc(m.about)}` : ""} · ` : ""}${time}</small></div>`; }).join("")
+      || `<div class="note" style="align-self:center">No messages yet — say hi below.</div>`;
+    const log = $("#chatlog"); log.scrollTop = log.scrollHeight;
+    if (j) { markSeen(uid, Date.now()); renderTickets(); const n = TICKETS.filter(isUnread).length; $("#icount").textContent = n || ""; $("#icount").classList.toggle("hide", !n); }
+  }
+  $("#chathead").addEventListener("click", async e => {
+    if (e.target.closest("[data-chatclose]")) return $("#chat").close();
+    const b = e.target.closest("[data-tstatus]"); if (!b) return;
+    const closing = b.dataset.tstatus === "closed";
+    try{ await bot("/api/admin/ticket/status", {uid: OPENT, status: b.dataset.tstatus, notify: closing && confirm("Let them know the ticket is closed (sends a DM)?")}); toast(closing ? "Ticket closed." : "Ticket reopened."); await loadTickets(); openTicket(OPENT); }catch(err){ toast(err.message, false); }
   });
+  async function sendChat(){
+    const text = $("#chatin").value.trim(); if (!text || !OPENT) return;
+    $("#chatsend").disabled = true;
+    try{ await bot("/api/admin/ticket/reply", {uid: OPENT, text}); $("#chatin").value = ""; await loadTickets(); await openTicket(OPENT); }
+    catch(e){ toast(e.message, false); }
+    $("#chatsend").disabled = false;
+  }
+  $("#chatsend").onclick = sendChat;
+  $("#chatin").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); sendChat(); } };
   async function loadDmLog(){
     try{ const {log} = await bot("/api/admin/dm/log");
       $("#dmlog").innerHTML = log.map(e => `<div class="tx"><b>${esc(e.title || "Message")} → ${esc(e.audience)} (${e.sent} sent${e.failed.length ? `, ${e.failed.length} failed` : ""})</b>${esc(e.text).slice(0, 220)}${e.text.length > 220 ? "…" : ""}<br><small>${new Date(e.ts).toLocaleString()} · ${esc(e.by)}</small></div>`).join("") || `<div class="note">Nothing sent yet.</div>`;
@@ -955,7 +1017,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       msg($("#gmsg"), "Loading…"); await loadSchedule();
       $("#gate").classList.add("hide"); $("#app").classList.remove("hide");
       $("#who").textContent = `Signed in · ${OWNER}/${REPO}`;
-      await loadLive(); go("dash"); if (LIVE) loadInbox(false);
+      await loadLive(); go("dash"); if (LIVE) loadTickets(0);
     }catch(e){ msg($("#gmsg"), e.message, false); }
   }
   $("#signin").onclick = () => { TOKEN = $("#tok").value.trim(); if (!TOKEN) return; try{ localStorage.setItem("vk_token", TOKEN); }catch{} boot(); };
