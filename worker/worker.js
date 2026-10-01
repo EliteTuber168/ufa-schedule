@@ -27,6 +27,8 @@ const POS = { QB: "QB", RB: "RB", HB: "RB", WR: "WR", TE: "TE", OL: "OL", DE: "D
 const RANK = { fo: "Franchise Owner", gm: "General Manager", hc: "Head Coach", player: "Player" };
 
 export default {
+  // runs every minute (wrangler.toml [triggers]) — auto-picks when the clock runs out
+  async scheduled(event, env, ctx) { ctx.waitUntil(autoPick(env).catch((e) => console.log("autopick:", e.message))); },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return web(req, url, env, ctx);
@@ -890,6 +892,25 @@ async function available(i, env) {
   return reply(`**Best available${pos ? " — " + pos : ""}:**\n` + list.map((p, k) => `${p.rank ? "#" + p.rank : k + 1 + "."} **${p.name}**${posTxt(p) ? " (" + posTxt(p) + ")" : ""}${p.tier ? " · T" + p.tier : ""}`).join("\n"), true);
 }
 
+// ---------- draft queue + auto-pick ----------
+const getQueue = async (env, abbr) => (await kget(env, `queue:${abbr}`)) || [];
+async function autoPick(env) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { D, sha } = await loadDraft(env), H = helpers(D), n = D.picks.length;
+    if (D.status !== "live" || !D.pickMinutes || !D.clockStart || n >= H.total) return;
+    if (Date.now() < D.clockStart + D.pickMinutes * 60000) return;
+    const s = H.slot(n), q = await getQueue(env, s.team);
+    const p = q.map((id) => H.avail.find((x) => x.id === id)).find(Boolean) || H.avail[0];
+    if (!p) { D.status = "done"; } else {
+      D.picks.push({ player: p.id, at: Date.now(), by: "auto", auto: q.includes(p.id) ? "queue" : "board" });
+      if (D.picks.length >= H.total) D.status = "done";
+    }
+    D.clockStart = Date.now();
+    try { await putJSON(env, "draft.json", D, sha, p ? `Pick #${s.overall}: ${s.team} auto-pick ${p.name}` : "Draft complete (pool empty)"); return; }
+    catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+  }
+}
+
 async function doPick(i, env) {
   try {
     const user = uidOf(i), raw = String(opt(i.data.options, "player") || "").trim();
@@ -901,7 +922,9 @@ async function doPick(i, env) {
       if (D.status === "paused") return "⏸️ The draft is paused right now.";
       if (D.status === "done" || n >= H.total) return "🏁 The draft is already complete.";
       const s = H.slot(n), fo = H.team(s.team).foId;
-      if (user !== fo && !commish) return `❌ You're not on the clock. It's **${N[s.team] || s.team}**'s pick${fo ? ` (<@${fo}>)` : ""}.`;
+      const roles = i.member?.roles || [], tr = L && teamOf(L, s.team)?.roleId;
+      const frontOffice = !!tr && roles.includes(tr) && ((L.R.fo && roles.includes(L.R.fo)) || (L.R.gm && roles.includes(L.R.gm)));   // the team's FO or GM
+      if (user !== fo && !frontOffice && !commish) return `❌ You're not on the clock. It's **${N[s.team] || s.team}**'s pick${fo ? ` (<@${fo}>)` : ""}.`;
       let p = /^\d+$/.test(raw) ? D.pool.find((x) => x.id === +raw) : null;
       if (!p) { const q = raw.toLowerCase(); const m = H.avail.filter((x) => x.name.toLowerCase() === q); p = m.length === 1 ? m[0] : null;
         if (!p) { const c = H.avail.filter((x) => x.name.toLowerCase().includes(q)); if (c.length === 1) p = c[0];
@@ -1255,6 +1278,24 @@ async function web(req, url, env, ctx) {
       return out({ team: teamOf(L, abbr), roster: rosterOf(L, M, abbr), offers: offers.filter(Boolean), requests: reqs.filter(Boolean).map((r) => ({ ...r, text: plain(L, r) })) });
     }
     if (p === "/api/players") return out({ players: M.map((m) => info(L, m)) });
+    if (p === "/api/queue") {
+      const abbr = actor.team;
+      if (!abbr || !["fo", "gm"].includes(actor.rank)) return out({ error: "Only the FO or GM can set the draft queue." }, 403);
+      if (req.method === "POST") {
+        const { D } = await loadDraft(env), ids = new Set(D.pool.map((x) => x.id));
+        const q = [...new Set((body.ids || []).map(Number))].filter((x) => ids.has(x)).slice(0, 60);
+        await kput(env, `queue:${abbr}`, q, 120 * 86400);
+        return out({ ok: true, queue: q });
+      }
+      const { D } = await loadDraft(env), H = helpers(D), N = names(await loadSched(env));
+      const mine = D.picks.map((pk, k) => ({ pk, s: H.slot(k) })).filter((x) => x.s.team === abbr).map((x) => ({ ...D.pool.find((y) => y.id === x.pk.player), round: x.s.round, pick: x.s.pick, auto: x.pk.auto || null }));
+      let next = null;
+      if (D.status === "live" || D.status === "paused") for (let k = D.picks.length; k < H.total; k++) if (H.slot(k).team === abbr) { next = { overall: k + 1, ...H.slot(k), away: k - D.picks.length }; break; }
+      const cur = D.picks.length < H.total ? H.slot(D.picks.length) : null;
+      return out({ queue: await getQueue(env, abbr), available: H.avail.map(({ id, name, pos, rank, tier, avatar }) => ({ id, name, pos, rank, tier, avatar })),
+        status: D.status, pickMinutes: D.pickMinutes || 0, clockStart: D.clockStart || null, onClock: cur ? { team: cur.team, name: N[cur.team], round: cur.round, pick: cur.pick } : null,
+        next, mine, rounds: D.rounds, teams: H.T });
+    }
     if (p === "/api/franchises") return out({ teams: L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { ...t, count: r.length, fo: r.find((x) => x.rank === "fo") || null }; }), cap: cap(L) });
     if (p === "/api/transactions") {
       const ks = (await klist(env, "tx:")).slice(0, 40);

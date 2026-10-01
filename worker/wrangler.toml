@@ -12,3 +12,7 @@ id = "c9b7d8c749364764805b70b652d95956"
 
 [observability]
 enabled = true
+
+# every minute: auto-pick when a team's draft clock runs out
+[triggers]
+crons = ["* * * * *"]
