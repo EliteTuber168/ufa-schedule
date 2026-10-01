@@ -900,9 +900,11 @@ async function autoPick(env) {
     if (D.status !== "live" || !D.pickMinutes || !D.clockStart || n >= H.total) return;
     if (Date.now() < D.clockStart + D.pickMinutes * 60000) return;
     const s = H.slot(n), q = await getQueue(env, s.team);
-    const p = q.map((id) => H.avail.find((x) => x.id === id)).find(Boolean) || H.avail[0];
+    const fromQ = q.map((id) => H.avail.find((x) => x.id === id)).find(Boolean);
+    const random = (D.autoMode || "random") === "random";
+    const p = fromQ || (random ? H.avail[Math.floor(Math.random() * H.avail.length)] : H.avail[0]);
     if (!p) { D.status = "done"; } else {
-      D.picks.push({ player: p.id, at: Date.now(), by: "auto", auto: q.includes(p.id) ? "queue" : "board" });
+      D.picks.push({ player: p.id, at: Date.now(), by: "auto", auto: fromQ ? "queue" : random ? "random" : "board" });
       if (D.picks.length >= H.total) D.status = "done";
     }
     D.clockStart = Date.now();
