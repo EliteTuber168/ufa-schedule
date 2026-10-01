@@ -284,7 +284,13 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     <div id="tab-queues" class="hide" style="display:flex;flex-direction:column;gap:14px">
       <div class="stats" id="qstats"></div>
       <div class="row between"><div class="note" id="qnote"></div><div class="row"><button class="btn sm" id="qload">↻ Refresh</button><button class="btn sm red" id="qremindall">Remind everyone without a queue</button></div></div>
-      <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Team</th><th>FO</th><th>Queue</th><th>Last updated</th><th></th></tr></thead><tbody id="qbody"></tbody></table></div>
+      <div class="filters">
+        <div class="sub" role="tablist"><button data-qv="teams" aria-selected="true">By team</button><button data-qv="players" aria-selected="false">By player</button></div>
+        <input type="search" id="qq" placeholder="Search teams or players…" aria-label="Search queues" style="flex:1 1 220px">
+        <label class="c hide" id="qavail"><input type="checkbox" id="qonlyav" checked> Hide drafted players</label>
+      </div>
+      <div class="tscroll" id="qteams"><table style="min-width:640px"><thead><tr><th>Team</th><th>FO</th><th>Queue</th><th>Last updated</th><th></th></tr></thead><tbody id="qbody"></tbody></table></div>
+      <div class="tscroll hide" id="qplayers"><table style="min-width:560px"><thead><tr><th>Player</th><th>On queues</th><th>Teams (spot in their queue)</th></tr></thead><tbody id="qpbody"></tbody></table></div>
       <span class="msg" id="qmsg"></span>
     </div>
 
@@ -334,7 +340,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     </div>
 
     <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:16px">
-      <div class="sub" role="tablist"><button data-sub="general" aria-selected="true">League settings</button><button class="dz" data-sub="danger" aria-selected="false">⚠️ Danger Zone</button></div>
+      <div class="sub" id="setsub" role="tablist"><button data-sub="general" aria-selected="true">League settings</button><button class="dz" data-sub="danger" aria-selected="false">⚠️ Danger Zone</button></div>
       <div id="set-danger" class="hide" style="display:flex;flex-direction:column;gap:16px">
         <div class="dzbanner"><b>Danger Zone</b><span class="note">These change a lot of people at once. Every roster wipe saves a backup first, so you can press <b>Undo last wipe</b> if you make a mistake. Each action asks you to type a phrase to confirm.</span></div>
         <div id="dzjob"></div>
@@ -958,23 +964,48 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   }
 
   // ---------- draft queues ----------
-  let QROWS = [];
+  let QROWS = [], QPL = [], QV = "teams"; const QOPEN = new Set();
+  $$("[data-qv]").forEach(b => b.onclick = () => { QV = b.dataset.qv; $$("[data-qv]").forEach(x => x.setAttribute("aria-selected", x === b)); $("#qteams").classList.toggle("hide", QV !== "teams"); $("#qplayers").classList.toggle("hide", QV !== "players"); $("#qavail").classList.toggle("hide", QV !== "players"); renderQ(); });
+  $("#qq").oninput = () => renderQ(); $("#qonlyav").onchange = () => renderQ();
+  const qp = id => QPL.find(p => p.id === id) || {name: "?", pos: []};
+  function renderQ(){
+    const q = $("#qq").value.trim().toLowerCase(), ago2 = ts => ts ? new Date(ts).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "—";
+    const pmatch = p => p.name.toLowerCase().includes(q) || (p.pos || []).join("/").toLowerCase().includes(q);
+    if (QV === "teams"){
+      const rows = QROWS.filter(r => !q || r.name.toLowerCase().includes(q) || r.abbr.toLowerCase() === q || (r.fo?.name || "").toLowerCase().includes(q) || r.list.some(id => pmatch(qp(id))))
+        .sort((a,b) => (a.available > 0) - (b.available > 0) || a.name.localeCompare(b.name));
+      $("#qbody").innerHTML = rows.map(r => { const open = QOPEN.has(r.abbr) || (q && r.list.some(id => pmatch(qp(id)))); return `<tr>
+        <td><span class="badge" style="background:${esc(r.color)};min-width:38px;height:28px;font-size:16px">${esc(r.abbr)}</span> <b>${esc(r.name)}</b>${r.inDraft ? "" : ` <span class="tag">not in draft order</span>`}</td>
+        <td>${r.fo ? esc(r.fo.name) : `<span class="note">No FO</span>`}</td>
+        <td>${r.available > 0 ? `<b style="color:${r.available < 3 ? "var(--warn)" : "var(--good)"}">${r.available} player${r.available === 1 ? "" : "s"}</b>${r.queued > r.available ? ` <span class="note">(${r.queued - r.available} already drafted)</span>` : ""}` : `<b style="color:var(--red)">No queue</b>`}
+          ${r.list.length ? ` <button class="btn sm" data-qopen="${r.abbr}">${open ? "Hide" : "View"}</button>` : ""}</td>
+        <td class="note">${ago2(r.updated)}</td>
+        <td>${r.fo && r.available < 3 ? `<button class="btn sm" data-qrem="${r.fo.id}">Remind</button>` : ""}</td></tr>`
+        + (open ? `<tr><td colspan="5" style="background:var(--panel2)"><ol style="margin:0;padding-left:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;color:var(--fg)">${r.list.map(id => { const p = qp(id), hit = q && pmatch(p); return `<li style="${p.taken ? "text-decoration:line-through;color:var(--mute)" : ""}${hit ? ";color:var(--gold);font-weight:700" : ""}">${esc(p.name)}${p.pos?.length ? ` <span class="note">${esc(p.pos.join("/"))}</span>` : ""}${p.taken ? " <span class='note'>(drafted)</span>" : ""}</li>`; }).join("")}</ol></td></tr>` : ""); }).join("")
+        || `<tr><td colspan="5" class="note">Nothing matches.</td></tr>`;
+    } else {
+      const onlyAv = $("#qonlyav").checked;
+      const idx = {}; QROWS.forEach(r => r.list.forEach((id, k) => (idx[id] ||= []).push({abbr: r.abbr, color: r.color, spot: k + 1})));
+      const list = QPL.filter(p => (!onlyAv || !p.taken) && (!q || pmatch(p) || (idx[p.id] || []).some(x => x.abbr.toLowerCase() === q)))
+        .sort((a,b) => (idx[b.id]?.length || 0) - (idx[a.id]?.length || 0) || a.name.localeCompare(b.name));
+      $("#qpbody").innerHTML = list.slice(0, 300).map(p => { const on = idx[p.id] || []; return `<tr>
+        <td>${p.avatar ? `<img src="${esc(p.avatar)}" alt="" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:6px">` : ""}<b>${esc(p.name)}</b>${p.pos?.length ? ` <span class="note">${esc(p.pos.join("/"))}</span>` : ""}${p.taken ? ` <span class="tag">Drafted</span>` : ""}</td>
+        <td><b style="color:${on.length ? "var(--gold)" : "var(--mute)"}">${on.length}</b></td>
+        <td>${on.sort((a,b) => a.spot - b.spot).map(x => `<span class="badge" style="background:${esc(x.color)};min-width:0;height:24px;font-size:14px;margin:2px 4px 2px 0">${esc(x.abbr)} #${x.spot}</span>`).join("") || `<span class="note">Not on any queue</span>`}</td></tr>`; }).join("")
+        || `<tr><td colspan="3" class="note">No players match.</td></tr>`;
+    }
+  }
+  $("#qbody").addEventListener("click", e => { const b = e.target.closest("[data-qopen]"); if (!b) return; QOPEN.has(b.dataset.qopen) ? QOPEN.delete(b.dataset.qopen) : QOPEN.add(b.dataset.qopen); renderQ(); });
   const QTEXT = "Hey {name}, you don't have a draft queue set up for the {team} yet. If you're not online when you're on the clock, the bot will pick a random player for you. Set your queue here (log in with Discord, then open the Draft queue tab): https://elitetuber168.github.io/ufa-schedule/fo.html";
   async function loadQueues(){
     $("#qbody").innerHTML = `<tr><td colspan="5" class="note">Loading…</td></tr>`;
     try{
-      const j = await bot("/api/admin/queues"); QROWS = j.rows;
+      const j = await bot("/api/admin/queues"); QROWS = j.rows; QPL = j.players || [];
       const withFo = QROWS.filter(r => r.fo), set = withFo.filter(r => r.available > 0), low = withFo.filter(r => r.available > 0 && r.available < 3);
       const tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
       $("#qstats").innerHTML = tile(`${set.length}<span style="font-size:24px;color:var(--mute)">/${withFo.length}</span>`, "FOs with a queue", "var(--good)") + tile(withFo.length - set.length, "No queue yet", withFo.length - set.length ? "var(--red)" : "") + tile(low.length, "Queue almost empty", low.length ? "var(--warn)" : "") + tile(j.pool, "Players available");
       $("#qnote").innerHTML = j.pickMinutes ? `Clock: <b>${j.pickMinutes} min</b> per pick · no queue = <b>${j.autoMode === "board" ? "best on big board" : "random player"}</b>` : `<span style="color:var(--warn)">No pick timer set in the draft room — auto-pick won't happen until you set minutes per pick.</span>`;
-      const ago2 = ts => ts ? new Date(ts).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "—";
-      $("#qbody").innerHTML = QROWS.sort((a,b) => (a.available > 0) - (b.available > 0) || a.name.localeCompare(b.name)).map(r => `<tr>
-        <td><span class="badge" style="background:${esc(r.color)};min-width:38px;height:28px;font-size:16px">${esc(r.abbr)}</span> <b>${esc(r.name)}</b>${r.inDraft ? "" : ` <span class="tag">not in draft order</span>`}</td>
-        <td>${r.fo ? esc(r.fo.name) : `<span class="note">No FO</span>`}</td>
-        <td>${r.available > 0 ? `<b style="color:${r.available < 3 ? "var(--warn)" : "var(--good)"}">${r.available} player${r.available === 1 ? "" : "s"}</b>${r.queued > r.available ? ` <span class="note">(${r.queued - r.available} already drafted)</span>` : ""}` : `<b style="color:var(--red)">No queue</b>`}</td>
-        <td class="note">${ago2(r.updated)}</td>
-        <td>${r.fo && r.available < 3 ? `<button class="btn sm" data-qrem="${r.fo.id}">Remind</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="note">No teams yet.</td></tr>`;
+      renderQ();
     }catch(e){ $("#qbody").innerHTML = `<tr><td colspan="5" class="msg err">${esc(e.message)}</td></tr>`; }
   }
   async function remind(ids){
@@ -991,8 +1022,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
-  $(".sub").onclick = e => { const b = e.target.closest("button[data-sub]"); if (!b) return; SUB = b.dataset.sub;
-    $$(".sub button").forEach(x => x.setAttribute("aria-selected", x === b)); $("#set-general").classList.toggle("hide", SUB !== "general"); $("#set-danger").classList.toggle("hide", SUB !== "danger");
+  $("#setsub").onclick = e => { const b = e.target.closest("button[data-sub]"); if (!b) return; SUB = b.dataset.sub;
+    $$("#setsub button").forEach(x => x.setAttribute("aria-selected", x === b)); $("#set-general").classList.toggle("hide", SUB !== "general"); $("#set-danger").classList.toggle("hide", SUB !== "danger");
     if (SUB === "danger") loadDanger(); };
   const ROSTER_DZ = [
     ["wipe_all", "🧹 Wipe all teams", "Takes every team role off everyone — players, GMs, head coaches <b>and franchise owners</b>. Also removes all FO / GM / HC roles. Every team ends up empty."],
