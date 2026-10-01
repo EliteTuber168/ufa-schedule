@@ -119,6 +119,19 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .dz .btn{align-self:flex-start}
 .bar{height:10px;background:var(--panel3);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--red);transition:width .3s}
 .phrase{font-family:ui-monospace,Consolas,monospace;color:var(--red);font-weight:700}
+.dmgrid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.dmgrid{grid-template-columns:1fr}}
+.aud{display:flex;flex-wrap:wrap;gap:6px}
+.aud button{font:inherit;font-weight:700;font-size:14px;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
+.aud button[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
+.rcp{display:flex;flex-direction:column;gap:3px;max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:6px;background:var(--bg)}
+.rcp label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:8px;cursor:pointer;min-width:0}
+.rcp label:hover{background:var(--panel2)}
+.rcp img{width:24px;height:24px;border-radius:50%;flex:none;background:#223}
+.rcp .pn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.dmprev{background:#313338;color:#dbdee1;border-radius:10px;padding:12px;font-family:"gg sans","Noto Sans",system-ui,sans-serif;font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.dmprev .emb{border-left:4px solid var(--red);background:#2b2d31;border-radius:4px;padding:10px 12px;white-space:pre-wrap}
+.dmprev small{color:#949ba4;font-size:12px}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-color:var(--red);color:#ffb3b7}
 </style></head><body>
@@ -145,6 +158,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <nav class="tabs" role="tablist" id="tabs">
       <button role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
       <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
+      <button role="tab" data-tab="dm" aria-selected="false">Messages</button>
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
@@ -182,6 +196,43 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <button class="act" data-wz="pw"><span class="ic">🔑</span><b>FO portal password</b><span>Make a password a team can use to log in to the FO portal.</span></button>
       </div>
       <section class="panel"><h2>Current staff</h2><div class="roster" id="stafflist" style="max-height:none"></div></section>
+    </div>
+
+    <div id="tab-dm" class="hide" style="display:flex;flex-direction:column;gap:16px">
+      <div class="note">Send a DM from the bot to a group of people. Pick who gets it, untick anyone you want to skip, write the message, check the preview, send. People with DMs closed are listed at the end so you can ping them instead.</div>
+      <div class="dmgrid">
+        <section class="panel">
+          <h2>1 · Who gets it</h2>
+          <div class="aud" id="aud">
+            <button data-aud="fos">All FOs</button>
+            <button data-aud="fronts">FOs + GMs + HCs</button>
+            <button data-aud="team">A team…</button>
+            <button data-aud="teamfos">FOs of teams…</button>
+            <button data-aud="fa">Free agents</button>
+            <button data-aud="staff">Staff</button>
+            <button data-aud="all">Everyone</button>
+            <button data-aud="custom">Pick people</button>
+          </div>
+          <div id="audextra"></div>
+          <div class="row between"><input type="search" id="rq" placeholder="Search people…" aria-label="Search recipients" style="flex:1 1 180px">
+            <span class="note"><b id="rcount">0</b> selected</span></div>
+          <div class="row"><button class="btn sm" id="rall">Select all shown</button><button class="btn sm" id="rnone">Clear</button><label class="c"><input type="checkbox" id="ronly"> Show selected only</label></div>
+          <div class="rcp" id="rlist"><div class="note">Pick a group above.</div></div>
+        </section>
+        <section class="panel">
+          <h2>2 · Message</h2>
+          <div class="row"><label class="f" style="flex:1 1 200px">Template<select id="tpl"></select></label><button class="btn sm" id="tplsave">Save as template</button><button class="btn sm x" id="tpldel" aria-label="Delete template">✕</button></div>
+          <label class="f" style="flex:none">Title (optional)<input type="text" id="dmtitle" maxlength="200" placeholder="e.g. FO form reminder"></label>
+          <label class="f" style="flex:none">Message<textarea id="dmtext" rows="7" maxlength="1800" style="font-family:inherit;font-size:16px;font-weight:600" placeholder="Hey {name}, …"></textarea></label>
+          <div class="note">Fill-ins: <code>{name}</code> their name · <code>{team}</code> their team · <code>{mention}</code> @ them. <span id="dmlen"></span></div>
+          <label class="c"><input type="checkbox" id="dmembed" checked> Send as a card (server icon, team color, "Sent by UFA Staff")</label>
+          <h3>Preview</h3><div class="dmprev" id="dmprev"></div>
+          <div class="bar hide" id="dmbar"><i style="width:0"></i></div><span class="msg" id="dmmsg"></span>
+          <div class="row"><button class="btn red" id="dmsend">Send DMs</button></div>
+          <div id="dmres"></div>
+        </section>
+      </div>
+      <section class="panel"><h2>Sent messages</h2><div id="dmlog" style="display:flex;flex-direction:column;gap:8px"></div></section>
     </div>
 
     <div id="tab-teams" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -407,8 +458,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","teams","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -711,6 +762,85 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
   $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
   $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); };
+
+  // ---------- messages (bulk DMs) ----------
+  let AUD = null, SEL = new Set(), POOL = [];
+  const TPL_DEF = [
+    ["FO form reminder", "FO form", "Hey {name}, you're listed as franchise owner of the {team}. If you want to keep running your team this season, fill out the FO form before the deadline so we know you're active."],
+    ["Draft date", "Draft date", "Hey {name}, the UFA draft is set for [DATE] at [TIME]. Make sure you're around — FOs pick with /pick when they're on the clock."],
+    ["Join the draft pool", "Get in the draft", "Hey {name}, rosters are resetting for the new season. Run /fa join with your positions (e.g. WR/CB) in the server so FOs can draft you."],
+  ];
+  const loadTpl = () => { try{ return JSON.parse(localStorage.getItem("ufa_tpl") || "null") || TPL_DEF; }catch{ return TPL_DEF; } };
+  const saveTpl = l => { try{ localStorage.setItem("ufa_tpl", JSON.stringify(l)); }catch{} };
+  function renderTpl(){ $("#tpl").innerHTML = `<option value="">— Start blank —</option>` + loadTpl().map((t, i) => `<option value="${i}">${esc(t[0])}</option>`).join(""); }
+  $("#tpl").onchange = e => { const t = loadTpl()[+e.target.value]; if (e.target.value !== "" && t){ $("#dmtitle").value = t[1]; $("#dmtext").value = t[2]; renderPrev2(); } };
+  $("#tplsave").onclick = () => { const n = prompt("Template name?"); if (!n) return; const l = loadTpl(); l.push([n, $("#dmtitle").value, $("#dmtext").value]); saveTpl(l); renderTpl(); toast("Template saved (on this browser)."); };
+  $("#tpldel").onclick = () => { const v = $("#tpl").value; if (v === "") return; const l = loadTpl(); l.splice(+v, 1); saveTpl(l); renderTpl(); };
+  function renderDM(){ renderTpl(); renderRcp(); renderPrev2(); loadDmLog(); }
+  function audPool(a){
+    const ms = members();
+    return a === "fos" ? ms.filter(m => m.rank === "fo") : a === "fronts" ? ms.filter(m => ["fo","gm","hc"].includes(m.rank)) : a === "fa" ? ms.filter(m => !m.team)
+      : a === "staff" ? ms.filter(m => m.staff) : a === "all" ? ms : a === "team" ? ms.filter(m => m.team === $("#audteam")?.value)
+      : a === "teamfos" ? ms.filter(m => m.rank === "fo" && $$("#audteams input:checked").some(x => x.value === m.team)) : ms;
+  }
+  $("#aud").onclick = e => {
+    const b = e.target.closest("button[data-aud]"); if (!b) return;
+    if (!LIVE) return toast("The bot isn't reachable right now.", false);
+    AUD = b.dataset.aud; $$("#aud button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    const teams = D.teams.slice().sort((a,b) => a.name.localeCompare(b.name));
+    $("#audextra").innerHTML = AUD === "team" ? `<label class="f" style="flex:none">Team<select id="audteam">${teams.map(t => `<option value="${t.abbr}">${esc(t.name)} (${rosterOf(t.abbr).length})</option>`).join("")}</select></label>`
+      : AUD === "teamfos" ? `<div class="note">Tick the teams whose FOs should get it:</div><div class="aud" id="audteams">${teams.filter(t => foOf(t.abbr)).map(t => `<label class="c" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:4px 8px"><input type="checkbox" value="${t.abbr}" checked> ${esc(t.abbr)}</label>`).join("")}</div>` : "";
+    const sync = () => { POOL = audPool(AUD); SEL = new Set(AUD === "custom" ? [] : POOL.map(m => m.id)); renderRcp(); };
+    $("#audteam")?.addEventListener("change", sync); $("#audteams")?.addEventListener("change", sync); sync();
+  };
+  function renderRcp(){
+    if (!AUD){ $("#rcount").textContent = SEL.size; return; }
+    const q = $("#rq").value.trim().toLowerCase(), only = $("#ronly").checked;
+    const list = (AUD === "custom" ? members() : POOL).filter(m => (!q || m.name.toLowerCase().includes(q)) && (!only || SEL.has(m.id))).sort((a,b) => a.name.localeCompare(b.name));
+    $("#rlist").innerHTML = list.slice(0, 400).map(m => `<label><input type="checkbox" value="${m.id}" ${SEL.has(m.id) ? "checked" : ""}><img src="${esc(m.avatar)}" alt="" loading="lazy"><span class="pn">${esc(m.name)}</span>${m.team ? `<span class="tag">${esc(m.team)}</span>` : `<span class="tag">FA</span>`}${m.rank && m.rank !== "player" ? `<span class="tag ${m.rank}">${RANK[m.rank]}</span>` : ""}</label>`).join("")
+      || `<div class="note">${AUD === "custom" ? "Search for people to add." : "Nobody in this group."}</div>`;
+    $("#rcount").textContent = SEL.size;
+  }
+  $("#rlist").addEventListener("change", e => { const c = e.target.closest("input[type=checkbox]"); if (!c) return; c.checked ? SEL.add(c.value) : SEL.delete(c.value); $("#rcount").textContent = SEL.size; renderPrev2(); });
+  $("#rq").oninput = renderRcp; $("#ronly").onchange = renderRcp;
+  $("#rall").onclick = () => { $$("#rlist input").forEach(c => { c.checked = true; SEL.add(c.value); }); $("#rcount").textContent = SEL.size; renderPrev2(); };
+  $("#rnone").onclick = () => { SEL.clear(); renderRcp(); renderPrev2(); };
+  function fillIn(txt, m){ const t = m?.team ? T(m.team).name : "free agency"; return txt.replace(/\{name\}/gi, m?.name || "Player").replace(/\{team\}/gi, t).replace(/\{mention\}/gi, "@" + (m?.name || "Player")); }
+  function renderPrev2(){
+    const m = byId([...SEL][0]) || null, title = $("#dmtitle").value.trim(), txt = fillIn($("#dmtext").value, m) || "Your message shows here.";
+    $("#dmlen").textContent = `${$("#dmtext").value.length}/1800`;
+    $("#dmprev").innerHTML = $("#dmembed").checked
+      ? `<div class="emb" style="border-left-color:${esc(m?.team ? T(m.team).color : "#e8424a")}"><small>UFA League</small>${title ? `\n<b>${esc(title)}</b>` : ""}\n${esc(txt)}\n<small>Sent by UFA Staff</small></div>`
+      : `${title ? `<b>${esc(title)}</b>\n` : ""}${esc(txt)}\n<small>Sent by UFA Staff</small>`;
+  }
+  ["#dmtitle","#dmtext"].forEach(s => $(s).oninput = renderPrev2); $("#dmembed").onchange = renderPrev2;
+  $("#dmsend").onclick = async () => {
+    const ids = [...SEL], text = $("#dmtext").value.trim(), title = $("#dmtitle").value.trim();
+    if (!ids.length) return msg($("#dmmsg"), "Pick at least one person.", false);
+    if (!text) return msg($("#dmmsg"), "Write a message first.", false);
+    if (!confirm(`Send this DM to ${ids.length} ${ids.length === 1 ? "person" : "people"}?`)) return;
+    const btn = $("#dmsend"); btn.disabled = true; $("#dmbar").classList.remove("hide"); $("#dmres").innerHTML = "";
+    const res = [];
+    try{
+      for (let i = 0; i < ids.length; i += 12){
+        const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title, embed: $("#dmembed").checked});
+        res.push(...j.results); $("#dmbar i").style.width = `${res.length / ids.length * 100}%`; msg($("#dmmsg"), `Sent ${res.length} / ${ids.length}…`);
+      }
+      const bad = res.filter(r => !r.ok);
+      msg($("#dmmsg"), `Done — ${res.length - bad.length} delivered${bad.length ? `, ${bad.length} couldn't be reached` : ""}.`, !bad.length);
+      $("#dmres").innerHTML = bad.length ? `<div class="panel" style="background:var(--panel2)"><b>Couldn't DM (DMs closed or left):</b><div>${bad.map(r => esc(r.name || byId(r.id)?.name || r.id)).join(", ")}</div>
+        <div class="row"><button class="btn sm" id="dmcopy">Copy as @mentions for a channel post</button></div></div>` : "";
+      $("#dmcopy")?.addEventListener("click", async () => { await navigator.clipboard.writeText(bad.map(r => `<@${r.id}>`).join(" ")); toast("Copied — paste it in a channel to ping them."); });
+      await bot("/api/admin/dm/log", {title, text, audience: $("#aud button[aria-pressed=true]")?.textContent || "", sent: res.length - bad.length, failed: bad.map(r => r.name || r.id)}).catch(() => {});
+      loadDmLog();
+    }catch(e){ msg($("#dmmsg"), `Stopped after ${res.length}: ${e.message}`, false); }
+    btn.disabled = false;
+  };
+  async function loadDmLog(){
+    try{ const {log} = await bot("/api/admin/dm/log");
+      $("#dmlog").innerHTML = log.map(e => `<div class="tx"><b>${esc(e.title || "Message")} → ${esc(e.audience)} (${e.sent} sent${e.failed.length ? `, ${e.failed.length} failed` : ""})</b>${esc(e.text).slice(0, 220)}${e.text.length > 220 ? "…" : ""}<br><small>${new Date(e.ts).toLocaleString()} · ${esc(e.by)}</small></div>`).join("") || `<div class="note">Nothing sent yet.</div>`;
+    }catch{ $("#dmlog").innerHTML = `<div class="note">History shows once the bot is reachable.</div>`; }
+  }
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
