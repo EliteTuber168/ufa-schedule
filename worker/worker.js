@@ -1255,9 +1255,10 @@ async function web(req, url, env, ctx) {
           if (!dt.in && !fo) continue;
           const q = meta[t.abbr] ? await getQueue(env, t.abbr) : [];
           rows.push({ abbr: t.abbr, name: t.name, color: t.color, inDraft: !!dt.in, fo: fo ? { id: fo.id, name: fo.name } : null,
-            queued: q.length, available: q.filter((id) => !taken.has(id)).length, updated: meta[t.abbr]?.ts || null, by: meta[t.abbr]?.by || "" });
+            queued: q.length, available: q.filter((id) => !taken.has(id)).length, updated: meta[t.abbr]?.ts || null, by: meta[t.abbr]?.by || "", list: q });
         }
-        return out({ rows, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
+        const players = D.pool.map(({ id, name, pos, avatar }) => ({ id, name, pos: pos || [], avatar, taken: taken.has(id) }));
+        return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
       if (p === "/api/admin/danger/preview") return out(await dangerPreview(env, L));
       if (p === "/api/admin/danger") return out({ ok: true, ...(await dangerRun(env, L, admin, body)) });
