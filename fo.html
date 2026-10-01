@@ -112,6 +112,17 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="row"><button class="btn red" id="dsend">Request to leave</button></div>
     </section>
 
+    <section class="panel" data-tab="draft">
+      <div class="row" style="justify-content:space-between"><h2>Draft queue</h2><span class="note" id="dqstat"></span></div>
+      <div class="note">Rank the players you want. If you're offline when you're on the clock and the timer runs out, the bot picks the highest player on your list who's still available. No queue = best available on the board. Your GM can edit this too.</div>
+      <div class="grid2">
+        <div class="panel" style="background:var(--panel2)"><div class="row" style="justify-content:space-between"><b>Your queue</b><span class="note" id="dqcount"></span></div><div class="list" id="dq"></div>
+          <div class="row"><button class="btn red" id="dqsave">Save queue</button><span class="msg" id="dqmsg"></span></div></div>
+        <div class="panel" style="background:var(--panel2)"><b>Available players</b><input type="search" id="dqq" placeholder="Search players or positions…" aria-label="Search available players"><div class="list" id="dqa" style="max-height:520px;overflow:auto"></div></div>
+      </div>
+      <div id="dqmine"></div>
+    </section>
+
     <section class="panel" data-tab="tx"><h2>League transactions</h2><div class="list" id="txs"></div></section>
   </div>
 </div>
@@ -187,12 +198,13 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     if (canDo("trade")) list.push(["trade","Trades"]);
     if (ME.rank && ME.rank !== "player" || canDo("offer")) list.push(["requests","Requests"]);
     if (ME.rank && ME.rank !== "fo") list.push(["leave","Leave team"]);
+    if (["fo","gm"].includes(ME.rank)) list.push(["draft","Draft queue"]);
     list.push(["tx","Transactions"]);
     if (!list.some(([k]) => k === TAB)) TAB = "roster";
     $("#tabs").innerHTML = list.map(([k,l]) => `<button role="tab" data-t="${k}" aria-selected="${k===TAB}">${l}</button>`).join("");
     document.querySelectorAll("section[data-tab]").forEach(s => s.classList.toggle("hide", s.dataset.tab !== TAB));
   }
-  $("#tabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (!b) return; TAB = b.dataset.t; tabs(); if (TAB === "tx") loadTx(); if (TAB === "trade") loadTrade(); };
+  $("#tabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (!b) return; TAB = b.dataset.t; tabs(); if (TAB === "tx") loadTx(); if (TAB === "trade") loadTrade(); if (TAB === "draft") loadQueue(); };
 
   const card = (p, acts="") => `<div class="p"><img src="${esc(p.avatar)}" alt="" loading="lazy"><span class="nm">${esc(p.name)}</span>${p.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}<span class="acts">${acts}</span></div>`;
   function render(){
@@ -270,6 +282,42 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       $("#txs").innerHTML = j.tx.map(t => `<div class="tx"><b>${esc(t.title)}</b>${esc(t.text).replace(/\n/g,"<br>")}<br><small>${new Date(t.ts).toLocaleString()}</small></div>`).join("") || `<div class="note">No transactions yet.</div>`;
     }catch(e){ toast(e.message); }
   }
+
+  // ---------- draft queue ----------
+  let DQ = null, QUEUE = [], qDirty = false;
+  async function loadQueue(){
+    try{ DQ = await call("/api/queue"); QUEUE = DQ.queue.filter(id => DQ.available.some(p => p.id === id)); qDirty = false; renderQueue(); }
+    catch(e){ $("#dq").innerHTML = `<div class="note">${esc(e.message)}</div>`; }
+  }
+  const pname = id => DQ.available.find(p => p.id === id) || {name: "?"};
+  const ppos = p => (p.pos || []).join("/");
+  function renderQueue(){
+    const st = DQ.status, nx = DQ.next;
+    $("#dqstat").textContent = st === "setup" ? "Draft hasn't started" : st === "done" ? "Draft finished" : nx ? (nx.away === 0 ? "You're on the clock!" : `You pick in ${nx.away} pick${nx.away === 1 ? "" : "s"} (R${nx.round} P${nx.pick})`) : "";
+    $("#dqcount").textContent = `${QUEUE.length} player${QUEUE.length === 1 ? "" : "s"}`;
+    $("#dq").innerHTML = QUEUE.map((id, k) => { const p = pname(id); return `<div class="p"><b style="width:22px;text-align:right">${k + 1}</b>${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span>
+      <span class="acts"><button class="btn sm" data-qup="${k}" aria-label="Move up" ${k ? "" : "disabled"}>↑</button><button class="btn sm" data-qdn="${k}" aria-label="Move down" ${k < QUEUE.length - 1 ? "" : "disabled"}>↓</button><button class="btn sm" data-qrm="${k}" aria-label="Remove">✕</button></span></div>`; }).join("")
+      || `<div class="note">Empty — add players from the right.</div>`;
+    const q = $("#dqq").value.trim().toLowerCase();
+    const av = DQ.available.filter(p => !QUEUE.includes(p.id) && (!q || p.name.toLowerCase().includes(q) || ppos(p).toLowerCase().includes(q)));
+    $("#dqa").innerHTML = av.slice(0, 150).map(p => `<div class="p">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${p.rank ? `<span class="note">#${p.rank}</span> ` : ""}${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span><span class="acts"><button class="btn sm red" data-qadd="${p.id}">Add</button></span></div>`).join("") || `<div class="note">No players match.</div>`;
+    $("#dqsave").textContent = qDirty ? "Save queue •" : "Save queue";
+    $("#dqmine").innerHTML = DQ.mine.length ? `<h2 style="font-size:22px;margin-top:8px">Your picks</h2><div class="list">${DQ.mine.map(p => `<div class="p"><span class="tag">R${p.round} P${p.pick}</span><span class="nm">${esc(p.name || "?")}</span>${p.auto ? `<span class="tag">auto</span>` : ""}</div>`).join("")}</div>` : "";
+  }
+  $("#dqq").oninput = renderQueue;
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-qadd],[data-qup],[data-qdn],[data-qrm]"); if (!b || !DQ) return;
+    if (b.dataset.qadd) QUEUE.push(+b.dataset.qadd);
+    else { const k = +(b.dataset.qup ?? b.dataset.qdn ?? b.dataset.qrm);
+      if (b.dataset.qup) [QUEUE[k-1], QUEUE[k]] = [QUEUE[k], QUEUE[k-1]];
+      else if (b.dataset.qdn) [QUEUE[k+1], QUEUE[k]] = [QUEUE[k], QUEUE[k+1]];
+      else QUEUE.splice(k, 1); }
+    qDirty = true; renderQueue();
+  });
+  $("#dqsave").onclick = async () => {
+    try{ msg($("#dqmsg"), "Saving…"); const j = await call("/api/queue", {ids: QUEUE}); QUEUE = j.queue; qDirty = false; renderQueue(); msg($("#dqmsg"), "Saved."); }
+    catch(e){ msg($("#dqmsg"), e.message, false); }
+  };
 
   // ---------- boot ----------
   async function boot(){
