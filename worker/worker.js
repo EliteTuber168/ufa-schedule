@@ -647,6 +647,60 @@ async function dangerSimple(env, L, admin, body) {
   return a === "logout_all" ? `Logged out ${n} FO portal session(s).` : a === "clear_passwords" ? `Removed ${n} team password(s) — those logins stop working.` : `Deleted ${n} transaction log entries (Discord messages stay).`;
 }
 
+// ---------- tickets (one conversation per person, numbered ticket-0001…) ----------
+const tno = (n) => `ticket-${String(n).padStart(4, "0")}`;
+async function ensureTicket(env, uid, name) {
+  let t = await kget(env, `ticket:${uid}`);
+  if (!t) {
+    const n = ((await kget(env, "ticket:counter")) || 0) + 1;
+    await kput(env, "ticket:counter", n, 3650 * 86400);
+    t = { no: n, uid, name, status: "open", created: Date.now(), updated: Date.now(), lastFrom: "", preview: "", replies: [] };
+  }
+  if (name) t.name = name;
+  return t;
+}
+const saveTicket = (env, t) => kput(env, `ticket:${t.uid}`, t, 365 * 86400, { no: t.no, status: t.status, updated: t.updated, lastFrom: t.lastFrom });
+const staffSig = (admin) => (admin?.name || "UFA Staff").replace(/ \(website\)$/, "");
+async function staffSend(env, uid, text, by, ticket) {
+  return dm(env, uid, { embeds: [{ author: { name: "UFA Staff" }, ...(ticket ? { title: tno(ticket.no) } : {}), description: text.slice(0, 1800), color: 0xe8424a,
+    footer: { text: `From ${by}` }, timestamp: new Date().toISOString() }], components: [row(btn("💬 Reply to staff", 2, "rp:"))] });
+}
+function msgText(m) {
+  const e = (m.embeds || [])[0];
+  const t = [m.content, e && [e.title, e.description].filter(Boolean).join("\n")].filter(Boolean).join("\n");
+  return t.replace(/\n?-# Sent by UFA Staff/g, "").trim();
+}
+async function ticketTimeline(env, t) {
+  const c = await kget(env, `dmch:${t.uid}`), items = [];
+  if (c?.ch) for (const m of (await discord(env, "GET", `/channels/${c.ch}/messages?limit=50`).catch(() => [])) || []) {
+    const text = msgText(m); if (!text || (m.author?.bot && /^✅ Thanks — your reply was sent/.test(text))) continue;
+    const e = (m.embeds || [])[0], staff = m.author?.bot && (e?.author?.name === "UFA Staff" || e?.author?.name === "UFA League" || /Sent by UFA Staff/.test(m.content || ""));
+    items.push({ id: m.id, ts: Date.parse(m.timestamp), from: !m.author?.bot ? "them" : staff ? "staff" : "bot", text, by: staff ? (e?.footer?.text || "").replace(/^From |^Sent by | · UFA Staff$/g, "") : "" });
+  }
+  for (const r of t.replies || []) items.push({ ts: r.ts, from: "them", text: r.text, via: "button", about: r.about || "" });
+  return items.sort((a, b) => a.ts - b.ts);
+}
+/** look through recent DM channels for messages people typed to the bot and file them into tickets */
+async function scanDMs(env, L, page = 0) {
+  const staffIds = new Set(String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean));   // your own DM with the bot isn't a ticket
+  const chans = (await Promise.all((await klist(env, "dmch:")).map(async (k) => ({ uid: k.name.slice(5), ...(await kget(env, k.name)) })))).filter((c) => c.ch && !staffIds.has(c.uid)).sort((a, b) => b.ts - a.ts);
+  const slice = chans.slice(page * 20, page * 20 + 20), M = await members(env, L).catch(() => []);
+  let found = 0;
+  for (const c of slice) {
+    const msgs = (await discord(env, "GET", `/channels/${c.ch}/messages?limit=5`).catch(() => [])) || [];
+    const mine = msgs.filter((m) => !m.author?.bot && m.content);
+    if (!mine.length) continue;
+    const newest = Math.max(...mine.map((m) => Date.parse(m.timestamp)));
+    const old = await kget(env, `ticket:${c.uid}`);
+    if (old && old.updated >= newest) continue;
+    const mm = M.find((x) => x.user.id === c.uid), t = await ensureTicket(env, c.uid, mm ? display(mm) : mine[0].author.global_name || mine[0].author.username);
+    const last = mine.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
+    Object.assign(t, { updated: newest, lastFrom: "them", preview: last.content.slice(0, 140), status: "open" });
+    await saveTicket(env, t); found++;
+  }
+  return { found, more: (page + 1) * 20 < chans.length };
+}
+
 // ---------- franchises ----------
 async function franchisesEmbeds(env, L) {
   const M = await members(env, L, true);
@@ -739,12 +793,15 @@ async function modalSubmit(i, env, ctx) {
     const text = i.data.components?.[0]?.components?.[0]?.value || "", uid = uidOf(i), L = await league(env);
     const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === uid), name = m ? display(m) : (i.user?.global_name || i.user?.username || uid);
     const log = id ? await kget(env, `dmlog:${id}`) : null;
-    await kput(env, `inbox:${String(9e12 - Date.now()).padStart(13, "0")}`, { uid, name, text, ts: Date.now(), about: log?.title || "" }, 120 * 86400);
+    const tk = await ensureTicket(env, uid, name);
+    tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about: log?.title || "" }].slice(-100);
+    Object.assign(tk, { updated: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
+    await saveTicket(env, tk);
     if (L.C.staffChat) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { allowed_mentions: { parse: [] },
-      embeds: [{ author: { name: `Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Inbox" }, timestamp: new Date().toISOString() }] }).catch(() => {});
+      embeds: [{ author: { name: `${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Tickets" }, timestamp: new Date().toISOString() }] }).catch(() => {});
     // forward to the commissioner(s) by DM, with a button to answer straight from Discord
     for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
-      await dm(env, cid, { embeds: [{ author: { name: `📬 Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900),
+      await dm(env, cid, { embeds: [{ author: { name: `📬 ${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900),
         color: 0xffc62f, footer: { text: m && info(L, m).team ? `${teamOf(L, info(L, m).team).name} · ${uid}` : uid }, timestamp: new Date().toISOString() }],
         components: [row(btn(`Answer ${name}`.slice(0, 80), 1, `ans:${uid}`))] });
     }
@@ -754,8 +811,9 @@ async function modalSubmit(i, env, ctx) {
     const L = await league(env), me = await actorFromUid(env, L, uidOf(i)).catch(() => ({ staff: isStaff(env, null, uidOf(i)) }));
     if (!me.staff && !isStaff(env, L, uidOf(i))) return "Only staff can answer.";
     const text = i.data.components?.[0]?.components?.[0]?.value || "";
-    const ok = await dm(env, id, { embeds: [{ author: { name: "UFA Staff" }, description: text.slice(0, 1800), color: 0xe8424a, footer: { text: `From ${me.name && me.name !== "Unknown" ? me.name : "UFA Staff"}` }, timestamp: new Date().toISOString() }],
-      components: [row(btn("💬 Reply to staff", 2, "rp:"))] });
+    const tk = await ensureTicket(env, id);
+    const ok = await staffSend(env, id, text, me.name && me.name !== "Unknown" ? me.name : "UFA Staff", tk);
+    if (ok) { Object.assign(tk, { updated: Date.now(), lastFrom: "staff", preview: text.slice(0, 140) }); await saveTicket(env, tk); }
     return ok ? `✅ Sent to them:\n> ${text.slice(0, 300).replace(/\n/g, "\n> ")}` : "⚠️ Couldn't DM them (DMs closed?).";
   }, false);
   if (kind !== "rm") return reply("Unknown form.", true);
@@ -1103,6 +1161,36 @@ async function web(req, url, env, ctx) {
         }
         return out({ results });
       }
+      if (p === "/api/admin/tickets") {
+        let scan = null;
+        if (url.searchParams.has("scan")) scan = await scanDMs(env, L, Number(url.searchParams.get("scan")) || 0);
+        const ks = await klist(env, "ticket:"), M = await members(env, L).catch(() => []);
+        const list = (await Promise.all(ks.filter((k) => k.name !== "ticket:counter").map((k) => kget(env, k.name)))).filter(Boolean)
+          .map(({ replies, ...t }) => { const m = M.find((x) => x.user.id === t.uid); const pi = m ? info(L, m) : null; return { ...t, ticket: tno(t.no), avatar: pi?.avatar, team: pi?.team || null, rank: pi?.rank || null, name: pi?.name || t.name }; })
+          .sort((a, b) => b.updated - a.updated);
+        return out({ tickets: list, scan });
+      }
+      if (p === "/api/admin/ticket") {
+        const uid = url.searchParams.get("uid") || body.uid, t = await kget(env, `ticket:${uid}`);
+        if (!t) return out({ error: "No ticket for that person." }, 404);
+        const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === uid), pi = m ? info(L, m) : null;
+        return out({ ticket: { ...t, replies: undefined, ticket: tno(t.no), avatar: pi?.avatar, team: pi?.team || null, rank: pi?.rank || null, name: pi?.name || t.name }, timeline: await ticketTimeline(env, t) });
+      }
+      if (p === "/api/admin/ticket/reply") {
+        const text = String(body.text || "").trim(); if (!text || !body.uid) return out({ error: "Write a message first." }, 400);
+        const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === body.uid);
+        if (!m) return out({ error: "That person isn't in the server." }, 400);
+        const t = await ensureTicket(env, body.uid, display(m));
+        if (!(await staffSend(env, body.uid, text, staffSig(admin), t))) return out({ error: "Couldn't DM them (DMs closed?)." }, 400);
+        Object.assign(t, { updated: Date.now(), lastFrom: "staff", preview: text.slice(0, 140), status: "open" }); await saveTicket(env, t);
+        return out({ ok: true, ticket: tno(t.no) });
+      }
+      if (p === "/api/admin/ticket/status") {
+        const t = await kget(env, `ticket:${body.uid}`); if (!t) return out({ error: "No ticket." }, 404);
+        t.status = body.status === "closed" ? "closed" : "open"; await saveTicket(env, t);
+        if (t.status === "closed" && body.notify) await dm(env, t.uid, `✅ Your ticket **${tno(t.no)}** with UFA Staff has been closed. Reply any time to open it again.`);
+        return out({ ok: true });
+      }
       if (p === "/api/admin/inbox") {
         // replies sent with the Reply button, plus anything people typed straight into their DM with the bot
         const replies = (await Promise.all((await klist(env, "inbox:")).slice(0, 50).map((k) => kget(env, k.name)))).filter(Boolean).map((r) => ({ ...r, via: "button" }));
@@ -1120,8 +1208,7 @@ async function web(req, url, env, ctx) {
       }
       if (p === "/api/admin/inbox/reply") {
         const text = String(body.text || "").trim(); if (!text || !body.uid) return out({ error: "Write a reply first." }, 400);
-        const ok = await dm(env, body.uid, { embeds: [{ author: { name: "UFA Staff" }, description: text.slice(0, 1800), color: 0xe8424a, footer: { text: `From ${admin.name.replace(/ \(website\)$/, "")}` }, timestamp: new Date().toISOString() }],
-          components: [row(btn("💬 Reply to staff", 2, "rp:"))] });
+        const ok = await staffSend(env, body.uid, text, staffSig(admin));
         return ok ? out({ ok: true }) : out({ error: "Couldn't DM them (DMs closed?)." }, 400);
       }
       if (p === "/api/admin/dm/log") {
