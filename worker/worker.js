@@ -714,6 +714,8 @@ async function myOffers(i, env) {
 async function component(i, env, ctx) {
   const [kind, id, k] = String(i.data.custom_id || "").split(":");
   if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
+  if (kind === "ans") return json({ type: 9, data: { custom_id: `ansm:${id}`, title: "Answer",
+    components: [row({ type: 4, custom_id: "text", style: 2, label: "Your answer (sent as a DM from the bot)", min_length: 1, max_length: 1500, required: true })] } });
   if (kind === "rp") return json({ type: 9, data: { custom_id: `rpm:${id || ""}`, title: "Reply to UFA Staff",
     components: [row({ type: 4, custom_id: "text", style: 2, label: "Your reply", min_length: 1, max_length: 1500, required: true })] } });
   if (kind === "oa" || kind === "od") return later(i, ctx, async () => {
@@ -740,7 +742,21 @@ async function modalSubmit(i, env, ctx) {
     await kput(env, `inbox:${String(9e12 - Date.now()).padStart(13, "0")}`, { uid, name, text, ts: Date.now(), about: log?.title || "" }, 120 * 86400);
     if (L.C.staffChat) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { allowed_mentions: { parse: [] },
       embeds: [{ author: { name: `Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Inbox" }, timestamp: new Date().toISOString() }] }).catch(() => {});
+    // forward to the commissioner(s) by DM, with a button to answer straight from Discord
+    for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
+      await dm(env, cid, { embeds: [{ author: { name: `📬 Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900),
+        color: 0xffc62f, footer: { text: m && info(L, m).team ? `${teamOf(L, info(L, m).team).name} · ${uid}` : uid }, timestamp: new Date().toISOString() }],
+        components: [row(btn(`Answer ${name}`.slice(0, 80), 1, `ans:${uid}`))] });
+    }
     return { content: "✅ Thanks — your reply was sent to UFA Staff.", components: [] };
+  }, false);
+  if (kind === "ansm") return later(i, ctx, async () => {
+    const L = await league(env), me = await actorFromUid(env, L, uidOf(i)).catch(() => ({ staff: isStaff(env, null, uidOf(i)) }));
+    if (!me.staff && !isStaff(env, L, uidOf(i))) return "Only staff can answer.";
+    const text = i.data.components?.[0]?.components?.[0]?.value || "";
+    const ok = await dm(env, id, { embeds: [{ author: { name: "UFA Staff" }, description: text.slice(0, 1800), color: 0xe8424a, footer: { text: `From ${me.name && me.name !== "Unknown" ? me.name : "UFA Staff"}` }, timestamp: new Date().toISOString() }],
+      components: [row(btn("💬 Reply to staff", 2, "rp:"))] });
+    return ok ? `✅ Sent to them:\n> ${text.slice(0, 300).replace(/\n/g, "\n> ")}` : "⚠️ Couldn't DM them (DMs closed?).";
   }, false);
   if (kind !== "rm") return reply("Unknown form.", true);
   const reason = i.data.components?.[0]?.components?.[0]?.value || "";
