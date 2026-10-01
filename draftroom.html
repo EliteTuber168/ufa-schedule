@@ -119,6 +119,7 @@ td input.n{width:62px}
         <div class="row">
           <label class="f">Rounds<input type="number" min="1" max="25" id="rounds"></label>
           <label class="f">Time per pick (minutes, 0 = no clock)<input type="number" min="0" max="1440" id="pmin"></label>
+          <label class="f">If time runs out and there's no queue<select id="amode"><option value="random">Random available player</option><option value="board">Best on my big board</option></select></label>
           <label class="c" style="margin-bottom:10px"><input type="checkbox" id="snake"> Snake order (reverses every round)</label>
         </div>
         <label class="f">Announcement on the public board (optional)<textarea id="ann" rows="2" placeholder="e.g. Draft starts Saturday 6pm EST in #draft-room. 10 min per pick."></textarea></label>
@@ -251,9 +252,9 @@ td input.n{width:62px}
   // ---------- setup ----------
   const locked = () => D.picks.length > 0;
   function renderSetup(){
-    $("#rounds").value = D.rounds; $("#pmin").value = D.pickMinutes || 0; $("#snake").checked = !!D.snake; $("#ann").value = D.announcement || "";
+    $("#rounds").value = D.rounds; $("#pmin").value = D.pickMinutes || 0; $("#snake").checked = !!D.snake; $("#amode").value = D.autoMode || "random"; $("#ann").value = D.announcement || "";
     const T = order().length, need = T * D.rounds;
-    $("#math").innerHTML = `${T} teams × ${D.rounds} rounds = <b>${need} picks</b>. Pool has <b>${D.pool.length}</b> players${D.pool.length < need ? ` — <span style="color:var(--warn)">${need - D.pool.length} short</span>` : ""}.${D.pickMinutes ? ` At ${D.pickMinutes} min per pick the draft could take up to ${Math.round(need*D.pickMinutes/60)} hours. When a team's time runs out, the bot auto-picks from their draft queue (or the best available on your big board).` : ` <span style="color:var(--warn)">Set minutes per pick to turn on auto-pick for teams that are away.</span>`}`;
+    $("#math").innerHTML = `${T} teams × ${D.rounds} rounds = <b>${need} picks</b>. Pool has <b>${D.pool.length}</b> players${D.pool.length < need ? ` — <span style="color:var(--warn)">${need - D.pool.length} short</span>` : ""}.${D.pickMinutes ? ` At ${D.pickMinutes} min per pick the draft could take up to ${Math.round(need*D.pickMinutes/60)} hours. When a team's time runs out, the bot auto-picks from their draft queue (or ${(D.autoMode || "random") === "random" ? "a random available player" : "the best available on your big board"}).` : ` <span style="color:var(--warn)">Set minutes per pick to turn on auto-pick for teams that are away.</span>`}`;
     let k = 0;
     $("#tbody").innerHTML = D.teams.map((t,i)=>`<tr data-i="${i}" class="${t.in?"":"out"}"><td>${t.in ? ++k : "—"}</td><td><input type="checkbox" data-f="in" ${t.in?"checked":""} ${locked()?"disabled":""} aria-label="${esc(team(t.abbr).name)} in draft"></td><td>${badge(t.abbr)}</td><td><b>${esc(team(t.abbr).name)}</b></td>
       <td><input type="text" data-f="fo" value="${esc(t.fo||"")}" placeholder="Discord name" aria-label="FO"></td><td style="white-space:nowrap"><input type="text" data-f="foId" value="${esc(t.foId||"")}" placeholder="auto from roles" inputmode="numeric" aria-label="FO Discord ID" style="width:170px"> ${t.foManual ? `<span class="pill man">manual</span> <button class="btn sm" data-auto="1" title="Let the Discord sync fill this">auto</button>` : t.foId ? `<span class="pill ok">linked</span>` : ""}</td>
@@ -261,6 +262,7 @@ td input.n{width:62px}
     $("#lottery").disabled = $("#az").disabled = locked();
   }
   $("#rounds").oninput = e => { const v = parseInt(e.target.value); if (v > 0 && !(locked() && v*order().length < D.picks.length)){ D.rounds = v; setDirty(true); renderSetup(); } };
+  $("#amode").onchange = e => { D.autoMode = e.target.value; setDirty(true); renderSetup(); };
   $("#pmin").oninput = e => { D.pickMinutes = Math.max(0, parseInt(e.target.value)||0); setDirty(true); renderSetup(); };
   $("#snake").onchange = e => { if (locked()){ e.target.checked = D.snake; return alert("Can't change snake order after picks are made."); } D.snake = e.target.checked; setDirty(true); };
   $("#ann").oninput = e => { D.announcement = e.target.value; setDirty(true); };
