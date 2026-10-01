@@ -1246,6 +1246,19 @@ async function web(req, url, env, ctx) {
         const ks = (await klist(env, "dmlog:")).slice(0, 25);
         return out({ log: (await Promise.all(ks.map((k) => kget(env, k.name)))).filter(Boolean) });
       }
+      if (p === "/api/admin/queues") {
+        const [{ D }, M, ks] = await Promise.all([loadDraft(env), members(env, L), klist(env, "queue:")]);
+        const H = helpers(D), taken = H.taken, meta = Object.fromEntries(ks.map((k) => [k.name.slice(6), k.metadata || {}]));
+        const rows = [];
+        for (const t of L.teams) {
+          const dt = D.teams.find((x) => x.abbr === t.abbr) || {}, fo = foOf(L, M, t.abbr);
+          if (!dt.in && !fo) continue;
+          const q = meta[t.abbr] ? await getQueue(env, t.abbr) : [];
+          rows.push({ abbr: t.abbr, name: t.name, color: t.color, inDraft: !!dt.in, fo: fo ? { id: fo.id, name: fo.name } : null,
+            queued: q.length, available: q.filter((id) => !taken.has(id)).length, updated: meta[t.abbr]?.ts || null, by: meta[t.abbr]?.by || "" });
+        }
+        return out({ rows, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
+      }
       if (p === "/api/admin/danger/preview") return out(await dangerPreview(env, L));
       if (p === "/api/admin/danger") return out({ ok: true, ...(await dangerRun(env, L, admin, body)) });
       if (p === "/api/admin/danger/simple") return out({ ok: true, text: await dangerSimple(env, L, admin, body) });
@@ -1286,7 +1299,7 @@ async function web(req, url, env, ctx) {
       if (req.method === "POST") {
         const { D } = await loadDraft(env), ids = new Set(D.pool.map((x) => x.id));
         const q = [...new Set((body.ids || []).map(Number))].filter((x) => ids.has(x)).slice(0, 60);
-        await kput(env, `queue:${abbr}`, q, 120 * 86400);
+        await kput(env, `queue:${abbr}`, q, 120 * 86400, { n: q.length, ts: Date.now(), by: actor.name });
         return out({ ok: true, queue: q });
       }
       const { D } = await loadDraft(env), H = helpers(D), N = names(await loadSched(env));
