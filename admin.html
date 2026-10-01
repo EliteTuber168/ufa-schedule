@@ -153,6 +153,11 @@ dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24
 .chatday{align-self:center;font-size:12px;color:var(--mute);letter-spacing:.08em}
 .chatfoot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);align-items:flex-end}
 .chatfoot textarea{flex:1;min-height:44px;max-height:160px;font-family:inherit;font-size:15px;font-weight:600}
+.tscroll{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-color:var(--red);color:#ffb3b7}
 </style></head><body>
@@ -181,6 +186,7 @@ dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24
       <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
       <button role="tab" data-tab="dm" aria-selected="false">Messages <span class="count hide" id="icount"></span></button>
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
+      <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
       <button role="tab" data-tab="tx" aria-selected="false">Transactions</button>
@@ -273,6 +279,13 @@ dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24
       </div>
       <div class="note">Players and FO come straight from Discord roles. <b>Status</b>: Auto follows your rules in Settings (min players + FO); Always / Never overrides them. Status and color changes need <b>Save &amp; publish</b>.</div>
       <div class="cards" id="cards"></div>
+    </div>
+
+    <div id="tab-queues" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="stats" id="qstats"></div>
+      <div class="row between"><div class="note" id="qnote"></div><div class="row"><button class="btn sm" id="qload">↻ Refresh</button><button class="btn sm red" id="qremindall">Remind everyone without a queue</button></div></div>
+      <div class="tscroll"><table style="min-width:640px"><thead><tr><th>Team</th><th>FO</th><th>Queue</th><th>Last updated</th><th></th></tr></thead><tbody id="qbody"></tbody></table></div>
+      <span class="msg" id="qmsg"></span>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -490,8 +503,8 @@ dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","queues","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, queues: loadQueues, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -943,6 +956,38 @@ dialog.chat{width:min(680px,calc(100vw - 16px));height:min(760px,calc(100vh - 24
       $("#dmlog").innerHTML = log.map(e => `<div class="tx"><b>${esc(e.title || "Message")} → ${esc(e.audience)} (${e.sent} sent${e.failed.length ? `, ${e.failed.length} failed` : ""})</b>${esc(e.text).slice(0, 220)}${e.text.length > 220 ? "…" : ""}<br><small>${new Date(e.ts).toLocaleString()} · ${esc(e.by)}</small></div>`).join("") || `<div class="note">Nothing sent yet.</div>`;
     }catch{ $("#dmlog").innerHTML = `<div class="note">History shows once the bot is reachable.</div>`; }
   }
+
+  // ---------- draft queues ----------
+  let QROWS = [];
+  const QTEXT = "Hey {name}, you don't have a draft queue set up for the {team} yet. If you're not online when you're on the clock, the bot will pick a random player for you. Set your queue here (log in with Discord, then open the Draft queue tab): https://elitetuber168.github.io/ufa-schedule/fo.html";
+  async function loadQueues(){
+    $("#qbody").innerHTML = `<tr><td colspan="5" class="note">Loading…</td></tr>`;
+    try{
+      const j = await bot("/api/admin/queues"); QROWS = j.rows;
+      const withFo = QROWS.filter(r => r.fo), set = withFo.filter(r => r.available > 0), low = withFo.filter(r => r.available > 0 && r.available < 3);
+      const tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+      $("#qstats").innerHTML = tile(`${set.length}<span style="font-size:24px;color:var(--mute)">/${withFo.length}</span>`, "FOs with a queue", "var(--good)") + tile(withFo.length - set.length, "No queue yet", withFo.length - set.length ? "var(--red)" : "") + tile(low.length, "Queue almost empty", low.length ? "var(--warn)" : "") + tile(j.pool, "Players available");
+      $("#qnote").innerHTML = j.pickMinutes ? `Clock: <b>${j.pickMinutes} min</b> per pick · no queue = <b>${j.autoMode === "board" ? "best on big board" : "random player"}</b>` : `<span style="color:var(--warn)">No pick timer set in the draft room — auto-pick won't happen until you set minutes per pick.</span>`;
+      const ago2 = ts => ts ? new Date(ts).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "—";
+      $("#qbody").innerHTML = QROWS.sort((a,b) => (a.available > 0) - (b.available > 0) || a.name.localeCompare(b.name)).map(r => `<tr>
+        <td><span class="badge" style="background:${esc(r.color)};min-width:38px;height:28px;font-size:16px">${esc(r.abbr)}</span> <b>${esc(r.name)}</b>${r.inDraft ? "" : ` <span class="tag">not in draft order</span>`}</td>
+        <td>${r.fo ? esc(r.fo.name) : `<span class="note">No FO</span>`}</td>
+        <td>${r.available > 0 ? `<b style="color:${r.available < 3 ? "var(--warn)" : "var(--good)"}">${r.available} player${r.available === 1 ? "" : "s"}</b>${r.queued > r.available ? ` <span class="note">(${r.queued - r.available} already drafted)</span>` : ""}` : `<b style="color:var(--red)">No queue</b>`}</td>
+        <td class="note">${ago2(r.updated)}</td>
+        <td>${r.fo && r.available < 3 ? `<button class="btn sm" data-qrem="${r.fo.id}">Remind</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="note">No teams yet.</td></tr>`;
+    }catch(e){ $("#qbody").innerHTML = `<tr><td colspan="5" class="msg err">${esc(e.message)}</td></tr>`; }
+  }
+  async function remind(ids){
+    if (!ids.length) return toast("Everyone has a queue.");
+    const {id: logId} = await bot("/api/admin/dm/log", {start: true, title: "Set your draft queue"}).catch(() => ({}));
+    let sent = 0, failed = [];
+    for (let i = 0; i < ids.length; i += 12){ const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text: QTEXT, title: "Set your draft queue", embed: true, logId}); j.results.forEach(r => r.ok ? sent++ : failed.push(r.name || r.id)); }
+    await bot("/api/admin/dm/log", {id: logId, title: "Set your draft queue", text: QTEXT, audience: "FOs without a queue", sent, failed}).catch(() => {});
+    msg($("#qmsg"), `Reminded ${sent}${failed.length ? ` — couldn't DM: ${failed.join(", ")}` : ""}.`, !failed.length);
+  }
+  $("#qload").onclick = loadQueues;
+  $("#qremindall").onclick = async () => { const ids = QROWS.filter(r => r.fo && !r.available).map(r => r.fo.id); if (!ids.length) return toast("Every FO has a queue."); if (!confirm(`DM ${ids.length} FO(s) to set up their draft queue?`)) return; $("#qremindall").disabled = true; try{ await remind(ids); }catch(e){ msg($("#qmsg"), e.message, false); } $("#qremindall").disabled = false; };
+  $("#qbody").addEventListener("click", async e => { const b = e.target.closest("[data-qrem]"); if (!b) return; b.disabled = true; try{ await remind([b.dataset.qrem]); b.textContent = "Sent"; }catch(err){ msg($("#qmsg"), err.message, false); b.disabled = false; } });
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
