@@ -1054,6 +1054,33 @@ async function web(req, url, env, ctx) {
         const pending = (await klist(env, "req:")).filter((k) => k.metadata?.status === "staff").length;
         return out({ teams: L.teams, members: M.map((m) => info(L, m)), cap: cap(L), frozen: frozen(L), draftStatus: L.draftStatus, pending, ready: { staff: !!L.R.staff, gm: !!L.R.gm, hc: !!L.R.hc, fo: !!L.R.fo, approvals: !!L.C.approvals, transactions: !!L.C.transactions } });
       }
+      if (p === "/api/admin/dm") {
+        const uids = [...new Set(body.uids || [])].slice(0, 12), text = String(body.text || "").trim();
+        if (!text) return out({ error: "Write a message first." }, 400);
+        if (text.length > 1800) return out({ error: "Keep it under 1800 characters." }, 400);
+        const M = await members(env, L), icon = body.embed ? await brandIcon(env, L) : null, results = [];
+        for (const uid of uids) {
+          const m = M.find((x) => x.user.id === uid);
+          if (!m) { results.push({ id: uid, ok: false, why: "not in server" }); continue; }
+          const pi = info(L, m), t = teamOf(L, pi.team);
+          const txt = text.replace(/\{name\}/gi, pi.name).replace(/\{team\}/gi, t ? t.name : "free agency").replace(/\{mention\}/gi, `<@${uid}>`);
+          const payload = body.embed
+            ? { embeds: [{ author: { name: "UFA League", ...(icon ? { icon_url: icon } : {}) }, ...(body.title ? { title: String(body.title).slice(0, 200) } : {}), description: txt,
+                color: t ? colorInt(t.color) : 0xe8424a, footer: { text: `Sent by ${admin.name.replace(/ \(website\)$/, "")} · UFA Staff` }, timestamp: new Date().toISOString() }] }
+            : { content: `${body.title ? `**${body.title}**\n` : ""}${txt}\n-# Sent by UFA Staff` };
+          const ok = await dm(env, uid, payload);
+          results.push({ id: uid, name: pi.name, ok, why: ok ? "" : "DMs closed" });
+        }
+        return out({ results });
+      }
+      if (p === "/api/admin/dm/log") {
+        if (req.method === "POST") {
+          const e = { ts: Date.now(), by: admin.name, title: String(body.title || "").slice(0, 200), text: String(body.text || "").slice(0, 1800), audience: String(body.audience || "").slice(0, 100), sent: body.sent | 0, failed: (body.failed || []).slice(0, 200) };
+          await kput(env, `dmlog:${String(9e12 - e.ts).padStart(13, "0")}`, e, 120 * 86400); return out({ ok: true });
+        }
+        const ks = (await klist(env, "dmlog:")).slice(0, 25);
+        return out({ log: (await Promise.all(ks.map((k) => kget(env, k.name)))).filter(Boolean) });
+      }
       if (p === "/api/admin/danger/preview") return out(await dangerPreview(env, L));
       if (p === "/api/admin/danger") return out({ ok: true, ...(await dangerRun(env, L, admin, body)) });
       if (p === "/api/admin/danger/simple") return out({ ok: true, text: await dangerSimple(env, L, admin, body) });
