@@ -229,7 +229,8 @@
   "K/P",
   "DB",
   "WR Deep",
-  "Slot FS Short"
+  "Slot FS Short",
+  "OS/Deep"
  ],
  "pool": [
   {
@@ -1854,9 +1855,12 @@
   {
    "id": 227,
    "name": "xptucker",
-   "pos": [],
+   "pos": [
+    "OS/Deep"
+   ],
    "discord": "1535752387044708492",
-   "avatar": "https://cdn.discordapp.com/avatars/1535752387044708492/6497cb780b0df2065a1d385b0174d176.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1535752387044708492/6497cb780b0df2065a1d385b0174d176.png?size=96",
+   "locked": true
   },
   {
    "id": 228,
