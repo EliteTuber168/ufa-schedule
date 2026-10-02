@@ -228,7 +228,8 @@
   "S",
   "K/P",
   "DB",
-  "WR Deep"
+  "WR Deep",
+  "Slot FS Short"
  ],
  "pool": [
   {
@@ -551,9 +552,12 @@
   {
    "id": 45,
    "name": "Cravy",
-   "pos": [],
+   "pos": [
+    "Slot FS Short"
+   ],
    "discord": "1518452758813081796",
-   "avatar": "https://cdn.discordapp.com/avatars/1518452758813081796/b7f3693ad785e8bf2a273c519e4c3a45.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1518452758813081796/b7f3693ad785e8bf2a273c519e4c3a45.png?size=96",
+   "locked": true
   },
   {
    "id": 46,
