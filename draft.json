@@ -340,9 +340,16 @@
   {
    "id": 14,
    "name": "Thekingofsoccer2022",
-   "pos": [],
+   "pos": [
+    "WR",
+    "CB",
+    "K/P",
+    "Deep",
+    "Short"
+   ],
    "discord": "1287214517197078578",
-   "avatar": "https://cdn.discordapp.com/avatars/1287214517197078578/9b3b6247b9b634c8e8f30b822e3f1c0d.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1287214517197078578/9b3b6247b9b634c8e8f30b822e3f1c0d.png?size=96",
+   "locked": true
   },
   {
    "id": 15,
