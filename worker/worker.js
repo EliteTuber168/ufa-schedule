@@ -753,7 +753,13 @@ async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos
         if (L.R.draftable && body.pool !== "add") await addRole(env, L, uid, L.R.draftable, "Added to the draft pool by staff").catch(() => {});   // the hourly sync keeps the pool = Draftable role
       }
       if (body.pos != null) {
-        const pos = parsePos(Array.isArray(body.pos) ? body.pos.join("/") : body.pos);
+        const pos = [];   // standard positions are normalised (HB -> RB); anything else is kept as a custom position
+        for (const raw of (Array.isArray(body.pos) ? body.pos : String(body.pos).split(/[\/,]+/))) {
+          const t = String(raw).replace(/[^\w .+\-\/]/g, "").trim().slice(0, 16); if (!t) continue;
+          const v = POS[t.toUpperCase()] || (t.toUpperCase() === "K/P" ? "K/P" : t);
+          if (!pos.includes(v)) pos.push(v);
+        }
+        pos.splice(20);
         p.pos = pos; p.locked = true;
         D.positions = D.positions || []; for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
       }
