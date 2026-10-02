@@ -715,6 +715,56 @@ async function scanDMs(env, L, page = 0) {
   return { found, more: (page + 1) * 20 < chans.length };
 }
 
+// ---------- admin: players directory ----------
+async function adminPlayers(env, L) {
+  const [M, { D }] = await Promise.all([members(env, L, true), loadDraft(env)]), H = helpers(D);
+  const draftedBy = new Map(D.picks.map((pk, n) => [pk.player, { team: H.slot(n).team, overall: n + 1 }]));
+  const byUid = new Map(D.pool.filter((p) => p.discord).map((p) => [p.discord, p]));
+  const has = (m, r) => !!r && (m.roles || []).includes(r);
+  const rows = M.map((m) => {
+    const pi = info(L, m), p = byUid.get(pi.id);
+    return { ...pi, foRole: has(m, L.R.fo), draftable: has(m, L.R.draftable), fa: has(m, L.R.fa), joined: m.joined_at || null,
+      pool: p ? { id: p.id, pos: p.pos || [], drafted: draftedBy.get(p.id) || null, rank: p.rank ?? null } : null };
+  });
+  const inServer = new Set(M.map((m) => m.user.id));
+  for (const p of D.pool) if (!p.discord || !inServer.has(p.discord))
+    rows.push({ id: p.discord || null, name: p.name, avatar: p.avatar || null, team: null, rank: null, staff: false, gone: true,
+      pool: { id: p.id, pos: p.pos || [], drafted: draftedBy.get(p.id) || null, rank: p.rank ?? null } });
+  return { rows, positions: D.positions || [], draftStatus: D.status, roles: { draftable: !!L.R.draftable, fa: !!L.R.fa } };
+}
+async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos?: "WR/CB" | [..], pool?: "add" | "remove"}
+  const uid = body.uid ? String(body.uid) : null, poolId = body.poolId != null ? +body.poolId : null;
+  const M = uid ? await members(env, L, true) : [], m = uid ? M.find((x) => x.user.id === uid) : null;
+  if (uid && !m && body.pool === "add") throw UE("They aren't in the server.");
+  if (body.pool === "add" && L.R.draftable) await addRole(env, L, uid, L.R.draftable, "Added to the draft pool by staff");
+  if (body.pool === "remove" && m && L.R.draftable) await delRole(env, L, uid, L.R.draftable, "Removed from the draft pool by staff").catch(() => {});
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { D, sha } = await loadDraft(env), H = helpers(D);
+    let p = D.pool.find((x) => (uid && x.discord === uid) || (poolId != null && x.id === poolId)), what;
+    if (body.pool === "remove") {
+      if (!p) return { ok: true, text: "Removed." };
+      if (H.taken.has(p.id)) throw UE(`${p.name} has already been drafted — undo the pick in the draft room first.`);
+      D.pool = D.pool.filter((x) => x !== p); what = `removed ${p.name} from the pool`;
+    } else {
+      if (!p) {
+        if (!m) throw UE("They aren't in the player pool or the server.");
+        p = { id: Math.max(0, ...D.pool.map((x) => x.id)) + 1, name: cleanName(display(m)) || m.user.username, pos: [], discord: uid, avatar: avatarUrl(L.guild, m) };
+        D.pool.push(p);
+        if (L.R.draftable && body.pool !== "add") await addRole(env, L, uid, L.R.draftable, "Added to the draft pool by staff").catch(() => {});   // the hourly sync keeps the pool = Draftable role
+      }
+      if (body.pos != null) {
+        const pos = parsePos(Array.isArray(body.pos) ? body.pos.join("/") : body.pos);
+        p.pos = pos; p.locked = true;
+        D.positions = D.positions || []; for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
+      }
+      what = `${p.name}: ${posTxt(p) || "no positions"}`;
+    }
+    try { await putJSON(env, "draft.json", D, sha, `Staff (${by}): ${what}`); return { ok: true, text: what, pos: p.pos || [] }; }
+    catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+  }
+  throw UE("The draft file was busy — try again.");
+}
+
 // ---------- live franchise owner list (/setownerchannel) ----------
 async function refreshOwnersBoard(env, L, force = false) {
   const b = env.VOTES ? await kget(env, "board:owners") : null;
@@ -1310,6 +1360,8 @@ async function web(req, url, env, ctx) {
         const players = D.pool.map(({ id, name, pos, avatar, discord }) => ({ id, name, pos: pos || [], avatar, discord: discord || null, taken: taken.has(id) }));
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
+      if (p === "/api/admin/players") return out(await adminPlayers(env, L));
+      if (p === "/api/admin/player") return out(await adminPlayer(env, L, body, staffSig(admin)));
       if (p === "/api/admin/autopick") return out({ ok: true, ...(await autoPick(env, { n: body.n, by: staffSig(admin) })) });   // force an auto-pick for the team on the clock
       if (p === "/api/admin/queue") {   // staff edit a team's draft queue
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
