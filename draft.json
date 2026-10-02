@@ -233,7 +233,8 @@
   "OS/Deep",
   "OS/Short",
   "Deep",
-  "Short"
+  "Short",
+  "Safety"
  ],
  "pool": [
   {
@@ -1926,9 +1927,13 @@
   {
    "id": 232,
    "name": "ZB7 Gen",
-   "pos": [],
+   "pos": [
+    "WR",
+    "Safety"
+   ],
    "discord": "1543662516868218992",
-   "avatar": "https://cdn.discordapp.com/avatars/1543662516868218992/bc7a923b89f994e24f6e4d2a9bb52cb1.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1543662516868218992/bc7a923b89f994e24f6e4d2a9bb52cb1.png?size=96",
+   "locked": true
   },
   {
    "id": 233,
