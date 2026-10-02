@@ -105,7 +105,7 @@ td input.n{width:62px}
         <section class="panel">
           <h2>Discord post</h2>
           <textarea class="mono" id="post" rows="7" aria-label="Discord post"></textarea>
-          <div class="row"><button class="btn gold" id="copy">Copy post</button><button class="btn" id="undo">↶ Undo last pick</button><span class="msg" id="rmsg"></span></div>
+          <div class="row"><button class="btn gold" id="copy">Copy post</button><button class="btn blue" id="skip" title="The team on the clock isn't around — the bot picks for them now (their queue first, then random / big board)">⏭ Skip — auto-pick now</button><button class="btn" id="undo">↶ Undo last pick</button><span class="msg" id="rmsg"></span></div>
           <h2 style="font-size:22px;margin-top:6px">Recent picks</h2>
           <div id="recent" class="note"></div>
         </section>
@@ -222,7 +222,7 @@ td input.n{width:62px}
     $("#avail").innerHTML = list.map(p=>`<div class="av"><span class="rk">${p.rank ? "#" + p.rank : ""}</span>${ava(p)}<b title="${esc(p.note||"")}">${esc(p.name)}</b>${p.tier ? `<span class="tier t${esc(p.tier)}">T${esc(p.tier)}</span>` : ""}<span class="pos">${esc(posTxt(p))}</span><button class="btn sm red" data-pick="${p.id}" ${canPick?"":"disabled"}>Draft</button></div>`).join("") || `<div class="note">No players ${D.pool.length ? "match" : "in the pool yet — add them in Player pool"}.</div>`;
     $("#apf").innerHTML = `<option value="">All positions</option>` + D.positions.map(p=>`<option ${p===apf?"selected":""}>${esc(p)}</option>`).join("");
     $("#recent").innerHTML = D.picks.slice(-8).reverse().map((p,i)=>{ const s = slot(D.picks.length-1-i); return `<div>#${s.overall} <b>${esc(team(s.team).name)}</b> — ${esc(P(p.player).name)} <span class="pos">${esc(posTxt(P(p.player)))}</span></div>`; }).join("") || "No picks yet.";
-    $("#undo").disabled = !D.picks.length;
+    $("#undo").disabled = !D.picks.length; $("#skip").disabled = !canPick;
     $("#post").value = post();
   }
   function post(){
@@ -236,6 +236,19 @@ td input.n{width:62px}
   $("#avail").addEventListener("click", e => { const b = e.target.closest("[data-pick]"); if (!b) return; const id = +b.dataset.pick, s = slot(D.picks.length), p = P(id);
     if (!confirm(`${team(s.team).name} select ${p.name}?`)) return;
     act(() => { D.picks.push({player:id, at:Date.now()}); D.clockStart = Date.now(); if (D.picks.length >= total()) D.status = "done"; }, `Pick #${s.overall}: ${s.team} select ${p.name}`); });
+  $("#skip").onclick = async () => {
+    if (dirty) return msg($("#rmsg"), "Save your other changes first.", false);
+    const n = D.picks.length, s = slot(n);
+    if (!confirm(`Skip ${team(s.team).name} and auto-pick for them now?\n\nPick #${s.overall}. The bot uses their draft queue first, otherwise ${(D.autoMode || "random") === "random" ? "a random available player" : "the best available on your big board"}.`)) return;
+    $("#skip").disabled = true; msg($("#rmsg"), "Auto-picking…");
+    try{
+      const r = await fetch("https://ufa-draft.dizzyokreal.workers.dev/api/admin/autopick", {method:"POST", headers:{Authorization:`GitHub ${TOKEN}`, "Content-Type":"application/json"}, body: JSON.stringify({n})});
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok || j.error) throw new Error(j.error || "Bot error " + r.status);
+      await fetchDraft(); renderRoom();
+      msg($("#rmsg"), j.player ? `${team(j.team).name} auto-picked ${j.player} (${j.from === "queue" ? "from their queue" : j.from}). The bot posts it in Discord shortly.` : "Draft complete.");
+    }catch(e){ msg($("#rmsg"), "Couldn't auto-pick: " + e.message, false); renderRoom(); }
+  };
   $("#undo").onclick = () => { const s = slot(D.picks.length-1), p = P(D.picks[D.picks.length-1].player); if (!confirm(`Undo pick #${s.overall} (${p.name})?`)) return;
     act(() => { D.picks.pop(); D.clockStart = Date.now(); if (D.status === "done") D.status = "live"; }, `Undo pick #${s.overall}`); };
   $("#start").onclick = () => { if (D.status === "setup" && !D.pool.length && !confirm("The player pool is empty. Start anyway?")) return; act(() => { D.status = "live"; D.clockStart = Date.now(); }, D.status === "setup" ? "Start draft" : "Restart clock"); };
