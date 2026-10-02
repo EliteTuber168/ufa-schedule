@@ -179,7 +179,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .posgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .posgrid label{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px 6px;font-weight:700;cursor:pointer;background:var(--panel2)}
 .posgrid label input{flex:none;width:16px;height:16px}
-.posgrid label{text-align:center;line-height:1.15;word-break:break-word}
+.posgrid label{text-align:center;line-height:1.15;overflow-wrap:anywhere;word-break:normal}
 .posgrid label:has(input:checked){border-color:var(--blue);background:rgba(61,123,255,.18)}
 .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
@@ -974,7 +974,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     try{ j = await bot("/api/admin/ticket?uid=" + uid); }catch(e){ if (!fresh) return ($("#chatlog").innerHTML = `<div class="msg err">${esc(e.message)}</div>`); }
     const t = j?.ticket || {ticket: "new ticket", name: p?.name, avatar: p?.avatar, team: p?.team, rank: p?.rank, status: "open"};
     $("#chathead").innerHTML = `${t.avatar ? `<img src="${esc(t.avatar)}" alt="">` : ""}<div style="flex:1;min-width:0"><b>${esc(t.name)}</b> ${t.team ? `<span class="tag">${esc(t.team)}</span>` : ""}${t.rank && t.rank !== "player" ? ` <span class="tag ${t.rank}">${RANK[t.rank]}</span>` : ""}<div class="note" style="font-family:ui-monospace,Consolas,monospace">${esc(t.ticket)} · ${t.status === "closed" ? "closed" : "open"}</div></div>
-      ${j ? `<button class="btn sm" data-tstatus="${t.status === "closed" ? "open" : "closed"}">${t.status === "closed" ? "Reopen" : "Close ticket"}</button>` : ""}<button class="btn sm" data-chatclose aria-label="Close chat">✕</button>`;
+      <button class="btn sm blue" data-toplayers title="Open this person on the Players tab (positions, pool, DMs)">Open in Players →</button>${j ? `<button class="btn sm" data-tstatus="${t.status === "closed" ? "open" : "closed"}">${t.status === "closed" ? "Reopen" : "Close ticket"}</button>` : ""}<button class="btn sm" data-chatclose aria-label="Close chat">✕</button>`;
     const tl = j?.timeline || [];
     let day = "";
     $("#chatlog").innerHTML = tl.map(m => { const d = new Date(m.ts).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}); const sep = d !== day ? `<div class="chatday">${(day = d)}</div>` : "";
@@ -986,6 +986,10 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   }
   $("#chathead").addEventListener("click", async e => {
     if (e.target.closest("[data-chatclose]")) return $("#chat").close();
+    if (e.target.closest("[data-toplayers]")){
+      $("#chat").close(); $("#plq").value = OPENT; $("#plg").value = "all"; $("#plt").value = ""; PLPOS = ""; PLLIM = 150; PLOPEN = OPENT;
+      go("players"); window.scrollTo({top: 0, behavior: "smooth"}); return;
+    }
     const b = e.target.closest("[data-tstatus]"); if (!b) return;
     const closing = b.dataset.tstatus === "closed";
     try{ await bot("/api/admin/ticket/status", {uid: OPENT, status: b.dataset.tstatus, notify: closing && confirm("Let them know the ticket is closed (sends a DM)?")}); toast(closing ? "Ticket closed." : "Ticket reopened."); await loadTickets(); openTicket(OPENT); }catch(err){ toast(err.message, false); }
@@ -1092,7 +1096,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 
   // ---------- players ----------
   const POS_ALL = ["QB","RB","WR","TE","OL","DE","LB","CB","S","K/P"];
-  let PL = null, PLSEL = new Set(), PLPOS = "", PLLIM = 150;
+  let PL = null, PLSEL = new Set(), PLPOS = "", PLLIM = 150, PLOPEN = null;
   const PL_DM = "Hey {name}, you don't have any positions set for the UFA draft yet, so franchise owners can't tell what you play. Run this in the server:\n\n/fa join positions: QB/TE\n\n(swap in your own: QB, RB, WR, TE, OL, DE, LB, CB, S, K/P). Run it again any time to change them.";
   const plKey = r => r.id || "p" + r.pool.id;
   const plPos = () => [...new Set([...POS_ALL, ...(PL?.positions || [])])];
@@ -1111,8 +1115,11 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     $("#plnote").innerHTML = `Everyone in the server, plus anyone in the draft pool. Positions are what FOs see on the board and in <b>/available</b>.${warn.length ? ` <span style="color:var(--warn)">${warn.join(" ")}</span>` : ""}`;
     $("#pldmmiss").textContent = `DM everyone missing positions (${miss.filter(r => r.id && !r.gone).length})`;
     const rc = (PL.recent || []).length; $("#plnotify").classList.toggle("hide", !rc); $("#plnotify").textContent = `DM ${rc} updated player${rc === 1 ? "" : "s"} their positions`;
-    $("#plt").innerHTML = `<option value="">All teams</option>` + D.teams.map(t => `<option value="${esc(t.abbr)}">${esc(t.name)}</option>`).join("");
+    const keepT = $("#plt").value;
+    $("#plt").innerHTML = `<option value="">All teams</option>` + D.teams.map(t => `<option value="${esc(t.abbr)}">${esc(t.name)}</option>`).join(""); $("#plt").value = keepT;
+    if (PLOPEN){ const r = R.find(x => x.id === PLOPEN); if (r && r.gone) $("#plg").value = "gone"; }
     renderPlayers();
+    if (PLOPEN){ const r = R.find(x => x.id === PLOPEN); PLOPEN = null; if (r) plEdit([r]); else toast("They're not in the server or the draft pool.", false); }
   }
   function plFiltered(){
     const q = $("#plq").value.trim().toLowerCase(), g = $("#plg").value, t = $("#plt").value, srt = $("#pls").value;
