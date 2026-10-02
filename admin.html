@@ -970,7 +970,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   const qp = id => QPL.find(p => p.id === id) || {name: "?", pos: []};
   function renderQ(){
     const q = $("#qq").value.trim().toLowerCase(), ago2 = ts => ts ? new Date(ts).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "—";
-    const pmatch = p => p.name.toLowerCase().includes(q) || (p.pos || []).join("/").toLowerCase().includes(q);
+    const pmatch = p => p.name.toLowerCase().includes(q) || (p.pos || []).join("/").toLowerCase().includes(q) || (!!p.discord && p.discord === q);
     if (QV === "teams"){
       const rows = QROWS.filter(r => !q || r.name.toLowerCase().includes(q) || r.abbr.toLowerCase() === q || (r.fo?.name || "").toLowerCase().includes(q) || r.list.some(id => pmatch(qp(id))))
         .sort((a,b) => (a.available > 0) - (b.available > 0) || a.name.localeCompare(b.name));
@@ -978,7 +978,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <td><span class="badge" style="background:${esc(r.color)};min-width:38px;height:28px;font-size:16px">${esc(r.abbr)}</span> <b>${esc(r.name)}</b>${r.inDraft ? "" : ` <span class="tag">not in draft order</span>`}</td>
         <td>${r.fo ? esc(r.fo.name) : `<span class="note">No FO</span>`}</td>
         <td>${r.available > 0 ? `<b style="color:${r.available < 3 ? "var(--warn)" : "var(--good)"}">${r.available} player${r.available === 1 ? "" : "s"}</b>${r.queued > r.available ? ` <span class="note">(${r.queued - r.available} already drafted)</span>` : ""}` : `<b style="color:var(--red)">No queue</b>`}
-          ${r.list.length ? ` <button class="btn sm" data-qopen="${r.abbr}">${open ? "Hide" : "View"}</button>` : ""}</td>
+          ${r.list.length ? ` <button class="btn sm" data-qopen="${r.abbr}">${open ? "Hide" : "View"}</button>` : ""} <button class="btn sm" data-qedit="${r.abbr}">Edit</button></td>
         <td class="note">${ago2(r.updated)}</td>
         <td>${r.fo && r.available < 3 ? `<button class="btn sm" data-qrem="${r.fo.id}">Remind</button>` : ""}</td></tr>`
         + (open ? `<tr><td colspan="5" style="background:var(--panel2)"><ol style="margin:0;padding-left:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;color:var(--fg)">${r.list.map(id => { const p = qp(id), hit = q && pmatch(p); return `<li style="${p.taken ? "text-decoration:line-through;color:var(--mute)" : ""}${hit ? ";color:var(--gold);font-weight:700" : ""}">${esc(p.name)}${p.pos?.length ? ` <span class="note">${esc(p.pos.join("/"))}</span>` : ""}${p.taken ? " <span class='note'>(drafted)</span>" : ""}</li>`; }).join("")}</ol></td></tr>` : ""); }).join("")
@@ -995,7 +995,35 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         || `<tr><td colspan="3" class="note">No players match.</td></tr>`;
     }
   }
-  $("#qbody").addEventListener("click", e => { const b = e.target.closest("[data-qopen]"); if (!b) return; QOPEN.has(b.dataset.qopen) ? QOPEN.delete(b.dataset.qopen) : QOPEN.add(b.dataset.qopen); renderQ(); });
+  function editQueue(abbr){
+    const r = QROWS.find(x => x.abbr === abbr); let list = r.list.slice();
+    const draw = () => {
+      const q = ($("#qeq")?.value || "").trim().toLowerCase();
+      const av = QPL.filter(p => !p.taken && !list.includes(p.id) && (!q || p.name.toLowerCase().includes(q) || (p.pos || []).join("/").toLowerCase().includes(q) || p.discord === q)).slice(0, 80);
+      $("#qelist").innerHTML = list.map((id, k) => { const p = qp(id); return `<div class="pl"><b style="width:22px;text-align:right">${k + 1}</b><span class="pn" style="${p.taken ? "text-decoration:line-through;color:var(--mute)" : ""}">${esc(p.name)} <span class="note">${esc((p.pos || []).join("/"))}</span></span>
+        <button class="btn sm" data-qeu="${k}" ${k ? "" : "disabled"} aria-label="Move up">↑</button><button class="btn sm" data-qed="${k}" ${k < list.length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="btn sm x" data-qer="${k}" aria-label="Remove">✕</button></div>`; }).join("") || `<div class="note">Empty queue.</div>`;
+      $("#qeav").innerHTML = av.map(p => `<div class="pl"><span class="pn">${esc(p.name)} <span class="note">${esc((p.pos || []).join("/"))}</span></span><button class="btn sm" data-qea="${p.id}">Add</button></div>`).join("")
+        || `<div class="note">${/^\d{15,20}$/.test(q) ? "Nobody with that user ID is in the draft pool — they need /fa join or the Draftable role." : "No players match."}</div>`;
+    };
+    wz.innerHTML = `<div class="row between"><h2>${esc(r.name)} queue</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="note">Editing as staff. The FO sees the change on their portal right away.</div>
+      <div class="roster" id="qelist" style="max-height:34vh"></div>
+      <input type="search" id="qeq" placeholder="Add players — search name, position or user ID…" aria-label="Search players to add">
+      <div class="roster" id="qeav" style="max-height:26vh"></div>
+      <div class="row between"><span class="msg" id="qemsg"></span><button class="btn red" id="qesave">Save queue</button></div>`;
+    draw(); $("#qeq").oninput = draw;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.dataset.qea){ list.push(+b.dataset.qea); return draw(); }
+      if (b.dataset.qeu){ const k = +b.dataset.qeu; [list[k-1], list[k]] = [list[k], list[k-1]]; return draw(); }
+      if (b.dataset.qed){ const k = +b.dataset.qed; [list[k+1], list[k]] = [list[k], list[k+1]]; return draw(); }
+      if (b.dataset.qer){ list.splice(+b.dataset.qer, 1); return draw(); }
+      if (b.id === "qesave"){ b.disabled = true; try{ await bot("/api/admin/queue", {team: abbr, ids: list}); dlg.close(); toast(`${r.name} queue saved.`); loadQueues(); }catch(err){ msg($("#qemsg"), err.message, false); b.disabled = false; } }
+    };
+    dlg.showModal();
+  }
+  $("#qbody").addEventListener("click", e => { const ed = e.target.closest("[data-qedit]"); if (ed) return editQueue(ed.dataset.qedit); const b = e.target.closest("[data-qopen]"); if (!b) return; QOPEN.has(b.dataset.qopen) ? QOPEN.delete(b.dataset.qopen) : QOPEN.add(b.dataset.qopen); renderQ(); });
   const QTEXT = "Hey {name}, you don't have a draft queue set up for the {team} yet. If you're not online when you're on the clock, the bot will pick a random player for you. Set your queue here (log in with Discord, then open the Draft queue tab): https://elitetuber168.github.io/ufa-schedule/fo.html";
   async function loadQueues(){
     $("#qbody").innerHTML = `<tr><td colspan="5" class="note">Loading…</td></tr>`;

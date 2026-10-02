@@ -87,7 +87,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <section class="panel" data-tab="sign">
       <h2>Sign free agents</h2>
       <div class="note">Players not on any team. They get a DM with Accept / Decline and have 24 hours to answer.</div>
-      <input type="search" id="fq" placeholder="Search by name…" aria-label="Search free agents">
+      <input type="search" id="fq" placeholder="Search by name or Discord user ID…" aria-label="Search free agents">
       <div class="list" id="fas"></div>
       <h2 style="font-size:22px;margin-top:6px">Pending offers</h2>
       <div class="list" id="offers"></div>
@@ -118,7 +118,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="grid2">
         <div class="panel" style="background:var(--panel2)"><div class="row" style="justify-content:space-between"><b>Your queue</b><span class="note" id="dqcount"></span></div><div class="list" id="dq"></div>
           <div class="row"><button class="btn red" id="dqsave">Save queue</button><span class="msg" id="dqmsg"></span></div></div>
-        <div class="panel" style="background:var(--panel2)"><b>Available players</b><input type="search" id="dqq" placeholder="Search players or positions…" aria-label="Search available players"><div class="list" id="dqa" style="max-height:520px;overflow:auto"></div></div>
+        <div class="panel" style="background:var(--panel2)"><b>Available players</b><input type="search" id="dqq" placeholder="Search name, position or Discord user ID…" aria-label="Search available players"><div class="note" id="dqhint"></div><div class="list" id="dqa" style="max-height:520px;overflow:auto"></div></div>
       </div>
       <div id="dqmine"></div>
     </section>
@@ -227,7 +227,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   }
   function renderFA(){
     const q = $("#fq").value.trim().toLowerCase();
-    const fa = PLAYERS.filter(p => !p.team && (!q || p.name.toLowerCase().includes(q))).sort((a,b) => a.name.localeCompare(b.name));
+    const fa = PLAYERS.filter(p => !p.team && (!q || p.name.toLowerCase().includes(q) || p.id === q)).sort((a,b) => a.name.localeCompare(b.name));
     const pend = new Set(TEAM.offers.map(o => o.uid));
     $("#fas").innerHTML = fa.slice(0, 40).map(p => card(p, pend.has(p.id) ? `<span class="tag">Offer sent</span>` : `<button class="btn sm red" data-off="${p.id}" ${FROZEN ? "disabled" : ""}>Offer</button>`)).join("")
       + (fa.length > 40 ? `<div class="note">${fa.length - 40} more — search to narrow it down.</div>` : "") || `<div class="note">No free agents match.</div>`;
@@ -299,8 +299,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <span class="acts"><button class="btn sm" data-qup="${k}" aria-label="Move up" ${k ? "" : "disabled"}>↑</button><button class="btn sm" data-qdn="${k}" aria-label="Move down" ${k < QUEUE.length - 1 ? "" : "disabled"}>↓</button><button class="btn sm" data-qrm="${k}" aria-label="Remove">✕</button></span></div>`; }).join("")
       || `<div class="note">Empty — add players from the right.</div>`;
     const q = $("#dqq").value.trim().toLowerCase();
-    const av = DQ.available.filter(p => !QUEUE.includes(p.id) && (!q || p.name.toLowerCase().includes(q) || ppos(p).toLowerCase().includes(q)));
-    $("#dqa").innerHTML = av.slice(0, 150).map(p => `<div class="p">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${p.rank ? `<span class="note">#${p.rank}</span> ` : ""}${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span><span class="acts"><button class="btn sm red" data-qadd="${p.id}">Add</button></span></div>`).join("") || `<div class="note">No players match.</div>`;
+    const av = DQ.available.filter(p => !QUEUE.includes(p.id) && (!q || p.name.toLowerCase().includes(q) || ppos(p).toLowerCase().includes(q) || (p.discord && p.discord === q)));
+    const isId = /^\d{15,20}$/.test(q);
+    $("#dqhint").innerHTML = isId && !av.length ? (QUEUE.some(id => pname(id).discord === q) ? "That player is already in your queue." : "Nobody with that user ID is in the draft pool. They need to run <b>/fa join</b> (or get the Draftable role) before they can be queued.") : "";
+    $("#dqa").innerHTML = av.slice(0, 400).map(p => `<div class="p">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${p.rank ? `<span class="note">#${p.rank}</span> ` : ""}${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span><span class="acts"><button class="btn sm red" data-qadd="${p.id}">Add</button></span></div>`).join("") || `<div class="note">No players match.</div>`;
     $("#dqsave").textContent = qDirty ? "Save queue •" : "Save queue";
     $("#dqmine").innerHTML = DQ.mine.length ? `<h2 style="font-size:22px;margin-top:8px">Your picks</h2><div class="list">${DQ.mine.map(p => `<div class="p"><span class="tag">R${p.round} P${p.pick}</span><span class="nm">${esc(p.name || "?")}</span>${p.auto ? `<span class="tag">auto</span>` : ""}</div>`).join("")}</div>` : "";
   }
