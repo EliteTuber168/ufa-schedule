@@ -362,7 +362,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     <div id="tab-spin" class="hide" style="display:flex;flex-direction:column;gap:14px">
       <div class="sub" role="tablist" id="spinsub">
         <button data-sm="team" aria-selected="true">🏈 Open team</button><button data-sm="player" aria-selected="false">👤 Random player</button><button data-sm="custom" aria-selected="false">🎡 Custom wheel</button>
-        <button data-sm="coin" aria-selected="false">🪙 Coin flip</button><button data-sm="match" aria-selected="false">⚔️ Matchups</button><button data-sm="order" aria-selected="false">🔀 Shuffle order</button><button data-sm="num" aria-selected="false">🎲 Number</button></div>
+        <button data-sm="coin" aria-selected="false">🪙 Coin flip</button><button data-sm="match" aria-selected="false">⚔️ Matchups</button><button data-sm="order" aria-selected="false">🔀 Shuffle order</button><button data-sm="num" aria-selected="false">🎲 Number</button><span style="margin-left:auto" id="sndslot"></span></div>
       <div class="spingrid">
         <div class="wheelbox" id="spinstage"></div>
         <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
@@ -1371,6 +1371,33 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
 
   // ---------- randomizer ----------
   let SM = "team", SPINNING = false, WHEEL = null, SPINWHO = null;
+  // sounds (made in the browser, no files)
+  let SND = true; try{ SND = localStorage.getItem("ufa_spin_snd") !== "0"; }catch{}
+  let AC = null, lastTick = 0;
+  const ac = () => { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === "suspended") AC.resume(); return AC; };
+  function tone(freq, dur, {type = "sine", vol = .25, at = 0, slide = 0} = {}){
+    if (!SND) return; const c = ac(), t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + .02);
+  }
+  function noise(dur, {vol = .2, at = 0, hp = 1200} = {}){
+    if (!SND) return; const c = ac(), t = c.currentTime + at, b = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); src.buffer = b; f.type = "highpass"; f.frequency.value = hp; g.gain.value = vol;
+    src.connect(f).connect(g).connect(c.destination); src.start(t);
+  }
+  const sfx = {
+    tick(){ const now = performance.now(); if (now - lastTick < 28) return; lastTick = now; tone(1700 + Math.random() * 200, .035, {type: "square", vol: .07}); noise(.02, {vol: .08, hp: 3000}); },
+    start(){ tone(220, .35, {type: "sawtooth", vol: .06, slide: 440}); },
+    win(){ [523, 659, 784, 1047].forEach((f, i) => tone(f, .22, {type: "triangle", vol: .22, at: i * .09})); tone(1568, .5, {type: "sine", vol: .12, at: .36}); noise(.35, {vol: .05, at: .36, hp: 5000}); },
+    flip(){ for (let i = 0; i < 8; i++) tone(2400 + i * 60, .03, {type: "sine", vol: .06, at: i * .1}); noise(.5, {vol: .05, hp: 4000}); },
+    ding(){ tone(1318, .6, {type: "sine", vol: .25}); tone(1976, .5, {type: "sine", vol: .1, at: .01}); },
+    blip(i = 0){ tone(440 + i * 40, .09, {type: "triangle", vol: .15}); },
+    roll(){ tone(900 + Math.random() * 500, .03, {type: "square", vol: .05}); },
+  };
+  function sndBtn(){ return `<button class="btn sm" id="spinsnd" title="Sound on/off" aria-pressed="${SND}">${SND ? "🔊 Sound on" : "🔇 Sound off"}</button>`; }
+  document.addEventListener("click", e => { const b = e.target.closest("#spinsnd"); if (!b) return; SND = !SND; try{ localStorage.setItem("ufa_spin_snd", SND ? "1" : "0"); }catch{} b.outerHTML = sndBtn(); if (SND) sfx.ding(); });
   const SPAL = ["#e8424a","#3d7bff","#ffc62f","#4fd18b","#a66bff","#ff8a3d","#22c3d6","#ff5fa2","#8bc34a","#5c6bc0"];
   const rnd = n => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; };
   const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -1378,7 +1405,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
   function addHist(kind, text){ const h = [{kind, text, ts: Date.now()}, ...loadHist()].slice(0, 40); try{ localStorage.setItem("ufa_spin", JSON.stringify(h)); }catch{} drawHist(); }
   function drawHist(){ const h = loadHist(); $("#spinhist").innerHTML = h.map(x => `<div><b>${esc(x.kind)}</b> ${esc(x.text)}<small>${ago(x.ts)}</small></div>`).join("") || `<div class="note" style="border:0">Nothing spun yet.</div>`; }
   $("#spinclr").onclick = () => { try{ localStorage.removeItem("ufa_spin"); }catch{} drawHist(); };
-  $("#spinsub").onclick = e => { const b = e.target.closest("[data-sm]"); if (!b || SPINNING) return; SM = b.dataset.sm; $$("#spinsub button").forEach(x => x.setAttribute("aria-selected", x === b)); renderSpin(); };
+  $("#spinsub").onclick = e => { if (e.target.closest("#spinsnd")) return; const b = e.target.closest("[data-sm]"); if (!b || SPINNING) return; SM = b.dataset.sm; $$("#spinsub button").forEach(x => x.setAttribute("aria-selected", x === b)); renderSpin(); };
   const copyBtn = text => `<button class="btn sm" data-copytxt="${esc(text)}">Copy for Discord</button>`;
   $("#tab-spin").addEventListener("click", async e => { const c = e.target.closest("[data-copytxt]"); if (c){ try{ await navigator.clipboard.writeText(c.dataset.copytxt); toast("Copied."); }catch{ toast("Couldn't copy.", false); } } });
 
@@ -1415,12 +1442,12 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       const start = rot, delta = target - (start % (Math.PI * 2)), dur = 4200 + rnd(1200), t0 = performance.now();
       const base = start - (start % (Math.PI * 2));
       const ease = t => 1 - Math.pow(1 - t, 4);
-      const tk = stage.querySelector("#ticker"); let last = -1;
+      const tk = stage.querySelector("#ticker"); let last = -1; sfx.start();
       (function frame(now){
         const t = Math.min(1, (now - t0) / dur); rot = base + (start % (Math.PI * 2)) + delta * ease(t); draw();
-        const u = under(); if (u !== last){ last = u; tk.textContent = items[u].label; tk.style.color = "var(--fg)"; }
+        const u = under(); if (u !== last){ if (last !== -1) sfx.tick(); last = u; tk.textContent = items[u].label; tk.style.color = "var(--fg)"; }
         if (t < 1) requestAnimationFrame(frame);
-        else { SPINNING = false; tk.style.color = "var(--gold)"; done(items[under()]); }
+        else { SPINNING = false; tk.style.color = "var(--gold)"; sfx.win(); done(items[under()]); }
       })(t0);
     }
     draw();
@@ -1429,7 +1456,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
 
   async function needPlayers(){ if (!PL){ try{ PL = await bot("/api/admin/players"); }catch(e){ toast(e.message, false); } } return PL; }
   function renderSpin(){
-    drawHist(); $("#spinres").innerHTML = ""; $("#spinres").onclick = null; $("#spinopts").onclick = null;
+    drawHist(); $("#spinres").innerHTML = ""; $("#spinres").onclick = null; $("#spinopts").onclick = null; $("#sndslot").innerHTML = sndBtn();
     const stage = $("#spinstage"), opts = $("#spinopts");
     ({team: spinTeam, player: spinPlayer, custom: spinCustom, coin: spinCoin, match: spinMatch, order: spinOrder, num: spinNum})[SM](stage, opts);
   }
@@ -1493,7 +1520,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       const r = it.r; used.add(r.id); addHist("Player", r.name + (r.pool?.pos.length ? ` (${r.pool.pos.join("/")})` : ""));
       $("#spinres").innerHTML = `<div class="result"><div class="note">WINNER</div><div class="big">${r.avatar ? `<img src="${esc(r.avatar)}" alt="">` : ""}<div>${esc(r.name)}<div class="note">${r.team ? esc(T(r.team).name) + " · " : ""}${r.pool?.pos.length ? r.pool.pos.map(esc).join(" / ") : "no positions"}</div></div></div>
         <div class="row">${r.id ? `<button class="btn" data-pdm="${r.id}">DM them</button>` : ""}${copyBtn(`🎉 Randomly picked: ${r.id ? `<@${r.id}>` : `**${r.name}**`}`)}</div></div>`;
-      $("#spcount").textContent = `${items().length} on the wheel`; setTimeout(refresh, 1200);
+      $("#spcount").textContent = `${items().length} on the wheel`; setTimeout(() => { if (SM === "player" && $("#spg")) refresh(); }, 1200);
     });
     ["#spg","#spt","#spp","#spnorep"].forEach(id => $(id).onchange = () => { refresh(); $("#spcount").textContent = `${items().length} on the wheel`; });
     $("#spcount").textContent = `${items().length} on the wheel`;
@@ -1510,7 +1537,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     const refresh = hookSpin(items, it => {
       addHist("Wheel", it.label);
       $("#spinres").innerHTML = `<div class="result"><div class="note">THE WHEEL SAYS</div><div class="big">${esc(it.label)}</div><div class="row">${copyBtn(`🎡 The wheel says: **${it.label}**`)}</div></div>`;
-      if ($("#scrm").checked){ const lines = $("#scx").value.split("\n"); const k = lines.findIndex(x => x.trim() === it.label); if (k >= 0){ lines.splice(k, 1); $("#scx").value = lines.join("\n"); save(); setTimeout(refresh, 900); } }
+      if ($("#scrm").checked){ const lines = $("#scx").value.split("\n"); const k = lines.findIndex(x => x.trim() === it.label); if (k >= 0){ lines.splice(k, 1); $("#scx").value = lines.join("\n"); save(); setTimeout(() => { if (SM === "custom" && $("#scx")) refresh(); }, 900); } }
     });
     const save = () => { try{ localStorage.setItem("ufa_spin_custom", $("#scx").value); }catch{} };
     $("#scx").oninput = () => { save(); if (!SPINNING) refresh(); };
@@ -1527,10 +1554,10 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     $("#cfgo").onclick = () => {
       if (SPINNING) return; SPINNING = true; $("#spinres").innerHTML = "";
       const heads = rnd(2) === 0, label = heads ? $("#cfh").value || "Heads" : $("#cft").value || "Tails";
-      deg += 1800 + (heads ? 0 : 180) - (deg % 360); $("#coin").style.transform = `rotateY(${deg}deg)`; $("#coin").textContent = ""; $("#ticker").textContent = "…";
+      sfx.flip(); deg += 1800 + (heads ? 0 : 180) - (deg % 360); $("#coin").style.transform = `rotateY(${deg}deg)`; $("#coin").textContent = ""; $("#ticker").textContent = "…";
       setTimeout(() => {
         SPINNING = false; $("#coin").textContent = heads ? "H" : "T"; $("#coin").style.transform = `rotateY(${deg - (heads ? 0 : 180)}deg)`; $("#ticker").textContent = label; $("#ticker").style.color = "var(--gold)";
-        heads ? h++ : tl++; $("#cfstat").textContent = `This session: ${h} heads · ${tl} tails`;
+        sfx.ding(); heads ? h++ : tl++; $("#cfstat").textContent = `This session: ${h} heads · ${tl} tails`;
         addHist("Coin", label);
         $("#spinres").innerHTML = `<div class="result"><div class="note">IT'S</div><div class="big">${esc(label)}</div><div class="row">${copyBtn(`🪙 Coin flip: **${label}**`)}</div></div>`;
       }, 950);
@@ -1555,7 +1582,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
         const bd = a => `<span class="badge" style="background:${esc(T(a).color)};min-width:40px;height:30px;font-size:16px">${esc(a)}</span>`;
         stage.innerHTML = `<div style="width:100%"><div class="pairs">${pairs.map(([a, b]) => `<div>${bd(a)}<span class="vs">vs</span>${bd(b)}</div>`).join("")}${bye ? `<div>${bd(bye)}<span class="vs">bye</span></div>` : ""}</div></div>`;
         const txt = `⚔️ **Random matchups**\n` + pairs.map(([a, b]) => `${T(a).name} vs ${T(b).name}`).join("\n") + (bye ? `\nBye: ${T(bye).name}` : "");
-        addHist("Matchups", pairs.map(p => p.join(" v ")).join(", ") + (bye ? `, bye ${bye}` : ""));
+        sfx.win(); addHist("Matchups", pairs.map(p => p.join(" v ")).join(", ") + (bye ? `, bye ${bye}` : ""));
         $("#spinres").innerHTML = `<div class="result"><div class="note">${pairs.length} GAME(S)</div><div class="row">${copyBtn(txt)}<button class="btn sm" id="mtagain">Re-roll</button></div></div>`;
         $("#mtagain").onclick = () => $("#mtgo").click();
       }
@@ -1576,10 +1603,10 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       stage.innerHTML = `<ol id="sool" style="width:100%;margin:0;padding-left:28px;display:flex;flex-direction:column;gap:6px;font-size:18px;font-weight:800"></ol>`;
       for (let i = 0; i < list.length; i++){
         const t = tByName(list[i]);
-        $("#sool").insertAdjacentHTML("beforeend", `<li style="animation:pop .35s ease">${t ? `<span class="badge" style="background:${esc(t.color)};min-width:40px;height:28px;font-size:15px;vertical-align:middle">${esc(t.abbr)}</span> ` : ""}${esc(list[i])}</li>`);
+        sfx.blip(i % 12); $("#sool").insertAdjacentHTML("beforeend", `<li style="animation:pop .35s ease">${t ? `<span class="badge" style="background:${esc(t.color)};min-width:40px;height:28px;font-size:15px;vertical-align:middle">${esc(t.abbr)}</span> ` : ""}${esc(list[i])}</li>`);
         if ($("#soslow").checked) await new Promise(r => setTimeout(r, Math.max(180, 1400 / list.length * 2)));
       }
-      SPINNING = false; addHist("Order", list.join(" → "));
+      SPINNING = false; sfx.win(); addHist("Order", list.join(" → "));
       $("#spinres").innerHTML = `<div class="result"><div class="note">FINAL ORDER</div><div class="row">${copyBtn("🔀 **Order**\n" + list.map((x, i) => `${i + 1}. ${x}`).join("\n"))}</div></div>`;
     };
   }
@@ -1595,7 +1622,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     $("#nmgo").onclick = () => {
       if (SPINNING) return; let a = parseInt($("#nmin").value), z = parseInt($("#nmax").value); if (isNaN(a) || isNaN(z)) return; if (a > z) [a, z] = [z, a];
       SPINNING = true; $("#spinres").innerHTML = ""; const n = a + rnd(z - a + 1); let k = 0;
-      const iv = setInterval(() => { $("#bn").textContent = a + rnd(z - a + 1); if (++k > 18){ clearInterval(iv); $("#bn").textContent = n; SPINNING = false; addHist("Number", `${n} (${a}–${z})`);
+      const iv = setInterval(() => { $("#bn").textContent = a + rnd(z - a + 1); sfx.roll(); if (++k > 18){ clearInterval(iv); $("#bn").textContent = n; SPINNING = false; sfx.win(); addHist("Number", `${n} (${a}–${z})`);
         $("#spinres").innerHTML = `<div class="result"><div class="note">ROLLED ${a}–${z}</div><div class="big">${n}</div><div class="row">${copyBtn(`🎲 Rolled **${n}** (${a}–${z})`)}</div></div>`; } }, 60);
     };
   }
