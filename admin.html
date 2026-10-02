@@ -1238,20 +1238,32 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     dlg.showModal();
   }
   $("#plnotify").onclick = () => {
-    const list = PL?.recent || []; if (!list.length) return toast("Nobody to tell.");
-    wz.innerHTML = `<div class="row between"><h2>Tell ${list.length} player${list.length === 1 ? "" : "s"} their new positions</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
-      <div class="note">Everyone whose positions staff changed in the last 7 days and who hasn't been DMed about it yet.</div>
-      <div class="tscroll" style="max-height:260px;overflow:auto"><table><tbody>${list.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${r.pos.length ? r.pos.map(p => `<span class="pp">${esc(p)}</span>`).join("") : `<span class="pp none">none</span>`}</td><td class="note">${ago(r.at)}</td></tr>`).join("")}</tbody></table></div>
+    let list = (PL?.recent || []).slice(); if (!list.length) return toast("Nobody to tell.");
+    const drawList = () => {
+      $("#plnlist").innerHTML = list.map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${r.pos.length ? r.pos.map(p => `<span class="pp">${esc(p)}</span>`).join("") : `<span class="pp none">none</span>`}</td><td class="note">${ago(r.at)}</td><td style="text-align:right"><button class="btn sm x" data-plnrm="${r.poolId}" title="Don't DM them — take them off this list" aria-label="Remove ${esc(r.name)}">🗑</button></td></tr>`).join("") || `<tr><td class="note">Nobody left on the list.</td></tr>`;
+      $("#plnh").textContent = `Tell ${list.length} player${list.length === 1 ? "" : "s"} their new positions`;
+      $("#plngo").textContent = `Send ${list.length} DM${list.length === 1 ? "" : "s"}`; $("#plngo").disabled = !list.length;
+    };
+    wz.innerHTML = `<div class="row between"><h2 id="plnh"></h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="note">Everyone whose positions staff changed in the last 7 days and who hasn't been DMed about it yet. 🗑 takes someone off the list without DMing them (they only come back if their positions change again).</div>
+      <div class="tscroll" style="max-height:300px;overflow:auto"><table><tbody id="plnlist"></tbody></table></div>
       <div class="dmprev" style="white-space:pre-wrap"><div class="emb">Staff updated your positions for the UFA draft.
 
 <b>Your positions: WR / CB</b>
 
 This is what franchise owners see when they draft. If it's wrong, hit <b>Reply to staff</b> below (or DM a staff member) and we'll fix it.</div><small>Each person sees their own positions. Replies come in as tickets.</small></div>
       <div class="bar hide" id="plnbar"><i style="width:0"></i></div><span class="msg" id="plnmsg"></span>
-      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="plngo">Send ${list.length} DM${list.length === 1 ? "" : "s"}</button></div>`;
+      <div class="row between"><button class="btn" data-close>Close</button><button class="btn red" id="plngo"></button></div>`;
+    drawList();
     wz.onclick = async e => {
       const b = e.target.closest("button"); if (!b || b.disabled) return;
-      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.hasAttribute("data-close")){ dlg.close(); return loadPlayers(); }
+      if (b.dataset.plnrm){
+        const id = +b.dataset.plnrm; b.disabled = true;
+        try{ await bot("/api/admin/notifypos", {ids: [id], silent: true}); list = list.filter(r => r.poolId !== id); PL.recent = (PL.recent || []).filter(r => r.poolId !== id); drawList(); }
+        catch(err){ msg($("#plnmsg"), err.message, false); b.disabled = false; }
+        return;
+      }
       if (b.id !== "plngo") return;
       b.disabled = true; $("#plnbar").classList.remove("hide");
       let sent = 0, failed = [];
