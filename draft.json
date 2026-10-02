@@ -902,9 +902,13 @@
   {
    "id": 94,
    "name": "Ihyphilly",
-   "pos": [],
+   "pos": [
+    "WR",
+    "DB"
+   ],
    "discord": "1036314757864632401",
-   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/a_8d8e2a369f6bc1bfe5a9e7536c2ac8b6.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/a_8d8e2a369f6bc1bfe5a9e7536c2ac8b6.png?size=96",
+   "locked": true
   },
   {
    "id": 95,
