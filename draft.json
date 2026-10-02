@@ -1947,9 +1947,15 @@
   {
    "id": 240,
    "name": "Ziondagoat",
-   "pos": [],
+   "pos": [
+    "TE",
+    "DE"
+   ],
    "discord": "1552786787175370833",
-   "avatar": "https://cdn.discordapp.com/avatars/1552786787175370833/6c5996770c985bcd6e5b68131ff2ba04.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1552786787175370833/6c5996770c985bcd6e5b68131ff2ba04.png?size=96",
+   "locked": true,
+   "posAt": 1790981053882,
+   "posNotified": 1790981053882
   },
   {
    "id": 241,
