@@ -26,6 +26,7 @@ cmds = [
          "options": [{"type": STR, "name": "positions", "description": "Positions you play, e.g. WR/CB", "required": True}]},
         {"type": SUB, "name": "leave", "description": "Take yourself out of the player pool"}]},
     {"name": "franchises", "description": "Every franchise, its roster count and owner"},
+    {"name": "setownerchannel", "description": "Post the franchise owner list in this channel and keep it updated automatically (staff)"},
     {"name": "offer", "description": "Offer a free agent a spot on your team (FO / GM / HC)", "options": [user("player", "The free agent to sign")]},
     {"name": "offers", "description": "See and answer contract offers sent to you"},
     {"name": "release", "description": "Release a player from your team (FO / GM)", "options": [user("player", "Player to release")]},
