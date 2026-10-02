@@ -1799,9 +1799,15 @@
   {
    "id": 223,
    "name": "Kxy7",
-   "pos": [],
+   "pos": [
+    "QB",
+    "WR"
+   ],
    "discord": "1531233080826658953",
-   "avatar": "https://cdn.discordapp.com/avatars/1531233080826658953/57c0efedd324c39e0af0c88f0f1280e2.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1531233080826658953/57c0efedd324c39e0af0c88f0f1280e2.png?size=96",
+   "locked": true,
+   "posAt": 1790978351433,
+   "posNotified": 1790978351433
   },
   {
    "id": 224,
