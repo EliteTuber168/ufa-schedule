@@ -231,7 +231,9 @@
   "WR Deep",
   "Slot FS Short",
   "OS/Deep",
-  "OS/Short"
+  "OS/Short",
+  "Deep",
+  "Short"
  ],
  "pool": [
   {
@@ -283,9 +285,15 @@
   {
    "id": 7,
    "name": "Fw_chase98",
-   "pos": [],
+   "pos": [
+    "WR",
+    "Deep",
+    "Short",
+    "S"
+   ],
    "discord": "824080057097125928",
-   "avatar": "https://cdn.discordapp.com/avatars/824080057097125928/5eafa70ca9544246122e0bce7807e94f.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/824080057097125928/5eafa70ca9544246122e0bce7807e94f.png?size=96",
+   "locked": true
   },
   {
    "id": 8,
