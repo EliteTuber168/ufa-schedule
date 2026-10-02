@@ -28,7 +28,11 @@ const RANK = { fo: "Franchise Owner", gm: "General Manager", hc: "Head Coach", p
 
 export default {
   // runs every minute (wrangler.toml [triggers]) — auto-picks when the clock runs out
-  async scheduled(event, env, ctx) { ctx.waitUntil(autoPick(env).catch((e) => console.log("autopick:", e.message))); },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(autoPick(env).catch((e) => console.log("autopick:", e.message)));
+    // every 10 minutes, catch roster changes made by hand in Discord (role edits, draft roles) for the live owner list
+    if (new Date().getUTCMinutes() % 2 === 0) ctx.waitUntil(refreshOwnersBoard(env).catch((e) => console.log("owners board:", e.message)));
+  },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return web(req, url, env, ctx);
@@ -257,6 +261,7 @@ async function logTx(env, L, { title, desc, color, teams = [], lines = [] }) {
       footer: { text: "UFA League" }, timestamp: new Date(ts).toISOString() }] }).catch(() => {});
   }
   if (env.VOTES) await kput(env, `tx:${String(9e12 - ts).padStart(13, "0")}`, { title, desc: [desc, ...lines].join("\n"), teams, ts }, 90 * 86400).catch(() => {});
+  await refreshOwnersBoard(env, L).catch(() => {});   // keep the live franchise list in sync
 }
 const capLine = (L, n) => `🔋 Roster Cap · \`${n}/${cap(L)}\``;
 const cap = (L) => Number(L.settings.rosterCap) || 25;
@@ -703,6 +708,36 @@ async function scanDMs(env, L, page = 0) {
   return { found, more: (page + 1) * 20 < chans.length };
 }
 
+// ---------- live franchise owner list (/setownerchannel) ----------
+async function refreshOwnersBoard(env, L, force = false) {
+  const b = env.VOTES ? await kget(env, "board:owners") : null;
+  if (!b) return null;
+  L = L || await league(env);
+  const embeds = await franchisesEmbeds(env, L);
+  const sig = await sha256(JSON.stringify(embeds.map((e) => [e.title, e.description])));
+  if (!force && sig === b.sig) return b;
+  const last = embeds[embeds.length - 1];
+  last.footer = { text: `${last.footer?.text || "UFA League"} · Updates automatically` }; last.timestamp = new Date().toISOString();
+  try { await discord(env, "PATCH", `/channels/${b.ch}/messages/${b.id}`, { embeds, allowed_mentions: { parse: [] } }); }
+  catch (e) { if (e.status === 404) { await KV(env).delete("board:owners"); return null; } throw e; }   // message deleted = board turned off
+  b.sig = sig; b.updated = Date.now(); await kput(env, "board:owners", b, 3650 * 86400);
+  return b;
+}
+async function setOwnerChannel(env, i) {
+  const L = await league(env);
+  if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return "Only staff can do this.";
+  const old = await kget(env, "board:owners");
+  const embeds = await franchisesEmbeds(env, L), last = embeds[embeds.length - 1];
+  last.footer = { text: `${last.footer?.text || "UFA League"} · Updates automatically` }; last.timestamp = new Date().toISOString();
+  let msg;
+  try { msg = await discord(env, "POST", `/channels/${i.channel_id}/messages`, { embeds, allowed_mentions: { parse: [] } }); }
+  catch (e) { return "⚠️ I can't post in this channel — give the bot Send Messages + Embed Links here."; }
+  if (old && !(old.ch === i.channel_id && old.id === msg.id)) await discord(env, "DELETE", `/channels/${old.ch}/messages/${old.id}`).catch(() => {});
+  const sig = await sha256(JSON.stringify(embeds.map((e) => [e.title, e.description])));
+  await kput(env, "board:owners", { ch: i.channel_id, id: msg.id, sig, updated: Date.now(), by: uidOf(i) }, 3650 * 86400);
+  return `✅ The franchise owner list is now pinned in <#${i.channel_id}> and updates itself whenever FOs, rosters or teams change. ${old ? "The old list was removed." : ""} Delete the message to turn it off.`;
+}
+
 // ---------- franchises ----------
 async function franchisesEmbeds(env, L) {
   const M = await members(env, L, true);
@@ -733,6 +768,7 @@ async function command(i, env, ctx) {
     case "schedule": return await schedule(i, env);
     case "roster": return later(i, ctx, () => roster(i, env), false);
     case "franchises": return later(i, ctx, async () => ({ embeds: await franchisesEmbeds(env, await league(env)) }), false);
+    case "setownerchannel": return later(i, ctx, () => setOwnerChannel(env, i));
     case "activity": return await activity(i, env);
     case "fa":
       if (sub?.name === "list") return await faList(sub, env);
