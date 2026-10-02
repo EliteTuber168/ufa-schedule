@@ -181,6 +181,28 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .posgrid label input{flex:none;width:16px;height:16px}
 .posgrid label{text-align:center;line-height:1.15;overflow-wrap:anywhere;word-break:normal}
 .posgrid label:has(input:checked){border-color:var(--blue);background:rgba(61,123,255,.18)}
+.spingrid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.spingrid{grid-template-columns:1fr}}
+.wheelbox{position:relative;background:radial-gradient(circle at 50% 45%,var(--panel2),var(--panel) 70%);border:1px solid var(--line);border-radius:18px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.wheelwrap{position:relative;width:min(100%,440px);aspect-ratio:1}
+.wheelwrap canvas{width:100%;height:100%;display:block;filter:drop-shadow(0 10px 30px rgba(0,0,0,.45))}
+.wheelwrap .ptr{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-top:30px solid var(--gold);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));z-index:2}
+.wheelwrap .hub{position:absolute;left:50%;top:50%;width:84px;height:84px;transform:translate(-50%,-50%);border-radius:50%;background:var(--bg);border:3px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--num);font-size:22px;letter-spacing:.06em;color:var(--gold);cursor:pointer;user-select:none;box-shadow:0 0 0 6px rgba(0,0,0,.35)}
+.wheelwrap .hub:hover{background:var(--panel3)}
+.ticker{min-height:30px;font-weight:800;font-size:18px;letter-spacing:.04em;color:var(--mute);text-align:center}
+.coin{width:180px;height:180px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--num);font-size:40px;letter-spacing:.06em;color:#1a1300;background:radial-gradient(circle at 35% 30%,#fff3b0,var(--gold) 55%,#b8860b);border:6px solid #e0a800;box-shadow:0 12px 30px rgba(0,0,0,.5),inset 0 -6px 12px rgba(0,0,0,.25);transition:transform .9s cubic-bezier(.2,.8,.2,1)}
+.bignum{font-family:var(--num);font-size:110px;line-height:1;color:var(--gold);letter-spacing:.04em;min-height:110px}
+.result{border:1px solid var(--gold);background:rgba(255,198,47,.08);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;animation:pop .35s ease}
+.result .big{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:800}
+.result .big .badge{min-width:56px;height:44px;font-size:24px}
+.result .big img{width:44px;height:44px;border-radius:50%}
+@keyframes pop{from{transform:scale(.96);opacity:0}to{transform:none;opacity:1}}
+.hist{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.hist div{display:flex;gap:8px;align-items:baseline;font-size:14px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.hist small{color:var(--mute);font-size:12px;margin-left:auto;white-space:nowrap}
+.pairs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.pairs div{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:700}
+.pairs .vs{color:var(--mute);font-size:12px}
 .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
 <div class="wrap">
@@ -210,6 +232,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
       <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
+      <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
       <button role="tab" data-tab="tx" aria-selected="false">Transactions</button>
@@ -334,6 +357,20 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <div class="bulkbar hide" id="plbulk"><b id="plsel"></b><button class="btn sm blue" id="plbdm">DM selected</button><button class="btn sm" id="plbpos">Set positions…</button><button class="btn sm" id="plbadd">Add to draft pool</button><button class="btn sm" id="plbclr">Clear selection</button><span class="msg" id="plbmsg"></span></div>
       <div class="tscroll"><table class="plist" style="min-width:720px"><thead><tr><th style="width:32px"><input type="checkbox" id="plall" aria-label="Select all shown"></th><th>Player</th><th>Team</th><th>Positions</th><th>Status</th><th></th></tr></thead><tbody id="plbody"></tbody></table></div>
       <div class="row between"><span class="note" id="plcount"></span><button class="btn sm hide" id="plmore">Show more</button></div>
+    </div>
+
+    <div id="tab-spin" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="sub" role="tablist" id="spinsub">
+        <button data-sm="team" aria-selected="true">🏈 Open team</button><button data-sm="player" aria-selected="false">👤 Random player</button><button data-sm="custom" aria-selected="false">🎡 Custom wheel</button>
+        <button data-sm="coin" aria-selected="false">🪙 Coin flip</button><button data-sm="match" aria-selected="false">⚔️ Matchups</button><button data-sm="order" aria-selected="false">🔀 Shuffle order</button><button data-sm="num" aria-selected="false">🎲 Number</button></div>
+      <div class="spingrid">
+        <div class="wheelbox" id="spinstage"></div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <section class="panel" id="spinopts"></section>
+          <div id="spinres"></div>
+          <section class="panel"><div class="row between"><h2 style="font-size:22px">History</h2><button class="btn sm" id="spinclr">Clear</button></div><div class="hist" id="spinhist"></div></section>
+        </div>
+      </div>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -551,8 +588,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","spin","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -1331,6 +1368,237 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     const csv = ["Name,User ID,Team,Role,Positions,In pool,Drafted,Free agent,Staff"].concat(rows.map(r => [r.name, r.id, r.team ? T(r.team).name : "", r.rank ? RANK[r.rank] : "", r.pool?.pos.join("/") || "", r.pool ? "yes" : "", r.pool?.drafted ? `#${r.pool.drafted.overall} ${T(r.pool.drafted.team).abbr}` : "", r.fa ? "yes" : "", r.staff ? "yes" : ""].map(q).join(","))).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"})); a.download = `ufa-players-${new Date().toISOString().slice(0,10)}.csv`; a.click();
   };
+
+  // ---------- randomizer ----------
+  let SM = "team", SPINNING = false, WHEEL = null, SPINWHO = null;
+  const SPAL = ["#e8424a","#3d7bff","#ffc62f","#4fd18b","#a66bff","#ff8a3d","#22c3d6","#ff5fa2","#8bc34a","#5c6bc0"];
+  const rnd = n => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; };
+  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const loadHist = () => { try{ return JSON.parse(localStorage.getItem("ufa_spin") || "[]"); }catch{ return []; } };
+  function addHist(kind, text){ const h = [{kind, text, ts: Date.now()}, ...loadHist()].slice(0, 40); try{ localStorage.setItem("ufa_spin", JSON.stringify(h)); }catch{} drawHist(); }
+  function drawHist(){ const h = loadHist(); $("#spinhist").innerHTML = h.map(x => `<div><b>${esc(x.kind)}</b> ${esc(x.text)}<small>${ago(x.ts)}</small></div>`).join("") || `<div class="note" style="border:0">Nothing spun yet.</div>`; }
+  $("#spinclr").onclick = () => { try{ localStorage.removeItem("ufa_spin"); }catch{} drawHist(); };
+  $("#spinsub").onclick = e => { const b = e.target.closest("[data-sm]"); if (!b || SPINNING) return; SM = b.dataset.sm; $$("#spinsub button").forEach(x => x.setAttribute("aria-selected", x === b)); renderSpin(); };
+  const copyBtn = text => `<button class="btn sm" data-copytxt="${esc(text)}">Copy for Discord</button>`;
+  $("#tab-spin").addEventListener("click", async e => { const c = e.target.closest("[data-copytxt]"); if (c){ try{ await navigator.clipboard.writeText(c.dataset.copytxt); toast("Copied."); }catch{ toast("Couldn't copy.", false); } } });
+
+  // a spinning wheel on a canvas: items [{label, color, sub?}], calls done(item)
+  function makeWheel(stage, items){
+    stage.innerHTML = `<div class="wheelwrap"><div class="ptr"></div><canvas width="880" height="880"></canvas><div class="hub" role="button" tabindex="0" aria-label="Spin">SPIN</div></div><div class="ticker" id="ticker">${items.length ? `${items.length} on the wheel` : ""}</div>`;
+    const cv = stage.querySelector("canvas"), ctx = cv.getContext("2d"), R = 430, C = 440;
+    let rot = 0;
+    const n = () => items.length, seg = () => Math.PI * 2 / Math.max(1, n());
+    function draw(){
+      ctx.clearRect(0, 0, 880, 880);
+      if (!n()){ ctx.fillStyle = "#141d33"; ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#93a0bf"; ctx.font = "700 34px system-ui"; ctx.textAlign = "center"; ctx.fillText("Nothing to spin", C, C + 120); return; }
+      const sg = seg(), labels = n() <= 40, fs = Math.max(16, Math.min(34, 520 / n() + 12));
+      for (let i = 0; i < n(); i++){
+        const a0 = rot + i * sg - Math.PI / 2, it = items[i];
+        ctx.beginPath(); ctx.moveTo(C, C); ctx.arc(C, C, R, a0, a0 + sg); ctx.closePath();
+        ctx.fillStyle = it.color || SPAL[i % SPAL.length]; ctx.fill();
+        if (n() <= 120){ ctx.strokeStyle = "rgba(7,11,22,.55)"; ctx.lineWidth = n() > 60 ? 1 : 3; ctx.stroke(); }
+        if (labels){
+          ctx.save(); ctx.translate(C, C); ctx.rotate(a0 + sg / 2); ctx.textAlign = "right"; ctx.textBaseline = "middle";
+          ctx.font = `800 ${fs}px system-ui, sans-serif`; ctx.fillStyle = "#fff"; ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 4;
+          let t = String(it.label); while (ctx.measureText(t).width > R - 120 && t.length > 3) t = t.slice(0, -2) + "…";
+          ctx.fillText(t, R - 22, 0); ctx.restore();
+        }
+      }
+      ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2); ctx.lineWidth = 10; ctx.strokeStyle = "#ffc62f"; ctx.stroke();
+    }
+    const under = () => { const sg = seg(); const a = ((-rot) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2); return Math.floor(a / sg) % n(); };
+    function spin(done){
+      if (SPINNING || !n()) return; SPINNING = true;
+      const win = rnd(n()), sg = seg(), turns = 6 + rnd(4);
+      const jitter = (rnd(1000) / 1000 * 0.7 + 0.15) * sg;               // land somewhere inside the slice, not on a line
+      const target = -(win * sg + jitter) - turns * Math.PI * 2;
+      const start = rot, delta = target - (start % (Math.PI * 2)), dur = 4200 + rnd(1200), t0 = performance.now();
+      const base = start - (start % (Math.PI * 2));
+      const ease = t => 1 - Math.pow(1 - t, 4);
+      const tk = stage.querySelector("#ticker"); let last = -1;
+      (function frame(now){
+        const t = Math.min(1, (now - t0) / dur); rot = base + (start % (Math.PI * 2)) + delta * ease(t); draw();
+        const u = under(); if (u !== last){ last = u; tk.textContent = items[u].label; tk.style.color = "var(--fg)"; }
+        if (t < 1) requestAnimationFrame(frame);
+        else { SPINNING = false; tk.style.color = "var(--gold)"; done(items[under()]); }
+      })(t0);
+    }
+    draw();
+    return { spin, set(list){ items = list; rot = 0; draw(); stage.querySelector("#ticker").textContent = items.length ? `${items.length} on the wheel` : ""; }, hub: stage.querySelector(".hub") };
+  }
+
+  async function needPlayers(){ if (!PL){ try{ PL = await bot("/api/admin/players"); }catch(e){ toast(e.message, false); } } return PL; }
+  function renderSpin(){
+    drawHist(); $("#spinres").innerHTML = ""; $("#spinres").onclick = null; $("#spinopts").onclick = null;
+    const stage = $("#spinstage"), opts = $("#spinopts");
+    ({team: spinTeam, player: spinPlayer, custom: spinCustom, coin: spinCoin, match: spinMatch, order: spinOrder, num: spinNum})[SM](stage, opts);
+  }
+  function hookSpin(itemsFn, onWin){
+    const items = itemsFn(); WHEEL = makeWheel($("#spinstage"), items);
+    const go = () => { if (SPINNING) return; $("#spinres").innerHTML = ""; WHEEL.spin(onWin); };
+    WHEEL.hub.onclick = go; WHEEL.hub.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); go(); } };
+    $("#spinbtn") && ($("#spinbtn").onclick = go);
+    return () => WHEEL.set(itemsFn());
+  }
+
+  // open team -> make someone FO
+  function spinTeam(stage, opts){
+    opts.innerHTML = `<h2 style="font-size:24px">Spin an open team</h2>
+      <div class="note">Every team without a franchise owner goes on the wheel. Pick who it's for first (optional), spin, then make them FO in one click.</div>
+      <label class="f" style="flex:none">Who's it for? <input type="search" id="stwho" placeholder="Search a Discord name… (optional)" autocomplete="off" list="stwholist"></label>
+      <datalist id="stwholist">${members().filter(m => m.rank !== "fo").sort((a,b) => a.name.localeCompare(b.name)).map(m => `<option value="${esc(m.name)}">`).join("")}</datalist>
+      <div class="row"><label class="c"><input type="checkbox" id="stall"> Include teams that already have an FO</label></div>
+      <div class="pchips" id="stexcl"></div>
+      <div class="row"><button class="btn gold" id="spinbtn">Spin</button><span class="note" id="stcount"></span></div>
+      ${LIVE ? "" : `<div class="msg err">The bot isn't reachable — FO info may be missing.</div>`}`;
+    const EX = new Set();
+    const items = () => D.teams.filter(t => ($("#stall").checked || !foOf(t.abbr)) && !EX.has(t.abbr)).map(t => ({label: t.name.split(" ").pop(), color: t.color, abbr: t.abbr}));
+    const chips = () => { const pool = D.teams.filter(t => $("#stall").checked || !foOf(t.abbr)); $("#stexcl").innerHTML = pool.length ? `<span class="note" style="width:100%">Click a team to leave it off the wheel:</span>` + pool.map(t => `<button data-ex="${t.abbr}" aria-pressed="${!EX.has(t.abbr)}">${esc(t.abbr)}</button>`).join("") : `<span class="note">Every team has an FO.</span>`; $("#stcount").textContent = `${items().length} team(s) on the wheel`; };
+    const refresh = hookSpin(items, it => {
+      const t = T(it.abbr), who = members().find(m => m.name.toLowerCase() === $("#stwho").value.trim().toLowerCase());
+      const fo = foOf(t.abbr), txt = `${who ? who.name + " → " : ""}${t.name}`;
+      addHist("Team", txt);
+      $("#spinres").innerHTML = `<div class="result"><div class="note">THE WHEEL SAYS</div><div class="big"><span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span>${esc(t.name)}</div>
+        ${fo ? `<div class="warnbox">Heads up: ${esc(fo.name)} is already their FO.</div>` : ""}
+        <div class="row">${who ? `<button class="btn red" data-mkfo="${t.abbr}" data-uid="${who.id}">Make ${esc(who.name)} FO of the ${esc(t.name)}</button>` : `<button class="btn red" data-mkfo="${t.abbr}">Assign an FO…</button>`}
+        <button class="btn" data-ex2="${t.abbr}">Take it off the wheel</button>${copyBtn(`🎡 The wheel has spoken${who ? ` — <@${who.id}>` : ""}: **${t.name}**`)}</div></div>`;
+    });
+    $("#stall").onchange = () => { chips(); refresh(); };
+    $("#stexcl").onclick = e => { const b = e.target.closest("[data-ex]"); if (!b || SPINNING) return; EX.has(b.dataset.ex) ? EX.delete(b.dataset.ex) : EX.add(b.dataset.ex); chips(); refresh(); };
+    $("#spinres").onclick = e => {
+      const m = e.target.closest("[data-mkfo]"); if (m) return wizard("fo", m.dataset.uid ? {team: m.dataset.mkfo, uid: m.dataset.uid} : {team: m.dataset.mkfo});
+      const x = e.target.closest("[data-ex2]"); if (x){ EX.add(x.dataset.ex2); chips(); refresh(); $("#spinres").innerHTML = ""; }
+    };
+    chips();
+  }
+
+  // random player from the pool / free agents
+  async function spinPlayer(stage, opts){
+    opts.innerHTML = `<h2 style="font-size:24px">Random player</h2><div class="note">Giveaways, random MVP, who goes first… pick who's eligible and spin.</div>
+      <div class="filters"><select id="spg"><option value="avail">Draft pool — not drafted</option><option value="pool">Whole draft pool</option><option value="fa">Free agents</option><option value="team">Players on a team</option><option value="all">Everyone in the server</option></select>
+        <select id="spt"><option value="">Any team</option>${D.teams.map(t => `<option value="${t.abbr}">${esc(t.name)}</option>`).join("")}</select>
+        <select id="spp"><option value="">Any position</option></select></div>
+      <label class="c"><input type="checkbox" id="spnorep" checked> Don't pick the same person twice this session</label>
+      <div class="row"><button class="btn gold" id="spinbtn">Spin</button><span class="note" id="spcount">Loading players…</span></div>`;
+    stage.innerHTML = `<div class="note">Loading players…</div>`;
+    await needPlayers(); if (!PL) return;
+    $("#spp").innerHTML = `<option value="">Any position</option>` + plPos().map(p => `<option>${esc(p)}</option>`).join("");
+    const used = new Set();
+    const items = () => {
+      const g = $("#spg").value, t = $("#spt").value, ps = $("#spp").value;
+      const test = {avail: r => r.pool && !r.pool.drafted, pool: r => r.pool, fa: r => r.fa || (!r.team && !r.pool && !r.gone), team: r => r.team, all: r => !r.gone}[g];
+      return PL.rows.filter(r => test(r) && !r.gone && (!t || r.team === t) && (!ps || r.pool?.pos.includes(ps)) && !($("#spnorep").checked && used.has(r.id))).map((r, i) => ({label: r.name, r}));
+    };
+    const refresh = hookSpin(items, it => {
+      const r = it.r; used.add(r.id); addHist("Player", r.name + (r.pool?.pos.length ? ` (${r.pool.pos.join("/")})` : ""));
+      $("#spinres").innerHTML = `<div class="result"><div class="note">WINNER</div><div class="big">${r.avatar ? `<img src="${esc(r.avatar)}" alt="">` : ""}<div>${esc(r.name)}<div class="note">${r.team ? esc(T(r.team).name) + " · " : ""}${r.pool?.pos.length ? r.pool.pos.map(esc).join(" / ") : "no positions"}</div></div></div>
+        <div class="row">${r.id ? `<button class="btn" data-pdm="${r.id}">DM them</button>` : ""}${copyBtn(`🎉 Randomly picked: ${r.id ? `<@${r.id}>` : `**${r.name}**`}`)}</div></div>`;
+      $("#spcount").textContent = `${items().length} on the wheel`; setTimeout(refresh, 1200);
+    });
+    ["#spg","#spt","#spp","#spnorep"].forEach(id => $(id).onchange = () => { refresh(); $("#spcount").textContent = `${items().length} on the wheel`; });
+    $("#spcount").textContent = `${items().length} on the wheel`;
+    $("#spinres").onclick = e => { const d = e.target.closest("[data-pdm]"); if (d) plDM([d.dataset.pdm], ""); };
+  }
+
+  // custom wheel
+  function spinCustom(stage, opts){
+    let saved = ""; try{ saved = localStorage.getItem("ufa_spin_custom") || ""; }catch{}
+    opts.innerHTML = `<h2 style="font-size:24px">Custom wheel</h2><div class="note">One option per line. Saved on this computer.</div>
+      <textarea id="scx" rows="8" style="width:100%;font:inherit;font-size:15px;font-weight:600;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px" placeholder="Double XP week&#10;Rematch&#10;No passing plays&#10;…">${esc(saved || "Rematch\nHome team picks\nAway team picks\nBest of 3\nSudden death\nNo kicks")}</textarea>
+      <div class="row"><button class="btn gold" id="spinbtn">Spin</button><label class="c"><input type="checkbox" id="scrm"> Remove the winner after each spin</label><button class="btn sm" id="scmix">Shuffle list</button></div>`;
+    const items = () => $("#scx").value.split("\n").map(x => x.trim()).filter(Boolean).map(l => ({label: l}));
+    const refresh = hookSpin(items, it => {
+      addHist("Wheel", it.label);
+      $("#spinres").innerHTML = `<div class="result"><div class="note">THE WHEEL SAYS</div><div class="big">${esc(it.label)}</div><div class="row">${copyBtn(`🎡 The wheel says: **${it.label}**`)}</div></div>`;
+      if ($("#scrm").checked){ const lines = $("#scx").value.split("\n"); const k = lines.findIndex(x => x.trim() === it.label); if (k >= 0){ lines.splice(k, 1); $("#scx").value = lines.join("\n"); save(); setTimeout(refresh, 900); } }
+    });
+    const save = () => { try{ localStorage.setItem("ufa_spin_custom", $("#scx").value); }catch{} };
+    $("#scx").oninput = () => { save(); if (!SPINNING) refresh(); };
+    $("#scmix").onclick = () => { $("#scx").value = shuffle(items().map(x => x.label)).join("\n"); save(); refresh(); };
+  }
+
+  // coin flip
+  function spinCoin(stage, opts){
+    stage.innerHTML = `<div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;gap:22px"><div class="coin" id="coin">UFA</div><div class="ticker" id="ticker">Click flip</div></div>`;
+    opts.innerHTML = `<h2 style="font-size:24px">Coin flip</h2><div class="note">Ties, who picks first, who gets the ball.</div>
+      <div class="row"><label class="f">Heads<input type="text" id="cfh" value="Heads"></label><label class="f">Tails<input type="text" id="cft" value="Tails"></label></div>
+      <div class="row"><button class="btn gold" id="cfgo">Flip</button><span class="note" id="cfstat"></span></div>`;
+    let h = 0, tl = 0, deg = 0;
+    $("#cfgo").onclick = () => {
+      if (SPINNING) return; SPINNING = true; $("#spinres").innerHTML = "";
+      const heads = rnd(2) === 0, label = heads ? $("#cfh").value || "Heads" : $("#cft").value || "Tails";
+      deg += 1800 + (heads ? 0 : 180) - (deg % 360); $("#coin").style.transform = `rotateY(${deg}deg)`; $("#coin").textContent = ""; $("#ticker").textContent = "…";
+      setTimeout(() => {
+        SPINNING = false; $("#coin").textContent = heads ? "H" : "T"; $("#coin").style.transform = `rotateY(${deg - (heads ? 0 : 180)}deg)`; $("#ticker").textContent = label; $("#ticker").style.color = "var(--gold)";
+        heads ? h++ : tl++; $("#cfstat").textContent = `This session: ${h} heads · ${tl} tails`;
+        addHist("Coin", label);
+        $("#spinres").innerHTML = `<div class="result"><div class="note">IT'S</div><div class="big">${esc(label)}</div><div class="row">${copyBtn(`🪙 Coin flip: **${label}**`)}</div></div>`;
+      }, 950);
+    };
+  }
+
+  // random matchups between teams
+  function spinMatch(stage, opts){
+    stage.innerHTML = `<div class="note" style="padding:30px 0">Pick teams on the right and hit Generate.</div>`;
+    let start = D.teams.filter(t => t.active); if (start.length < 2) start = D.teams.filter(t => foOf(t.abbr)); if (start.length < 2) start = D.teams;
+    const sel = new Set(start.map(t => t.abbr));
+    opts.innerHTML = `<h2 style="font-size:24px">Random matchups</h2><div class="note">Pairs the selected teams at random — scrims, a bracket, a bonus week. Odd number = one team gets a bye.</div>
+      <div class="row"><button class="btn sm" data-msel="active">Active teams</button><button class="btn sm" data-msel="fo">Teams with an FO</button><button class="btn sm" data-msel="all">All</button><button class="btn sm" data-msel="none">None</button></div>
+      <div class="pchips" id="mtl"></div><div class="row"><button class="btn gold" id="mtgo">Generate</button><span class="note" id="mtc"></span></div>`;
+    const draw = () => { $("#mtl").innerHTML = D.teams.map(t => `<button data-mt="${t.abbr}" aria-pressed="${sel.has(t.abbr)}">${esc(t.abbr)}</button>`).join(""); $("#mtc").textContent = `${sel.size} selected`; };
+    opts.onclick = e => {
+      const b = e.target.closest("[data-mt]"); if (b){ sel.has(b.dataset.mt) ? sel.delete(b.dataset.mt) : sel.add(b.dataset.mt); return draw(); }
+      const m = e.target.closest("[data-msel]"); if (m){ sel.clear(); D.teams.filter(t => ({active: t.active, fo: !!foOf(t.abbr), all: true, none: false})[m.dataset.msel]).forEach(t => sel.add(t.abbr)); return draw(); }
+      if (e.target.closest("#mtgo")){
+        if (sel.size < 2) return toast("Pick at least 2 teams.", false);
+        const s = shuffle([...sel]), pairs = []; for (let i = 0; i + 1 < s.length; i += 2) pairs.push([s[i], s[i + 1]]); const bye = s.length % 2 ? s[s.length - 1] : null;
+        const bd = a => `<span class="badge" style="background:${esc(T(a).color)};min-width:40px;height:30px;font-size:16px">${esc(a)}</span>`;
+        stage.innerHTML = `<div style="width:100%"><div class="pairs">${pairs.map(([a, b]) => `<div>${bd(a)}<span class="vs">vs</span>${bd(b)}</div>`).join("")}${bye ? `<div>${bd(bye)}<span class="vs">bye</span></div>` : ""}</div></div>`;
+        const txt = `⚔️ **Random matchups**\n` + pairs.map(([a, b]) => `${T(a).name} vs ${T(b).name}`).join("\n") + (bye ? `\nBye: ${T(bye).name}` : "");
+        addHist("Matchups", pairs.map(p => p.join(" v ")).join(", ") + (bye ? `, bye ${bye}` : ""));
+        $("#spinres").innerHTML = `<div class="result"><div class="note">${pairs.length} GAME(S)</div><div class="row">${copyBtn(txt)}<button class="btn sm" id="mtagain">Re-roll</button></div></div>`;
+        $("#mtagain").onclick = () => $("#mtgo").click();
+      }
+    };
+    draw();
+  }
+
+  // shuffle an order (draft lottery etc.)
+  function spinOrder(stage, opts){
+    stage.innerHTML = `<div class="note" style="padding:30px 0">Hit Shuffle to draw an order.</div>`;
+    opts.innerHTML = `<h2 style="font-size:24px">Shuffle an order</h2><div class="note">Draft lottery, tiebreakers, speaking order. Uses teams with an FO by default — or type your own list.</div>
+      <textarea id="sox" rows="8" style="width:100%;font:inherit;font-size:15px;font-weight:600;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px">${esc(D.teams.filter(t => foOf(t.abbr)).map(t => t.name).join("\n"))}</textarea>
+      <div class="row"><button class="btn gold" id="sogo">Shuffle</button><label class="c"><input type="checkbox" id="soslow" checked> Reveal one at a time</label></div>`;
+    $("#sogo").onclick = async () => {
+      if (SPINNING) return; const list = shuffle($("#sox").value.split("\n").map(x => x.trim()).filter(Boolean)); if (!list.length) return;
+      SPINNING = true; $("#spinres").innerHTML = "";
+      const tByName = n => D.teams.find(t => t.name.toLowerCase() === n.toLowerCase() || t.abbr.toLowerCase() === n.toLowerCase());
+      stage.innerHTML = `<ol id="sool" style="width:100%;margin:0;padding-left:28px;display:flex;flex-direction:column;gap:6px;font-size:18px;font-weight:800"></ol>`;
+      for (let i = 0; i < list.length; i++){
+        const t = tByName(list[i]);
+        $("#sool").insertAdjacentHTML("beforeend", `<li style="animation:pop .35s ease">${t ? `<span class="badge" style="background:${esc(t.color)};min-width:40px;height:28px;font-size:15px;vertical-align:middle">${esc(t.abbr)}</span> ` : ""}${esc(list[i])}</li>`);
+        if ($("#soslow").checked) await new Promise(r => setTimeout(r, Math.max(180, 1400 / list.length * 2)));
+      }
+      SPINNING = false; addHist("Order", list.join(" → "));
+      $("#spinres").innerHTML = `<div class="result"><div class="note">FINAL ORDER</div><div class="row">${copyBtn("🔀 **Order**\n" + list.map((x, i) => `${i + 1}. ${x}`).join("\n"))}</div></div>`;
+    };
+  }
+
+  // random number / dice
+  function spinNum(stage, opts){
+    stage.innerHTML = `<div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;gap:10px"><div class="bignum" id="bn">?</div><div class="ticker" id="ticker"></div></div>`;
+    opts.innerHTML = `<h2 style="font-size:24px">Random number</h2><div class="note">Dice, a score, pick a round…</div>
+      <div class="row"><label class="f">From<input type="number" id="nmin" value="1"></label><label class="f">To<input type="number" id="nmax" value="100"></label></div>
+      <div class="row"><button class="btn sm" data-nr="1,6">🎲 Die (1–6)</button><button class="btn sm" data-nr="1,20">D20</button><button class="btn sm" data-nr="1,16">Team # (1–16)</button><button class="btn sm" data-nr="1,100">1–100</button></div>
+      <div class="row"><button class="btn gold" id="nmgo">Roll</button></div>`;
+    opts.onclick = e => { const b = e.target.closest("[data-nr]"); if (b){ const [a, z] = b.dataset.nr.split(","); $("#nmin").value = a; $("#nmax").value = z; $("#nmgo").click(); } };
+    $("#nmgo").onclick = () => {
+      if (SPINNING) return; let a = parseInt($("#nmin").value), z = parseInt($("#nmax").value); if (isNaN(a) || isNaN(z)) return; if (a > z) [a, z] = [z, a];
+      SPINNING = true; $("#spinres").innerHTML = ""; const n = a + rnd(z - a + 1); let k = 0;
+      const iv = setInterval(() => { $("#bn").textContent = a + rnd(z - a + 1); if (++k > 18){ clearInterval(iv); $("#bn").textContent = n; SPINNING = false; addHist("Number", `${n} (${a}–${z})`);
+        $("#spinres").innerHTML = `<div class="result"><div class="note">ROLLED ${a}–${z}</div><div class="big">${n}</div><div class="row">${copyBtn(`🎲 Rolled **${n}** (${a}–${z})`)}</div></div>`; } }, 60);
+    };
+  }
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
