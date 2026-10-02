@@ -739,6 +739,18 @@ async function recentPosEdits(env, D, days = 7) {   // pool entries staff change
   }
   return out.sort((a, b) => b.at - a.at);
 }
+async function deletePosition(env, name, by) {   // remove a (custom) position from the list and from everyone who has it
+  name = String(name || "").trim(); if (!name) throw UE("Which position?");
+  if (["QB", "RB", "WR", "TE", "OL", "DE", "LB", "CB", "S", "K/P"].includes(name)) throw UE("Standard positions can't be deleted.");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { D, sha } = await loadDraft(env); let n = 0;
+    D.positions = (D.positions || []).filter((x) => x !== name);
+    for (const p of D.pool) if ((p.pos || []).includes(name)) { p.pos = p.pos.filter((x) => x !== name); n++; }
+    try { await putJSON(env, "draft.json", D, sha, `Staff (${by}): deleted position "${name}" (${n} player${n === 1 ? "" : "s"})`); return { ok: true, removedFrom: n }; }
+    catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
+  }
+  throw UE("The draft file was busy — try again.");
+}
 async function notifyPositions(env, ids, silent = false) {   // silent: just take them off the "needs telling" list   // DM up to 12 pool players their current positions, then mark them as told
   ids = [...new Set((ids || []).map(Number))].slice(0, 12);
   const { D } = await loadDraft(env), results = [];
@@ -1412,6 +1424,7 @@ async function web(req, url, env, ctx) {
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
       if (p === "/api/admin/players") return out(await adminPlayers(env, L));
+      if (p === "/api/admin/position/delete") return out(await deletePosition(env, body.name, staffSig(admin)));
       if (p === "/api/admin/notifypos") return out(await notifyPositions(env, body.ids, !!body.silent));
       if (p === "/api/admin/player") return out(await adminPlayer(env, L, body, staffSig(admin)));
       if (p === "/api/admin/autopick") return out({ ok: true, ...(await autoPick(env, { n: body.n, by: staffSig(admin) })) });   // force an auto-pick for the team on the clock
