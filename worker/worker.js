@@ -1323,6 +1323,15 @@ async function web(req, url, env, ctx) {
         const salt = randToken(); await kput(env, `pw:${abbr}`, { salt, hash: await sha256(salt + body.password), ts: Date.now() }, 365 * 86400);
         return out({ ok: true });
       }
+      if (p === "/api/admin/password/dm") {   // DM the team's FO their (just-made) portal password
+        const abbr = String(body.team || "").toUpperCase(), t = teamOf(L, abbr); if (!t) return out({ error: "Unknown team." }, 400);
+        const rec = await kget(env, `pw:${abbr}`), pw = String(body.password || "");
+        if (!rec || rec.hash !== await sha256(rec.salt + pw)) return out({ error: "That isn't the team's current password." }, 400);
+        const fo = foOf(L, await members(env, L, true), abbr); if (!fo) return out({ error: `The ${t.name} don't have an FO right now.` }, 400);
+        const ok = await staffSend(env, fo.id, `Here's the FO portal password for the **${t.name}**:\n\n**\`${pw}\`**\n\nLog in at ${SITE}fo.html — pick your team and type this in (or just log in with Discord). Don't share it; staff can change it any time.`, staffSig(admin));
+        if (!ok) return out({ error: `Couldn't DM ${fo.name} — their DMs might be closed.` }, 400);
+        return out({ ok: true, text: `Sent to ${fo.name}.` });
+      }
       if (p === "/api/admin/passwords") { const ks = await klist(env, "pw:"); return out({ teams: ks.map((k) => k.name.slice(3)) }); }
       if (p === "/api/admin/overview") {
         const M = await members(env, L, true);
