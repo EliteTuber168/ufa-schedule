@@ -734,7 +734,8 @@ async function recentPosEdits(env, D, days = 7) {   // pool entries staff change
   const out = [];
   for (const p of D.pool) {
     const at = Math.max(p.posAt || 0, seen.get(String(p.name).toLowerCase()) || 0);
-    if (at && p.discord && !(p.posNotified >= at - 60000)) out.push({ poolId: p.id, uid: p.discord, name: p.name, pos: p.pos || [], at });
+    const told = p.posNotified && !(p.posNotified === p.posAt && p.posAt < 1790977127511);   // edits before 2026-10-02 21:50 UTC never actually got their DM (bug)
+    if (at && p.discord && !(told && p.posNotified >= at - 60000)) out.push({ poolId: p.id, uid: p.discord, name: p.name, pos: p.pos || [], at });
   }
   return out.sort((a, b) => b.at - a.at);
 }
@@ -780,7 +781,7 @@ async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos
   if (body.pool === "remove" && m && L.R.draftable) await delRole(env, L, uid, L.R.draftable, "Removed from the draft pool by staff").catch(() => {});
   for (let attempt = 0; attempt < 3; attempt++) {
     const { D, sha } = await loadDraft(env), H = helpers(D);
-    let p = D.pool.find((x) => (uid && x.discord === uid) || (poolId != null && x.id === poolId)), what;
+    let p = D.pool.find((x) => (uid && x.discord === uid) || (poolId != null && x.id === poolId)), what, tell = false;
     if (body.pool === "remove") {
       if (!p) return { ok: true, text: "Removed." };
       if (H.taken.has(p.id)) throw UE(`${p.name} has already been drafted — undo the pick in the draft room first.`);
@@ -792,7 +793,6 @@ async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos
         D.pool.push(p);
         if (L.R.draftable && body.pool !== "add") await addRole(env, L, uid, L.R.draftable, "Added to the draft pool by staff").catch(() => {});   // the hourly sync keeps the pool = Draftable role
       }
-      let tell = false;
       if (body.pos != null) {
         const before = (p.pos || []).join("/");
         const pos = [];   // standard positions are normalised (HB -> RB); anything else is kept as a custom position
