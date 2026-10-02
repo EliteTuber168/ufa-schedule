@@ -958,9 +958,12 @@
   {
    "id": 104,
    "name": "kasthmz",
-   "pos": [],
+   "pos": [
+    "QB"
+   ],
    "discord": "1123920661061042286",
-   "avatar": "https://cdn.discordapp.com/avatars/1123920661061042286/0df8b6c4196b737874eac112241a1e60.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1123920661061042286/0df8b6c4196b737874eac112241a1e60.png?size=96",
+   "locked": true
   },
   {
    "id": 105,
