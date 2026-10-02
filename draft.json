@@ -855,9 +855,14 @@
   {
    "id": 88,
    "name": "Gks_331",
-   "pos": [],
+   "pos": [
+    "TE",
+    "OL",
+    "DE"
+   ],
    "discord": "989685059084779531",
-   "avatar": "https://cdn.discordapp.com/avatars/989685059084779531/484fc77b215d087853ceac3e1f55f0e6.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/989685059084779531/484fc77b215d087853ceac3e1f55f0e6.png?size=96",
+   "locked": true
   },
   {
    "id": 89,
