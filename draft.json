@@ -509,9 +509,14 @@
   {
    "id": 39,
    "name": "Skibs son fatman",
-   "pos": [],
+   "pos": [
+    "WR"
+   ],
    "discord": "1497199955356680253",
-   "avatar": "https://cdn.discordapp.com/avatars/1497199955356680253/2017558017f43cdb51e7c309875d8ff7.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1497199955356680253/2017558017f43cdb51e7c309875d8ff7.png?size=96",
+   "locked": true,
+   "posAt": 1790980216978,
+   "posNotified": 1790980216978
   },
   {
    "id": 40,
