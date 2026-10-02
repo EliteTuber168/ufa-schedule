@@ -234,7 +234,8 @@
   "OS/Short",
   "Deep",
   "Short",
-  "KR"
+  "KR",
+  "Plays Anything"
  ],
  "pool": [
   {
@@ -466,9 +467,14 @@
   {
    "id": 34,
    "name": "mama duke",
-   "pos": [],
+   "pos": [
+    "Plays Anything"
+   ],
    "discord": "1469485659239485576",
-   "avatar": "https://cdn.discordapp.com/avatars/1469485659239485576/867ff0e5c0f1e64f9564a712e9494f17.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1469485659239485576/867ff0e5c0f1e64f9564a712e9494f17.png?size=96",
+   "locked": true,
+   "posAt": 1790981354430,
+   "posNotified": 1790981354430
   },
   {
    "id": 35,
