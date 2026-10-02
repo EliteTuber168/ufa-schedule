@@ -780,9 +780,14 @@
   {
    "id": 78,
    "name": "mfwx",
-   "pos": [],
+   "pos": [
+    "WR",
+    "CB",
+    "DB"
+   ],
    "discord": "909950569370775602",
-   "avatar": "https://cdn.discordapp.com/avatars/909950569370775602/e74513e260047d19487782889eb022fa.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/909950569370775602/e74513e260047d19487782889eb022fa.png?size=96",
+   "locked": true
   },
   {
    "id": 79,
