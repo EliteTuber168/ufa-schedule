@@ -28,10 +28,10 @@
    "name": "Baltimore Ravens",
    "abbr": "BAL",
    "color": "#241773",
-   "active": true,
+   "active": false,
    "role": "1548502229227540491",
    "players": 5,
-   "fo": "350aj"
+   "fo": ""
   },
   {
    "name": "Buffalo Bills",
