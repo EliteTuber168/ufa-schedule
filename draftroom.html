@@ -117,6 +117,7 @@ td input.n{width:62px}
       <section class="panel">
         <h2>Rules</h2>
         <div class="row">
+          <label class="f">Teams in draft<input type="number" min="2" max="64" id="nteams"></label>
           <label class="f">Rounds<input type="number" min="1" max="25" id="rounds"></label>
           <label class="f">Time per pick (minutes, 0 = no clock)<input type="number" min="0" max="1440" id="pmin"></label>
           <label class="f">If time runs out and there's no queue<select id="amode"><option value="random">Random available player</option><option value="board">Best on my big board</option></select></label>
@@ -127,8 +128,8 @@ td input.n{width:62px}
       </section>
       <section class="panel">
         <div class="row" style="justify-content:space-between;align-items:center"><h2>Teams &amp; draft order</h2>
-          <div class="row"><button class="btn blue" id="lottery">🎲 Randomize order</button><button class="btn" id="az">Sort A–Z</button></div></div>
-        <div class="note">Top = picks first. Untick teams that won't be in the draft. FOs fill in automatically from Discord (team role + Franchise owner role) each sync — the <b>FO Discord ID</b> is who's allowed to use <b>/pick</b> for that team. Type one in to override.</div>
+          <div class="row"><button class="btn blue" id="lottery">🎲 Randomize order</button><button class="btn" id="az">Sort A–Z</button><button class="btn" id="foonly">Only teams with an FO</button></div></div>
+        <div class="note">Set <b>Teams in draft</b> to pick how many teams are in — teams with an FO are kept first, then the rest in current order. Top = picks first. Untick teams that won't be in the draft. FOs fill in automatically from Discord (team role + Franchise owner role) each sync — the <b>FO Discord ID</b> is who's allowed to use <b>/pick</b> for that team. Type one in to override.</div>
         <div class="tscroll"><table><thead><tr><th>#</th><th>In</th><th></th><th>Team</th><th>Franchise owner</th><th>FO Discord ID</th><th>Move</th></tr></thead><tbody id="tbody"></tbody></table></div>
       </section>
     </div>
@@ -252,7 +253,7 @@ td input.n{width:62px}
   // ---------- setup ----------
   const locked = () => D.picks.length > 0;
   function renderSetup(){
-    $("#rounds").value = D.rounds; $("#pmin").value = D.pickMinutes || 0; $("#snake").checked = !!D.snake; $("#amode").value = D.autoMode || "random"; $("#ann").value = D.announcement || "";
+    $("#nteams").value = order().length; $("#nteams").disabled = $("#foonly").disabled = locked(); $("#rounds").value = D.rounds; $("#pmin").value = D.pickMinutes || 0; $("#snake").checked = !!D.snake; $("#amode").value = D.autoMode || "random"; $("#ann").value = D.announcement || "";
     const T = order().length, need = T * D.rounds;
     $("#math").innerHTML = `${T} teams × ${D.rounds} rounds = <b>${need} picks</b>. Pool has <b>${D.pool.length}</b> players${D.pool.length < need ? ` — <span style="color:var(--warn)">${need - D.pool.length} short</span>` : ""}.${D.pickMinutes ? ` At ${D.pickMinutes} min per pick the draft could take up to ${Math.round(need*D.pickMinutes/60)} hours. When a team's time runs out, the bot auto-picks from their draft queue (or ${(D.autoMode || "random") === "random" ? "a random available player" : "the best available on your big board"}).` : ` <span style="color:var(--warn)">Set minutes per pick to turn on auto-pick for teams that are away.</span>`}`;
     let k = 0;
@@ -262,6 +263,16 @@ td input.n{width:62px}
     $("#lottery").disabled = $("#az").disabled = locked();
   }
   $("#rounds").oninput = e => { const v = parseInt(e.target.value); if (v > 0 && !(locked() && v*order().length < D.picks.length)){ D.rounds = v; setDirty(true); renderSetup(); } };
+  function setTeamCount(n){
+    n = Math.max(0, Math.min(n, D.teams.length));
+    const ranked = D.teams.map((t,i)=>({t,i})).sort((a,b)=>(!!b.t.foId - !!a.t.foId) || (b.t.in - a.t.in) || (a.i - b.i));
+    const keep = new Set(ranked.slice(0,n).map(x=>x.t));
+    D.teams.forEach(t=>t.in = keep.has(t));
+    D.teams = [...D.teams.filter(t=>t.in), ...D.teams.filter(t=>!t.in)];
+    setDirty(true); renderSetup();
+  }
+  $("#nteams").onchange = e => { if (locked()){ renderSetup(); return alert("Can't change the number of teams after picks are made."); } const v = parseInt(e.target.value); if (v >= 2) setTeamCount(v); else renderSetup(); };
+  $("#foonly").onclick = () => { const n = D.teams.filter(t=>t.foId).length; if (!n) return alert("No teams have an FO linked yet."); setTeamCount(n); };
   $("#amode").onchange = e => { D.autoMode = e.target.value; setDirty(true); renderSetup(); };
   $("#pmin").oninput = e => { D.pickMinutes = Math.max(0, parseInt(e.target.value)||0); setDirty(true); renderSetup(); };
   $("#snake").onchange = e => { if (locked()){ e.target.checked = D.snake; return alert("Can't change snake order after picks are made."); } D.snake = e.target.checked; setDirty(true); };
