@@ -30,7 +30,7 @@
    "color": "#241773",
    "active": false,
    "role": "1548502229227540491",
-   "players": 5,
+   "players": 0,
    "fo": ""
   },
   {
@@ -39,7 +39,7 @@
    "color": "#00338D",
    "active": false,
    "role": "1548502233669443686",
-   "players": 5,
+   "players": 0,
    "fo": ""
   },
   {
@@ -64,9 +64,9 @@
    "name": "Cincinnati Bengals",
    "abbr": "CIN",
    "color": "#FB4F14",
-   "active": true,
+   "active": false,
    "role": "1548502246151561296",
-   "players": 8,
+   "players": 1,
    "fo": "Georgerussel (@flymac1)"
   },
   {
@@ -75,7 +75,7 @@
    "color": "#FF3C00",
    "active": false,
    "role": "1548502250060648598",
-   "players": 4,
+   "players": 0,
    "fo": ""
   },
   {
@@ -93,7 +93,7 @@
    "color": "#FB4F14",
    "active": false,
    "role": "1548502258491195483",
-   "players": 3,
+   "players": 0,
    "fo": ""
   },
   {
@@ -127,9 +127,9 @@
    "name": "Indianapolis Colts",
    "abbr": "IND",
    "color": "#002C5F",
-   "active": true,
+   "active": false,
    "role": "1548502275268411402",
-   "players": 6,
+   "players": 1,
    "fo": "𝑉𝑜𝗇"
   },
   {
@@ -138,7 +138,7 @@
    "color": "#006778",
    "active": false,
    "role": "1548502279550930975",
-   "players": 2,
+   "players": 0,
    "fo": ""
   },
   {
@@ -147,7 +147,7 @@
    "color": "#E31837",
    "active": false,
    "role": "1548502283644444822",
-   "players": 4,
+   "players": 1,
    "fo": "𝑩𝑨𝑳𝑬𝑵𝑪𝑰𝑨𝑮𝑨"
   },
   {
@@ -156,7 +156,7 @@
    "color": "#A5ACAF",
    "active": false,
    "role": "1548502288006389820",
-   "players": 4,
+   "players": 0,
    "fo": ""
   },
   {
@@ -174,7 +174,7 @@
    "color": "#003594",
    "active": false,
    "role": "1548502296298782831",
-   "players": 4,
+   "players": 1,
    "fo": "ccrick1044"
   },
   {
@@ -201,16 +201,16 @@
    "color": "#002244",
    "active": false,
    "role": "1548502308990750740",
-   "players": 1,
+   "players": 0,
    "fo": ""
   },
   {
    "name": "New Orleans Saints",
    "abbr": "NO",
    "color": "#D3BC8D",
-   "active": true,
+   "active": false,
    "role": "1548502313004699758",
-   "players": 8,
+   "players": 1,
    "fo": "MYMY022509"
   },
   {
@@ -219,16 +219,16 @@
    "color": "#0B2265",
    "active": false,
    "role": "1548502317035425966",
-   "players": 1,
+   "players": 0,
    "fo": ""
   },
   {
    "name": "New York Jets",
    "abbr": "NYJ",
    "color": "#125740",
-   "active": true,
+   "active": false,
    "role": "1548502321422671903",
-   "players": 9,
+   "players": 1,
    "fo": "Skib  (hot and dangerous)"
   },
   {
@@ -253,9 +253,9 @@
    "name": "San Francisco 49ers",
    "abbr": "SF",
    "color": "#AA0000",
-   "active": true,
+   "active": false,
    "role": "1548502333871235084",
-   "players": 7,
+   "players": 1,
    "fo": "Dj556yk(wr/qb/db/rb⭐⭐⭐⭐⭐ )"
   },
   {
@@ -291,7 +291,7 @@
    "color": "#5A1414",
    "active": false,
    "role": "1548502350828806214",
-   "players": 2,
+   "players": 1,
    "fo": "Just_benn10"
   }
  ],
