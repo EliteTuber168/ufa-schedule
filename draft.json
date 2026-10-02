@@ -1430,9 +1430,12 @@
   {
    "id": 169,
    "name": "Showmypassion",
-   "pos": [],
+   "pos": [
+    "WR"
+   ],
    "discord": "1385440956752330973",
-   "avatar": "https://cdn.discordapp.com/avatars/1385440956752330973/f886d77abd0a676faeac03845615a7c5.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1385440956752330973/f886d77abd0a676faeac03845615a7c5.png?size=96",
+   "locked": true
   },
   {
    "id": 170,
