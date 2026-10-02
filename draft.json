@@ -235,7 +235,8 @@
   "Deep",
   "Short",
   "Safety",
-  "Returner"
+  "Returner",
+  "KR"
  ],
  "pool": [
   {
@@ -527,14 +528,13 @@
     "WR",
     "LB",
     "S",
-    "K/P",
-    "Returner"
+    "KR"
    ],
    "discord": "1487908645344772126",
    "avatar": "https://cdn.discordapp.com/avatars/1487908645344772126/af4bb831b95906d2a13219984dfdf2b7.png?size=96",
    "locked": true,
-   "posAt": 1790977232226,
-   "posNotified": 1790977232226
+   "posAt": 1790977248642,
+   "posNotified": 1790977248642
   },
   {
    "id": 38,
