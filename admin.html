@@ -160,6 +160,22 @@ tr:last-child td{border-bottom:0}
 th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-transform:uppercase}
 .toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);background:var(--panel3);border:1px solid var(--line);border-radius:12px;padding:10px 16px;font-weight:700;z-index:30;max-width:calc(100vw - 32px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.err{border-color:var(--red);color:#ffb3b7}
+.pchips{display:flex;gap:6px;flex-wrap:wrap}
+.pchips button{font:inherit;font-size:13px;font-weight:700;color:var(--mute);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:4px 10px;cursor:pointer}
+.pchips button b{color:var(--fg);margin-left:4px}
+.pchips button[aria-pressed=true]{color:#fff;border-color:var(--blue);background:rgba(61,123,255,.18)}
+.pchips button.miss{color:var(--red);border-color:rgba(232,66,74,.5)}
+.pp{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:1px 6px;margin:1px 2px 1px 0;background:var(--panel3);color:var(--fg)}
+.pp.none{background:transparent;color:var(--red);border:1px dashed rgba(232,66,74,.5)}
+.plist td{padding:8px 10px}
+.plist .who{display:flex;align-items:center;gap:8px;min-width:0}
+.plist .who img{width:30px;height:30px;border-radius:50%;flex:none;background:#223}
+.plist .who small{display:block;color:var(--mute);font-size:11px;font-weight:600;cursor:pointer}
+.plist .badge{min-width:36px;height:26px;font-size:15px}
+.posgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.posgrid label{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px 6px;font-weight:700;cursor:pointer;background:var(--panel2)}
+.posgrid label:has(input:checked){border-color:var(--blue);background:rgba(61,123,255,.18)}
+.bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
 <div class="wrap">
   <header>
@@ -186,6 +202,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="assign" aria-selected="false">Assign</button>
       <button role="tab" data-tab="dm" aria-selected="false">Messages <span class="count hide" id="icount"></span></button>
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
+      <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
@@ -292,6 +309,25 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <div class="tscroll" id="qteams"><table style="min-width:640px"><thead><tr><th>Team</th><th>FO</th><th>Queue</th><th>Last updated</th><th></th></tr></thead><tbody id="qbody"></tbody></table></div>
       <div class="tscroll hide" id="qplayers"><table style="min-width:560px"><thead><tr><th>Player</th><th>On queues</th><th>Teams (spot in their queue)</th></tr></thead><tbody id="qpbody"></tbody></table></div>
       <span class="msg" id="qmsg"></span>
+    </div>
+
+    <div id="tab-players" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="stats" id="plstats"></div>
+      <div class="row between"><div class="note" id="plnote">Everyone in the server, plus anyone in the draft pool. Positions are what FOs see on the board and in <b>/available</b>.</div>
+        <div class="row"><button class="btn sm" id="plload">↻ Refresh</button><button class="btn sm" id="plcsv">Export CSV</button><button class="btn sm red" id="pldmmiss">DM everyone missing positions</button></div></div>
+      <div class="pchips" id="plpos"></div>
+      <div class="filters">
+        <input type="search" id="plq" placeholder="Search name or user ID…" aria-label="Search players" style="flex:1 1 220px">
+        <select id="plg" aria-label="Group">
+          <option value="all">Everyone</option><option value="pool">Draft pool</option><option value="miss">Pool — no positions</option><option value="avail">Pool — not drafted yet</option><option value="drafted">Drafted</option>
+          <option value="team">On a team</option><option value="noteam">Not on a team</option><option value="fo">Franchise owners</option><option value="gmhc">GMs &amp; head coaches</option>
+          <option value="fa">Free agents</option><option value="notpool">Not in the pool</option><option value="staff">Staff</option><option value="gone">Left the server</option></select>
+        <select id="plt" aria-label="Team"><option value="">All teams</option></select>
+        <select id="pls" aria-label="Sort"><option value="name">Sort: name</option><option value="team">Sort: team</option><option value="pos">Sort: positions</option><option value="joined">Sort: newest in server</option></select>
+      </div>
+      <div class="bulkbar hide" id="plbulk"><b id="plsel"></b><button class="btn sm blue" id="plbdm">DM selected</button><button class="btn sm" id="plbpos">Set positions…</button><button class="btn sm" id="plbadd">Add to draft pool</button><button class="btn sm" id="plbclr">Clear selection</button><span class="msg" id="plbmsg"></span></div>
+      <div class="tscroll"><table class="plist" style="min-width:720px"><thead><tr><th style="width:32px"><input type="checkbox" id="plall" aria-label="Select all shown"></th><th>Player</th><th>Team</th><th>Positions</th><th>Status</th><th></th></tr></thead><tbody id="plbody"></tbody></table></div>
+      <div class="row between"><span class="note" id="plcount"></span><button class="btn sm hide" id="plmore">Show more</button></div>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -509,8 +545,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","queues","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, queues: loadQueues, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -1047,6 +1083,154 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   $("#qload").onclick = loadQueues;
   $("#qremindall").onclick = async () => { const ids = QROWS.filter(r => r.fo && !r.available).map(r => r.fo.id); if (!ids.length) return toast("Every FO has a queue."); if (!confirm(`DM ${ids.length} FO(s) to set up their draft queue?`)) return; $("#qremindall").disabled = true; try{ await remind(ids); }catch(e){ msg($("#qmsg"), e.message, false); } $("#qremindall").disabled = false; };
   $("#qbody").addEventListener("click", async e => { const b = e.target.closest("[data-qrem]"); if (!b) return; b.disabled = true; try{ await remind([b.dataset.qrem]); b.textContent = "Sent"; }catch(err){ msg($("#qmsg"), err.message, false); b.disabled = false; } });
+
+  // ---------- players ----------
+  const POS_ALL = ["QB","RB","WR","TE","OL","DE","LB","CB","S","K/P"];
+  let PL = null, PLSEL = new Set(), PLPOS = "", PLLIM = 150;
+  const PL_DM = "Hey {name}, you don't have any positions set for the UFA draft yet, so franchise owners can't tell what you play. Run this in the server:\n\n/fa join positions: QB/TE\n\n(swap in your own: QB, RB, WR, TE, OL, DE, LB, CB, S, K/P). Run it again any time to change them.";
+  const plKey = r => r.id || "p" + r.pool.id;
+  const plPos = () => [...new Set([...POS_ALL, ...(PL?.positions || [])])];
+  async function loadPlayers(){
+    $("#plbody").innerHTML = `<tr><td colspan="6" class="note">Loading…</td></tr>`;
+    try{ PL = await bot("/api/admin/players"); }catch(e){ $("#plbody").innerHTML = `<tr><td colspan="6" class="msg err">${esc(e.message)}</td></tr>`; return; }
+    const R = PL.rows, pool = R.filter(r => r.pool), miss = pool.filter(r => !r.pool.pos.length && !r.pool.drafted);
+    const tile = (n, l, col, go) => `<div class="stat"${go ? ` style="cursor:pointer" data-plg="${go}"` : ""}><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    $("#plstats").innerHTML = tile(R.filter(r => !r.gone).length, "In the server", "", "all") + tile(pool.length, "Draft pool", "var(--blue)", "pool")
+      + tile(`${pool.length - pool.filter(r => !r.pool.pos.length).length}<span style="font-size:24px;color:var(--mute)">/${pool.length}</span>`, "Positions set", "var(--good)", "pool")
+      + tile(miss.length, "Missing positions", miss.length ? "var(--red)" : "", "miss") + tile(R.filter(r => r.rank === "fo").length, "Franchise owners", "var(--gold)", "fo")
+      + tile(R.filter(r => r.fa).length, "Free agents", "", "fa");
+    const warn = [];
+    if (!PL.roles.draftable) warn.push("No Draftable role found in the server.");
+    if (!PL.roles.fa) warn.push("No Free Agent role yet — the bot creates it when the draft ends.");
+    $("#plnote").innerHTML = `Everyone in the server, plus anyone in the draft pool. Positions are what FOs see on the board and in <b>/available</b>.${warn.length ? ` <span style="color:var(--warn)">${warn.join(" ")}</span>` : ""}`;
+    $("#pldmmiss").textContent = `DM everyone missing positions (${miss.filter(r => r.id && !r.gone).length})`;
+    $("#plt").innerHTML = `<option value="">All teams</option>` + D.teams.map(t => `<option value="${esc(t.abbr)}">${esc(t.name)}</option>`).join("");
+    renderPlayers();
+  }
+  function plFiltered(){
+    const q = $("#plq").value.trim().toLowerCase(), g = $("#plg").value, t = $("#plt").value, srt = $("#pls").value;
+    const tests = {all: r => !r.gone, pool: r => r.pool, miss: r => r.pool && !r.pool.pos.length && !r.pool.drafted, avail: r => r.pool && !r.pool.drafted, drafted: r => r.pool?.drafted,
+      team: r => r.team, noteam: r => !r.team && !r.gone, fo: r => r.rank === "fo" || r.foRole, gmhc: r => r.rank === "gm" || r.rank === "hc", fa: r => r.fa, notpool: r => !r.pool && !r.gone, staff: r => r.staff, gone: r => r.gone};
+    let rows = PL.rows.filter(tests[g] || tests.all);
+    if (t) rows = rows.filter(r => r.team === t || r.pool?.drafted?.team === t);
+    if (PLPOS) rows = rows.filter(r => PLPOS === "none" ? r.pool && !r.pool.pos.length : r.pool?.pos.includes(PLPOS));
+    if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.id || "").includes(q));
+    const nm = (a, b) => a.name.localeCompare(b.name);
+    const sorts = {name: nm, team: (a, b) => (a.team || "~").localeCompare(b.team || "~") || ({fo:0,gm:1,hc:2,player:3}[a.rank] ?? 4) - ({fo:0,gm:1,hc:2,player:3}[b.rank] ?? 4) || nm(a, b),
+      pos: (a, b) => (a.pool?.pos[0] || "~").localeCompare(b.pool?.pos[0] || "~") || nm(a, b), joined: (a, b) => (b.joined || "").localeCompare(a.joined || "")};
+    return rows.sort(sorts[srt] || nm);
+  }
+  function renderPlayers(){
+    if (!PL) return;
+    const pool = PL.rows.filter(r => r.pool), cnt = p => pool.filter(r => r.pool.pos.includes(p)).length, none = pool.filter(r => !r.pool.pos.length).length;
+    $("#plpos").innerHTML = `<button data-pp="" aria-pressed="${!PLPOS}">All positions</button>` + plPos().map(p => `<button data-pp="${esc(p)}" aria-pressed="${PLPOS === p}">${esc(p)}<b>${cnt(p)}</b></button>`).join("")
+      + `<button data-pp="none" class="miss" aria-pressed="${PLPOS === "none"}">No positions<b>${none}</b></button>`;
+    const rows = plFiltered(), shown = rows.slice(0, PLLIM);
+    $("#plbody").innerHTML = shown.map(r => {
+      const k = plKey(r), t = r.team ? T(r.team) : null, dr = r.pool?.drafted, dt = dr ? T(dr.team) : null;
+      const tags = [r.staff ? `<span class="tag staff">Staff</span>` : "", r.pool ? (dr ? `<span class="tag" title="Pick #${dr.overall}">Drafted #${dr.overall}${t ? "" : " · " + esc(dt.abbr)}</span>` : `<span class="tag" style="color:var(--blue);border-color:var(--blue)">Pool</span>`) : "",
+        r.fa ? `<span class="tag hc">Free agent</span>` : "", r.foRole && r.rank !== "fo" ? `<span class="tag fo">FO role, no team</span>` : "", r.gone ? `<span class="tag" style="color:var(--red)">Left server</span>` : ""].join(" ");
+      return `<tr data-k="${esc(k)}"><td><input type="checkbox" data-sel="${esc(k)}" ${PLSEL.has(k) ? "checked" : ""} ${r.id && !r.gone ? "" : "disabled"} aria-label="Select ${esc(r.name)}"></td>
+        <td><div class="who">${r.avatar ? `<img src="${esc(r.avatar)}" alt="" loading="lazy">` : `<img alt="">`}<div style="min-width:0"><b>${esc(r.name)}</b>${r.id ? `<small data-copy="${esc(r.id)}" title="Copy user ID">${esc(r.id)}</small>` : ""}</div></div></td>
+        <td style="white-space:nowrap">${t ? `<span class="badge" style="background:${esc(t.color)}">${esc(t.abbr)}</span> ${r.rank && r.rank !== "player" ? `<span class="tag ${r.rank}">${RANK[r.rank]}</span>` : ""}` : `<span class="note">—</span>`}</td>
+        <td>${r.pool ? (r.pool.pos.length ? r.pool.pos.map(p => `<span class="pp">${esc(p)}</span>`).join("") : `<span class="pp none">none</span>`) : `<span class="note">not in pool</span>`}</td>
+        <td>${tags}</td>
+        <td style="white-space:nowrap;text-align:right"><button class="btn sm" data-pled="${esc(k)}">Edit</button> ${r.id && !r.gone ? `<button class="btn sm" data-pldm="${esc(r.id)}">DM</button>` : ""}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" class="note">Nobody matches.</td></tr>`;
+    $("#plcount").textContent = `Showing ${shown.length} of ${rows.length}`;
+    $("#plmore").classList.toggle("hide", rows.length <= PLLIM);
+    const selectable = shown.filter(r => r.id && !r.gone).map(plKey);
+    $("#plall").checked = selectable.length > 0 && selectable.every(k => PLSEL.has(k));
+    $("#plbulk").classList.toggle("hide", !PLSEL.size); $("#plsel").textContent = `${PLSEL.size} selected`;
+  }
+  const plRow = k => PL.rows.find(r => plKey(r) === k);
+  ["#plq","#plg","#plt","#pls"].forEach(id => $(id).addEventListener(id === "#plq" ? "input" : "change", () => { PLLIM = 150; renderPlayers(); }));
+  $("#plmore").onclick = () => { PLLIM += 150; renderPlayers(); };
+  $("#plload").onclick = loadPlayers;
+  $("#plpos").onclick = e => { const b = e.target.closest("[data-pp]"); if (!b) return; PLPOS = b.dataset.pp; renderPlayers(); };
+  $("#plstats").onclick = e => { const s = e.target.closest("[data-plg]"); if (!s) return; $("#plg").value = s.dataset.plg; PLPOS = ""; renderPlayers(); };
+  $("#plall").onchange = e => { plFiltered().slice(0, PLLIM).filter(r => r.id && !r.gone).forEach(r => e.target.checked ? PLSEL.add(plKey(r)) : PLSEL.delete(plKey(r))); renderPlayers(); };
+  $("#plbclr").onclick = () => { PLSEL.clear(); renderPlayers(); };
+  $("#plbody").addEventListener("change", e => { const c = e.target.closest("[data-sel]"); if (!c) return; c.checked ? PLSEL.add(c.dataset.sel) : PLSEL.delete(c.dataset.sel); renderPlayers(); });
+  $("#plbody").addEventListener("click", async e => {
+    const cp = e.target.closest("[data-copy]"); if (cp){ try{ await navigator.clipboard.writeText(cp.dataset.copy); toast("User ID copied."); }catch{} return; }
+    const ed = e.target.closest("[data-pled]"); if (ed) return plEdit([plRow(ed.dataset.pled)]);
+    const d = e.target.closest("[data-pldm]"); if (d) return plDM([d.dataset.pldm], "");
+  });
+  function plEdit(rows){
+    const one = rows.length === 1 ? rows[0] : null, cur = new Set(one?.pool?.pos || []);
+    wz.innerHTML = `<div class="row between"><h2>${one ? esc(one.name) : `Set positions for ${rows.length} players`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      ${one ? `<div class="note">${one.team ? `${esc(T(one.team).name)}${one.rank && one.rank !== "player" ? " · " + RANK[one.rank] : ""} · ` : ""}${one.pool ? (one.pool.drafted ? `Drafted #${one.pool.drafted.overall} by ${esc(T(one.pool.drafted.team).name)}` : "In the draft pool") : "Not in the draft pool — saving positions adds them"}</div>` : `<div class="note">Replaces the positions of everyone selected. Anyone not in the draft pool gets added.</div>`}
+      <div class="posgrid">${plPos().map(p => `<label><input type="checkbox" value="${esc(p)}" ${cur.has(p) ? "checked" : ""}> ${esc(p)}</label>`).join("")}</div>
+      <div class="bar hide" id="plebar"><i style="width:0"></i></div><span class="msg" id="plemsg"></span>
+      <div class="row between">${one && one.pool && !one.pool.drafted ? `<button class="btn x" id="plerm">Remove from draft pool</button>` : one && !one.pool && one.id && !one.gone ? `<button class="btn" id="pleadd">Add to pool (no positions)</button>` : "<span></span>"}
+        <div class="row"><button class="btn" data-close>Cancel</button><button class="btn gold" id="plesave">Save</button></div></div>`;
+    const target = r => r.id && !r.gone ? {uid: r.id} : {poolId: r.pool.id};
+    const finish = async t => { toast(t); dlg.close(); await loadPlayers(); };
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      try{
+        if (b.id === "plesave"){
+          const pos = $$(".posgrid input:checked").map(x => x.value); b.disabled = true;
+          if (rows.length > 1) $("#plebar").classList.remove("hide");
+          let done = 0, bad = [];
+          for (const r of rows){ try{ await bot("/api/admin/player", {...target(r), pos}); }catch(err){ bad.push(`${r.name} (${err.message})`); } done++; $("#plebar i").style.width = done / rows.length * 100 + "%"; msg($("#plemsg"), `${done} / ${rows.length}…`); }
+          if (bad.length){ msg($("#plemsg"), "Couldn't update: " + bad.join(", "), false); b.disabled = false; return; }
+          if (rows.length > 1) PLSEL.clear();
+          return finish(one ? `${one.name}: ${pos.join("/") || "no positions"}` : `Updated ${rows.length} players.`);
+        }
+        if (b.id === "plerm"){ if (!confirm(`Take ${one.name} out of the draft pool? This also removes their Draftable role.`)) return; b.disabled = true; await bot("/api/admin/player", {...target(one), pool: "remove"}); return finish(`${one.name} removed from the pool.`); }
+        if (b.id === "pleadd"){ b.disabled = true; await bot("/api/admin/player", {uid: one.id, pool: "add"}); return finish(`${one.name} added to the pool.`); }
+      }catch(err){ msg($("#plemsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  function plDM(ids, preset, audience){
+    const names = ids.map(id => PL.rows.find(r => r.id === id)?.name || id);
+    wz.innerHTML = `<div class="row between"><h2>DM ${ids.length === 1 ? esc(names[0]) : `${ids.length} people`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      ${ids.length > 1 ? `<div class="note" style="max-height:72px;overflow:auto">${names.map(esc).join(", ")}</div>` : ""}
+      <label class="f" style="flex:none">Title<input type="text" id="pldt" value="${esc(preset ? "Set your draft positions" : "")}" placeholder="Optional"></label>
+      <label class="f" style="flex:none">Message — {name} and {team} fill in for each person<textarea id="pldx" rows="7" style="width:100%;font-family:inherit;font-size:15px;font-weight:600;text-transform:none;letter-spacing:0">${esc(preset)}</textarea></label>
+      <label class="c"><input type="checkbox" id="plde" checked> Send as an embed with a "Reply to staff" button</label>
+      <div class="bar hide" id="pldbar"><i style="width:0"></i></div><span class="msg" id="pldmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="pldgo">Send</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "pldgo") return;
+      const text = $("#pldx").value.trim(), title = $("#pldt").value.trim(); if (!text) return msg($("#pldmsg"), "Write a message first.", false);
+      b.disabled = true; $("#pldbar").classList.remove("hide");
+      try{
+        const {id: logId} = await bot("/api/admin/dm/log", {start: true, title: title || "Message from staff"}).catch(() => ({}));
+        let sent = 0, failed = [];
+        for (let i = 0; i < ids.length; i += 12){
+          const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title, embed: $("#plde").checked, logId});
+          j.results.forEach(r => r.ok ? sent++ : failed.push(r.name || r.id));
+          $("#pldbar i").style.width = Math.min(100, (i + 12) / ids.length * 100) + "%"; msg($("#pldmsg"), `${Math.min(ids.length, i + 12)} / ${ids.length}…`);
+        }
+        await bot("/api/admin/dm/log", {id: logId, title: title || "Message from staff", text, audience: audience || (ids.length === 1 ? names[0] : `${ids.length} players (Players tab)`), sent, failed}).catch(() => {});
+        msg($("#pldmsg"), `Sent ${sent}${failed.length ? ` — couldn't DM (DMs closed?): ${failed.join(", ")}` : ""}.`, !failed.length);
+        if (!failed.length) setTimeout(() => dlg.close(), 1500);
+      }catch(err){ msg($("#pldmsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  $("#pldmmiss").onclick = () => { if (!PL) return; const ids = PL.rows.filter(r => r.pool && !r.pool.pos.length && !r.pool.drafted && r.id && !r.gone).map(r => r.id); if (!ids.length) return toast("Everyone in the pool has positions set."); plDM(ids, PL_DM, "Draft pool — no positions"); };
+  $("#plbdm").onclick = () => plDM([...PLSEL].map(k => plRow(k)?.id).filter(Boolean), "");
+  $("#plbpos").onclick = () => plEdit([...PLSEL].map(plRow).filter(Boolean));
+  $("#plbadd").onclick = async () => {
+    const rows = [...PLSEL].map(plRow).filter(r => r && r.id && !r.pool); if (!rows.length) return msg($("#plbmsg"), "Everyone selected is already in the pool.", false);
+    if (!confirm(`Add ${rows.length} people to the draft pool? They get the Draftable role.`)) return;
+    $("#plbadd").disabled = true; let n = 0;
+    for (const r of rows){ try{ await bot("/api/admin/player", {uid: r.id, pool: "add"}); n++; msg($("#plbmsg"), `${n} / ${rows.length}…`); }catch{} }
+    $("#plbadd").disabled = false; PLSEL.clear(); toast(`Added ${n} to the pool.`); loadPlayers();
+  };
+  $("#plcsv").onclick = () => {
+    if (!PL) return; const rows = plFiltered(), q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = ["Name,User ID,Team,Role,Positions,In pool,Drafted,Free agent,Staff"].concat(rows.map(r => [r.name, r.id, r.team ? T(r.team).name : "", r.rank ? RANK[r.rank] : "", r.pool?.pos.join("/") || "", r.pool ? "yes" : "", r.pool?.drafted ? `#${r.pool.drafted.overall} ${T(r.pool.drafted.team).abbr}` : "", r.fa ? "yes" : "", r.staff ? "yes" : ""].map(q).join(","))).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"})); a.download = `ufa-players-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  };
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
