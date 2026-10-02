@@ -1,6 +1,6 @@
 {
  "status": "setup",
- "rounds": 8,
+ "rounds": 7,
  "snake": true,
  "pickMinutes": 0,
  "clockStart": null,
@@ -20,12 +20,6 @@
    "foId": "957403759896576040"
   },
   {
-   "abbr": "ARI",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502220776013885"
-  },
-  {
    "abbr": "KC",
    "fo": "𝑩𝑨𝑳𝑬𝑵𝑪𝑰𝑨𝑮𝑨",
    "in": true,
@@ -40,23 +34,11 @@
    "foId": "955692451258044477"
   },
   {
-   "abbr": "PHI",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502325348270183"
-  },
-  {
    "abbr": "CLE",
    "fo": "Jace",
    "in": true,
    "roleId": "1548502250060648598",
    "foId": "992429543258325072"
-  },
-  {
-   "abbr": "GB",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502266934333553"
   },
   {
    "abbr": "NE",
@@ -73,41 +55,11 @@
    "foId": "1482161722788941906"
   },
   {
-   "abbr": "PIT",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502329840500797"
-  },
-  {
-   "abbr": "CHI",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502242221363342"
-  },
-  {
-   "abbr": "DET",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502262844891187"
-  },
-  {
    "abbr": "LAR",
    "fo": "ccrick1044",
    "in": true,
    "roleId": "1548502296298782831",
    "foId": "1191466907354796213"
-  },
-  {
-   "abbr": "TEN",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502346621915217"
-  },
-  {
-   "abbr": "MIA",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502300098564241"
   },
   {
    "abbr": "SF",
@@ -145,12 +97,6 @@
    "foId": "1384410671625539634"
   },
   {
-   "abbr": "SEA",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502338170396802"
-  },
-  {
    "abbr": "BAL",
    "fo": "350aj",
    "in": true,
@@ -165,30 +111,6 @@
    "foId": "1432252161688997978"
   },
   {
-   "abbr": "CAR",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502237473542236"
-  },
-  {
-   "abbr": "TB",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502342368755892"
-  },
-  {
-   "abbr": "DAL",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502254296768673"
-  },
-  {
-   "abbr": "LAC",
-   "fo": "",
-   "in": true,
-   "roleId": "1548502292062273546"
-  },
-  {
    "abbr": "NYG",
    "fo": "Kjxtocold",
    "in": true,
@@ -196,23 +118,101 @@
    "foId": "965940037474717716"
   },
   {
+   "abbr": "ARI",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502220776013885"
+  },
+  {
+   "abbr": "PHI",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502325348270183"
+  },
+  {
+   "abbr": "GB",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502266934333553"
+  },
+  {
+   "abbr": "PIT",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502329840500797"
+  },
+  {
+   "abbr": "CHI",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502242221363342"
+  },
+  {
+   "abbr": "DET",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502262844891187"
+  },
+  {
+   "abbr": "TEN",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502346621915217"
+  },
+  {
+   "abbr": "MIA",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502300098564241"
+  },
+  {
+   "abbr": "SEA",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502338170396802"
+  },
+  {
+   "abbr": "CAR",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502237473542236"
+  },
+  {
+   "abbr": "TB",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502342368755892"
+  },
+  {
+   "abbr": "DAL",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502254296768673"
+  },
+  {
+   "abbr": "LAC",
+   "fo": "",
+   "in": false,
+   "roleId": "1548502292062273546"
+  },
+  {
    "abbr": "WAS",
    "fo": "Just_benn10",
-   "in": true,
+   "in": false,
    "roleId": "1548502350828806214",
    "foId": "1005679375225720882"
   },
   {
    "abbr": "IND",
    "fo": "𝑉𝑜𝗇",
-   "in": true,
+   "in": false,
    "roleId": "1548502275268411402",
    "foId": "1455465653761736930"
   },
   {
    "abbr": "HOU",
    "fo": "",
-   "in": true,
+   "in": false,
    "roleId": "1548502272600842341"
   }
  ],
