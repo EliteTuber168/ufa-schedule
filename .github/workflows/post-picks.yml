@@ -18,4 +18,5 @@ jobs:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           DRAFT_CHANNEL_ID: ${{ secrets.DRAFT_CHANNEL_ID }}
+          DRAFT_ROLE: ${{ secrets.DRAFT_ROLE }}
         run: python scripts/post_picks.py
