@@ -81,8 +81,9 @@ def main():
     for n in range(pn, cn):
         rd, pk, team = slot(n); p = pool.get(cur["picks"][n]["player"], {"name": "?", "pos": []})
         pos = "/".join(p.get("pos") or [])
-        auto = cur["picks"][n].get("auto")
-        tag = (" 🤖 *auto-pick from their queue*" if auto == "queue" else " 🎲 *random auto-pick (clock ran out)*" if auto == "random"
+        auto, forced = cur["picks"][n].get("auto"), cur["picks"][n].get("forced")
+        tag = (" ⏭️ *skipped by the commissioner — auto-picked from their queue*" if forced and auto == "queue"
+               else " ⏭️ *skipped by the commissioner — auto-picked*" if forced else" 🤖 *auto-pick from their queue*" if auto == "queue" else " 🎲 *random auto-pick (clock ran out)*" if auto == "random"
                else " 🤖 *auto-pick (clock ran out)*" if auto else "")
         msgs.append(f"**Round {rd}, Pick {pk}** (#{n + 1}) — {mention(team)} select **{p['name']}**" + (f" ({pos})" if pos else "")
                     + (f" <@{p['discord']}>" if p.get("discord") else "") + tag)
