@@ -1257,8 +1257,15 @@ async function web(req, url, env, ctx) {
           rows.push({ abbr: t.abbr, name: t.name, color: t.color, inDraft: !!dt.in, fo: fo ? { id: fo.id, name: fo.name } : null,
             queued: q.length, available: q.filter((id) => !taken.has(id)).length, updated: meta[t.abbr]?.ts || null, by: meta[t.abbr]?.by || "", list: q });
         }
-        const players = D.pool.map(({ id, name, pos, avatar }) => ({ id, name, pos: pos || [], avatar, taken: taken.has(id) }));
+        const players = D.pool.map(({ id, name, pos, avatar, discord }) => ({ id, name, pos: pos || [], avatar, discord: discord || null, taken: taken.has(id) }));
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
+      }
+      if (p === "/api/admin/queue") {   // staff edit a team's draft queue
+        const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
+        const { D } = await loadDraft(env), ids = new Set(D.pool.map((x) => x.id));
+        const q = [...new Set((body.ids || []).map(Number))].filter((x) => ids.has(x)).slice(0, 60);
+        await kput(env, `queue:${abbr}`, q, 120 * 86400, { n: q.length, ts: Date.now(), by: `${staffSig(admin)} (staff)` });
+        return out({ ok: true, queue: q });
       }
       if (p === "/api/admin/danger/preview") return out(await dangerPreview(env, L));
       if (p === "/api/admin/danger") return out({ ok: true, ...(await dangerRun(env, L, admin, body)) });
@@ -1308,7 +1315,7 @@ async function web(req, url, env, ctx) {
       let next = null;
       if (D.status === "live" || D.status === "paused") for (let k = D.picks.length; k < H.total; k++) if (H.slot(k).team === abbr) { next = { overall: k + 1, ...H.slot(k), away: k - D.picks.length }; break; }
       const cur = D.picks.length < H.total ? H.slot(D.picks.length) : null;
-      return out({ queue: await getQueue(env, abbr), available: H.avail.map(({ id, name, pos, rank, tier, avatar }) => ({ id, name, pos, rank, tier, avatar })),
+      return out({ queue: await getQueue(env, abbr), available: H.avail.map(({ id, name, pos, rank, tier, avatar, discord }) => ({ id, name, pos, rank, tier, avatar, discord: discord || null })),
         status: D.status, pickMinutes: D.pickMinutes || 0, clockStart: D.clockStart || null, onClock: cur ? { team: cur.team, name: N[cur.team], round: cur.round, pick: cur.pick } : null,
         next, mine, rounds: D.rounds, teams: H.T });
     }
