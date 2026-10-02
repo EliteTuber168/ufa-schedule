@@ -1363,9 +1363,13 @@
   {
    "id": 157,
    "name": "M E R X Y",
-   "pos": [],
+   "pos": [
+    "LB",
+    "DE"
+   ],
    "discord": "1361130560113741856",
-   "avatar": "https://cdn.discordapp.com/avatars/1361130560113741856/12a22f4bb3872ce815718e967f018712.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1361130560113741856/12a22f4bb3872ce815718e967f018712.png?size=96",
+   "locked": true
   },
   {
    "id": 158,
