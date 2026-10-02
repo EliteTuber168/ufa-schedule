@@ -1828,9 +1828,12 @@
   {
    "id": 225,
    "name": "丂丨几",
-   "pos": [],
+   "pos": [
+    "QB"
+   ],
    "discord": "1534755964845035622",
-   "avatar": "https://cdn.discordapp.com/avatars/1534755964845035622/bf134bdbb8f3a6f342ede6d2d5a8abc8.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1534755964845035622/bf134bdbb8f3a6f342ede6d2d5a8abc8.png?size=96",
+   "locked": true
   },
   {
    "id": 226,
