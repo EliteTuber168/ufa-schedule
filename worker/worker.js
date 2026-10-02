@@ -930,21 +930,28 @@ async function available(i, env) {
 
 // ---------- draft queue + auto-pick ----------
 const getQueue = async (env, abbr) => (await kget(env, `queue:${abbr}`)) || [];
-async function autoPick(env) {
+async function autoPick(env, force = null) {   // force = {n, by}: staff skip the team on the clock
   for (let attempt = 0; attempt < 3; attempt++) {
     const { D, sha } = await loadDraft(env), H = helpers(D), n = D.picks.length;
-    if (D.status !== "live" || !D.pickMinutes || !D.clockStart || n >= H.total) return;
-    if (Date.now() < D.clockStart + D.pickMinutes * 60000) return;
+    if (force) {
+      if (D.status !== "live" && D.status !== "paused") throw UE("The draft isn't running.");
+      if (n >= H.total) throw UE("The draft is already complete.");
+      if (force.n != null && +force.n !== n) throw UE("That pick was already made — refresh.");
+    } else {
+      if (D.status !== "live" || !D.pickMinutes || !D.clockStart || n >= H.total) return;
+      if (Date.now() < D.clockStart + D.pickMinutes * 60000) return;
+    }
     const s = H.slot(n), q = await getQueue(env, s.team);
     const fromQ = q.map((id) => H.avail.find((x) => x.id === id)).find(Boolean);
     const random = (D.autoMode || "random") === "random";
     const p = fromQ || (random ? H.avail[Math.floor(Math.random() * H.avail.length)] : H.avail[0]);
     if (!p) { D.status = "done"; } else {
-      D.picks.push({ player: p.id, at: Date.now(), by: "auto", auto: fromQ ? "queue" : random ? "random" : "board" });
+      D.picks.push({ player: p.id, at: Date.now(), by: "auto", auto: fromQ ? "queue" : random ? "random" : "board", ...(force ? { forced: force.by || "staff" } : {}) });
       if (D.picks.length >= H.total) D.status = "done";
     }
     D.clockStart = Date.now();
-    try { await putJSON(env, "draft.json", D, sha, p ? `Pick #${s.overall}: ${s.team} auto-pick ${p.name}` : "Draft complete (pool empty)"); return; }
+    try { await putJSON(env, "draft.json", D, sha, p ? `Pick #${s.overall}: ${s.team} auto-pick ${p.name}${force ? " (forced by staff)" : ""}` : "Draft complete (pool empty)");
+      return p ? { player: p.name, team: s.team, overall: s.overall, from: fromQ ? "queue" : random ? "random" : "board" } : { done: true }; }
     catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
   }
 }
@@ -1296,6 +1303,7 @@ async function web(req, url, env, ctx) {
         const players = D.pool.map(({ id, name, pos, avatar, discord }) => ({ id, name, pos: pos || [], avatar, discord: discord || null, taken: taken.has(id) }));
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
+      if (p === "/api/admin/autopick") return out({ ok: true, ...(await autoPick(env, { n: body.n, by: staffSig(admin) })) });   // force an auto-pick for the team on the clock
       if (p === "/api/admin/queue") {   // staff edit a team's draft queue
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
         const { D } = await loadDraft(env), ids = new Set(D.pool.map((x) => x.id));
