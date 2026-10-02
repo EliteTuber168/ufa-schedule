@@ -7,7 +7,7 @@ Secrets: DISCORD_BOT_TOKEN, DRAFT_CHANNEL_ID, DISCORD_GUILD_ID.
 """
 import json, os, subprocess
 from discord_api import call
-from league import GUILD, BOARD, load, dm
+from league import GUILD, BOARD, load, dm, find_role, guild_roles, guild_members
 
 CHANNEL = os.environ.get("DRAFT_CHANNEL_ID", "").strip()
 FO_PORTAL = "https://elitetuber168.github.io/ufa-schedule/fo.html"
@@ -51,6 +51,30 @@ def sync_roles(prev, cur):
         except SystemExit as e: errors.append(str(e))
     for e in errors: print("Role change failed:", e)
     return errors
+
+DRAFT_ROLE = os.environ.get("DRAFT_ROLE", "").strip() or "Draftable"
+
+def to_free_agency(cur):
+    """Draft over: take the Draftable role off everyone; anyone not on a team gets the Free Agent role."""
+    if not GUILD: return "", 0
+    roles = guild_roles()
+    draftable = find_role(roles, DRAFT_ROLE)
+    fa = find_role(roles, os.environ.get("FA_ROLE", "").strip() or "Free Agent") or find_role(roles, "Free Agents")
+    if not fa:
+        fa = call("POST", f"/guilds/{GUILD}/roles", {"name": "Free Agent", "mentionable": False, "hoist": False}); print("Created the Free Agent role")
+    team_ids = {t.get("roleId") for t in cur["teams"] if t.get("roleId")}
+    moved = 0
+    for m in guild_members():
+        mine = set(m.get("roles", []))
+        if not draftable or draftable["id"] not in mine: continue
+        uid = m["user"]["id"]
+        try:
+            call("DELETE", f"/guilds/{GUILD}/members/{uid}/roles/{draftable['id']}")
+            if not (mine & team_ids):
+                call("PUT", f"/guilds/{GUILD}/members/{uid}/roles/{fa['id']}"); moved += 1
+        except SystemExit as e: print("Role change failed:", e)
+    print(f"Moved {moved} undrafted players to free agency")
+    return fa["id"], moved
 
 def main():
     cur, prev = load("draft.json"), load_prev()
@@ -104,6 +128,10 @@ def main():
         if fo: dm_to = (fo, team, rd, pk, cn + 1)
     if cs == "done" and ps != "done":
         msgs.append(f"🏁 **The draft is complete!** Full rosters: {BOARD}#/teams")
+        try:
+            fa_id, moved = to_free_agency(cur)
+            if moved: msgs.append(f"🆓 {moved} undrafted players are now **Free Agents** — FOs can sign them with **/offer**.")
+        except SystemExit as e: print("Free agency step failed:", e)
     if role_errors and cn > pn:
         msgs.append("⚠️ Couldn't give out team roles — the bot needs **Manage Roles** and its role must sit above the team roles.")
     if not msgs:
