@@ -390,9 +390,13 @@
   {
    "id": 22,
    "name": "bryton",
-   "pos": [],
+   "pos": [
+    "WR",
+    "DB"
+   ],
    "discord": "1395144897484296254",
-   "avatar": "https://cdn.discordapp.com/avatars/1395144897484296254/9a374046e324df41a7da9b66b67cd376.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1395144897484296254/9a374046e324df41a7da9b66b67cd376.png?size=96",
+   "locked": true
   },
   {
    "id": 23,
