@@ -965,9 +965,13 @@
   {
    "id": 105,
    "name": "GeorgeBoden",
-   "pos": [],
+   "pos": [
+    "TE",
+    "S"
+   ],
    "discord": "1125305596015546408",
-   "avatar": "https://cdn.discordapp.com/avatars/1125305596015546408/49793217026bf2617a2a8318b6e0c714.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1125305596015546408/49793217026bf2617a2a8318b6e0c714.png?size=96",
+   "locked": true
   },
   {
    "id": 106,
