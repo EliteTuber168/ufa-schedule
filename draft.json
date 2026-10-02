@@ -227,7 +227,8 @@
   "CB",
   "S",
   "K/P",
-  "DB"
+  "DB",
+  "WR Deep"
  ],
  "pool": [
   {
@@ -407,9 +408,12 @@
   {
    "id": 25,
    "name": "YvvngJayy",
-   "pos": [],
+   "pos": [
+    "WR Deep"
+   ],
    "discord": "1406119787360161895",
-   "avatar": "https://cdn.discordapp.com/avatars/1406119787360161895/02467bb6fd4599297b000b67a89a0318.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1406119787360161895/02467bb6fd4599297b000b67a89a0318.png?size=96",
+   "locked": true
   },
   {
    "id": 26,
