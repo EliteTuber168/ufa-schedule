@@ -1578,9 +1578,12 @@
   {
    "id": 186,
    "name": "sh8dow",
-   "pos": [],
+   "pos": [
+    "QB"
+   ],
    "discord": "1432252161688997978",
-   "avatar": "https://cdn.discordapp.com/avatars/1432252161688997978/d7911ae4e863b2a02b1d8dacb257f73d.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1432252161688997978/d7911ae4e863b2a02b1d8dacb257f73d.png?size=96",
+   "locked": true
   },
   {
    "id": 187,
