@@ -1418,9 +1418,13 @@
   {
    "id": 164,
    "name": "Juju",
-   "pos": [],
+   "pos": [
+    "QB",
+    "DB"
+   ],
    "discord": "1369399693175427166",
-   "avatar": "https://cdn.discordapp.com/avatars/1369399693175427166/bb55f9234bbd4a1f78d3f7ab6bba1e47.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1369399693175427166/bb55f9234bbd4a1f78d3f7ab6bba1e47.png?size=96",
+   "locked": true
   },
   {
    "id": 165,
