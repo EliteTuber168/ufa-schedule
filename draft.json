@@ -807,9 +807,14 @@
   {
    "id": 80,
    "name": "Imhimggggg",
-   "pos": [],
+   "pos": [
+    "TE",
+    "DE",
+    "DB"
+   ],
    "discord": "925450917170532382",
-   "avatar": "https://cdn.discordapp.com/avatars/925450917170532382/c6fab1c2a8dd30dec7d357e48edc3d71.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/925450917170532382/c6fab1c2a8dd30dec7d357e48edc3d71.png?size=96",
+   "locked": true
   },
   {
    "id": 81,
