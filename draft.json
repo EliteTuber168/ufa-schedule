@@ -240,22 +240,6 @@
  ],
  "pool": [
   {
-   "id": 1,
-   "name": "CrazyAndrew",
-   "pos": [
-    "RB",
-    "WR",
-    "TE",
-    "K/P",
-    "KR"
-   ],
-   "discord": "296046630619054090",
-   "avatar": "https://cdn.discordapp.com/avatars/296046630619054090/118405449643495349408d6221d14c8d.png?size=96",
-   "locked": true,
-   "posAt": 1790977306012,
-   "posNotified": 1790977306012
-  },
-  {
    "id": 2,
    "name": "Scare",
    "pos": [],
