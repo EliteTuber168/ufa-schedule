@@ -164,6 +164,10 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .pchips button{font:inherit;font-size:13px;font-weight:700;color:var(--mute);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:4px 10px;cursor:pointer}
 .pchips button b{color:var(--fg);margin-left:4px}
 .pchips button[aria-pressed=true]{color:#fff;border-color:var(--blue);background:rgba(61,123,255,.18)}
+.pchips .pdel{margin-left:6px;color:var(--mute);font-size:12px;padding:0 2px;border-radius:4px}
+.pchips .pdel:hover{color:#fff;background:var(--red)}
+.posgrid .pdel{margin-left:auto;color:var(--mute);font-size:12px;cursor:pointer;padding:0 3px;border-radius:4px}
+.posgrid .pdel:hover{color:#fff;background:var(--red)}
 .pchips button.miss{color:var(--red);border-color:rgba(232,66,74,.5)}
 .pp{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:1px 6px;margin:1px 2px 1px 0;background:var(--panel3);color:var(--fg)}
 .pp.none{background:transparent;color:var(--red);border:1px dashed rgba(232,66,74,.5)}
@@ -1126,7 +1130,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function renderPlayers(){
     if (!PL) return;
     const pool = PL.rows.filter(r => r.pool), cnt = p => pool.filter(r => r.pool.pos.includes(p)).length, none = pool.filter(r => !r.pool.pos.length).length;
-    $("#plpos").innerHTML = `<button data-pp="" aria-pressed="${!PLPOS}">All positions</button>` + plPos().map(p => `<button data-pp="${esc(p)}" aria-pressed="${PLPOS === p}">${esc(p)}<b>${cnt(p)}</b></button>`).join("")
+    $("#plpos").innerHTML = `<button data-pp="" aria-pressed="${!PLPOS}">All positions</button>` + plPos().map(p => `<button data-pp="${esc(p)}" aria-pressed="${PLPOS === p}">${esc(p)}<b>${cnt(p)}</b>${POS_ALL.includes(p) ? "" : `<span class="pdel" data-pdel="${esc(p)}" title="Delete this position" role="button" aria-label="Delete ${esc(p)}">✕</span>`}</button>`).join("")
       + `<button data-pp="none" class="miss" aria-pressed="${PLPOS === "none"}">No positions<b>${none}</b></button>`;
     const rows = plFiltered(), shown = rows.slice(0, PLLIM);
     $("#plbody").innerHTML = shown.map(r => {
@@ -1150,7 +1154,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   ["#plq","#plg","#plt","#pls"].forEach(id => $(id).addEventListener(id === "#plq" ? "input" : "change", () => { PLLIM = 150; renderPlayers(); }));
   $("#plmore").onclick = () => { PLLIM += 150; renderPlayers(); };
   $("#plload").onclick = loadPlayers;
-  $("#plpos").onclick = e => { const b = e.target.closest("[data-pp]"); if (!b) return; PLPOS = b.dataset.pp; renderPlayers(); };
+  $("#plpos").onclick = e => { const d = e.target.closest("[data-pdel]"); if (d){ e.stopPropagation(); return plDelPos(d.dataset.pdel); } const b = e.target.closest("[data-pp]"); if (!b) return; PLPOS = b.dataset.pp; renderPlayers(); };
   $("#plstats").onclick = e => { const s = e.target.closest("[data-plg]"); if (!s) return; $("#plg").value = s.dataset.plg; PLPOS = ""; renderPlayers(); };
   $("#plall").onchange = e => { plFiltered().slice(0, PLLIM).filter(r => r.id && !r.gone).forEach(r => e.target.checked ? PLSEL.add(plKey(r)) : PLSEL.delete(plKey(r))); renderPlayers(); };
   $("#plbclr").onclick = () => { PLSEL.clear(); renderPlayers(); };
@@ -1164,7 +1168,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     const one = rows.length === 1 ? rows[0] : null, cur = new Set(one?.pool?.pos || []);
     wz.innerHTML = `<div class="row between"><h2>${one ? esc(one.name) : `Set positions for ${rows.length} players`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
       ${one ? `<div class="note">${one.team ? `${esc(T(one.team).name)}${one.rank && one.rank !== "player" ? " · " + RANK[one.rank] : ""} · ` : ""}${one.pool ? (one.pool.drafted ? `Drafted #${one.pool.drafted.overall} by ${esc(T(one.pool.drafted.team).name)}` : "In the draft pool") : "Not in the draft pool — saving positions adds them"}</div>` : `<div class="note">Replaces the positions of everyone selected. Anyone not in the draft pool gets added.</div>`}
-      <div class="posgrid" id="plgrid">${[...new Set([...plPos(), ...cur])].map(p => `<label><input type="checkbox" value="${esc(p)}" ${cur.has(p) ? "checked" : ""}> ${esc(p)}</label>`).join("")}</div>
+      <div class="posgrid" id="plgrid">${[...new Set([...plPos(), ...cur])].map(p => `<label><input type="checkbox" value="${esc(p)}" ${cur.has(p) ? "checked" : ""}> ${esc(p)}${POS_ALL.includes(p) ? "" : `<span class="pdel" data-pdel="${esc(p)}" title="Delete this position for everyone" role="button">✕</span>`}</label>`).join("")}</div>
       <div class="row" style="align-items:flex-end"><label class="f" style="flex:1 1 200px">Custom position<input type="text" id="plcus" maxlength="16" placeholder="e.g. KR, Slot WR, Wildcat" autocomplete="off"></label><button class="btn" id="plcusadd">+ Add</button></div>
       <div class="note" style="margin-top:-6px">Add as many as you want — each one shows up as a box above, ticked. Separate several with commas.</div>
       <label class="c"><input type="checkbox" id="plenotify" checked> DM ${one ? "them" : "each of them"} their new positions (only if they changed)</label>
@@ -1184,6 +1188,15 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     const target = r => r.id && !r.gone ? {uid: r.id} : {poolId: r.pool.id};
     const finish = async t => { toast(t); dlg.close(); await loadPlayers(); };
     wz.onclick = async e => {
+      const pd = e.target.closest("[data-pdel]");
+      if (pd){
+        e.preventDefault(); const name = pd.dataset.pdel, who = PL.rows.filter(r => r.pool?.pos.includes(name));
+        const saved = (PL.positions || []).includes(name) || who.length;
+        if (!saved){ pd.closest("label").remove(); return; }   // added just now, never saved
+        if (!confirm(`Delete the position "${name}" for everyone?\n\n${who.length ? `${who.length} player${who.length === 1 ? " has" : "s have"} it:\n${who.slice(0, 25).map(r => "• " + r.name).join("\n")}${who.length > 25 ? `\n…and ${who.length - 25} more` : ""}\n\nIt comes off their positions (no DM).` : "Nobody has it right now."}`)) return;
+        try{ await bot("/api/admin/position/delete", {name}); pd.closest("label").remove(); toast(`Deleted "${name}".`); await loadPlayers(); }catch(err){ msg($("#plemsg"), err.message, false); }
+        return;
+      }
       const b = e.target.closest("button"); if (!b || b.disabled) return;
       if (b.hasAttribute("data-close")) return dlg.close();
       try{
@@ -1234,6 +1247,23 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         msg($("#pldmsg"), `Sent ${sent}${failed.length ? ` — couldn't DM (DMs closed?): ${failed.join(", ")}` : ""}.`, !failed.length);
         if (!failed.length) setTimeout(() => dlg.close(), 1500);
       }catch(err){ msg($("#pldmsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  function plDelPos(name){
+    const who = PL.rows.filter(r => r.pool?.pos.includes(name));
+    wz.innerHTML = `<div class="row between"><h2>Delete "${esc(name)}"?</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="confirm">${who.length ? `<b>${who.length}</b> player${who.length === 1 ? " has" : "s have"} this position right now. It comes off their positions — they keep the rest. Nobody gets a DM.` : "Nobody has this position right now. It just disappears from the list."}</div>
+      ${who.length ? `<div class="tscroll" style="max-height:300px;overflow:auto"><table><tbody>${who.map(r => `<tr><td><div class="who" style="display:flex;align-items:center;gap:8px">${r.avatar ? `<img src="${esc(r.avatar)}" alt="" style="width:26px;height:26px;border-radius:50%">` : ""}<b>${esc(r.name)}</b></div></td><td>${r.pool.pos.map(p => `<span class="pp" style="${p === name ? "background:rgba(232,66,74,.35)" : ""}">${esc(p)}</span>`).join("")}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      <span class="msg" id="pdmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="pdgo">Delete position</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "pdgo") return;
+      b.disabled = true;
+      try{ const j = await bot("/api/admin/position/delete", {name}); if (PLPOS === name) PLPOS = ""; dlg.close(); toast(`Deleted "${name}"${j.removedFrom ? ` — removed from ${j.removedFrom} player${j.removedFrom === 1 ? "" : "s"}` : ""}.`); loadPlayers(); }
+      catch(err){ msg($("#pdmsg"), err.message, false); b.disabled = false; }
     };
     dlg.showModal();
   }
