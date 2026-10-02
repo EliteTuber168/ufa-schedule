@@ -2,7 +2,7 @@
  "status": "setup",
  "rounds": 7,
  "snake": true,
- "pickMinutes": 0,
+ "pickMinutes": 7,
  "clockStart": null,
  "teams": [
   {
