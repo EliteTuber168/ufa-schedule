@@ -546,9 +546,14 @@
   {
    "id": 44,
    "name": "Dart",
-   "pos": [],
+   "pos": [
+    "QB",
+    "LB",
+    "CB"
+   ],
    "discord": "1514016653569163416",
-   "avatar": "https://cdn.discordapp.com/avatars/1514016653569163416/a15d7d9fad613bdc7ed29e9463cb6b17.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1514016653569163416/a15d7d9fad613bdc7ed29e9463cb6b17.png?size=96",
+   "locked": true
   },
   {
    "id": 45,
