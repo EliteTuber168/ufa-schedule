@@ -1620,9 +1620,13 @@
   {
    "id": 194,
    "name": "Jaythegoat",
-   "pos": [],
+   "pos": [
+    "WR",
+    "DB"
+   ],
    "discord": "1457464951781327096",
-   "avatar": "https://cdn.discordapp.com/avatars/1457464951781327096/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1457464951781327096/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96",
+   "locked": true
   },
   {
    "id": 195,
