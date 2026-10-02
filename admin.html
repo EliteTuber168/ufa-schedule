@@ -683,7 +683,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       run: s => bot("/api/admin/staffrole", {uid: s.uid, on: !byId(s.uid).staff}), ok:"Yes, confirm"},
     pw: {title:"FO portal password", steps:["team","confirm"],
       confirm: s => `Make a new FO portal password for the <b>${esc(T(s.team).name)}</b>? Any old password for this team stops working.`,
-      run: async s => { const pw = genPw(); await bot("/api/admin/password", {team: s.team, password: pw}); return {title: `Password for the ${T(s.team).name}`, pw}; }, ok:"Make password"},
+      run: async s => { const pw = genPw(); await bot("/api/admin/password", {team: s.team, password: pw}); return {title: `Password for the ${T(s.team).name}`, pw, team: s.team}; }, ok:"Make password"},
   };
   function wizard(kind, pre = {}){
     if (!LIVE) return toast("The bot isn't reachable right now, so live changes are off.", false);
@@ -715,12 +715,13 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       if (b.hasAttribute("data-close")) return dlg.close();
       if (b.hasAttribute("data-back")){ i--; delete s[KEY[steps[i]]]; return show(); }
       if (b.dataset.copy){ try{ await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; }catch{ toast("Select the password and copy it.", false); } return; }
+      if (b.dataset.pwdm){ b.disabled = true; try{ const r = await bot("/api/admin/password/dm", {team: b.dataset.pwdm, password: b.dataset.pw}); b.textContent = "Sent ✓"; msg($("#pwmsg"), r.text); }catch(err){ msg($("#pwmsg"), err.message, false); b.disabled = false; } return; }
       for (const k of ["team","uid","choice"]) if (b.dataset[k]){ s[k] = b.dataset[k]; i++; return show(); }
       if (b.hasAttribute("data-run")){
         b.disabled = true; msg($("#wmsg"), "Working…");
         try{
           const j = await F.run(s);
-          if (j.pw){ wz.innerHTML = `<h2>${esc(j.title)}</h2><div class="pwbox">${esc(j.pw)}</div><div class="note">Copy it now — it won't be shown again. The FO picks their team on the FO portal and types this in.</div><div class="row" style="justify-content:flex-end"><button class="btn gold" data-copy="${esc(j.pw)}">Copy</button><button class="btn" data-close>Done</button></div>`; return; }
+          if (j.pw){ wz.innerHTML = `<h2>${esc(j.title)}</h2><div class="pwbox">${esc(j.pw)}</div><div class="note">Copy it now — it won't be shown again. The FO picks their team on the FO portal and types this in.</div><span class="msg" id="pwmsg"></span><div class="row" style="justify-content:flex-end">${foOf(j.team) ? `<button class="btn blue" data-pwdm="${esc(j.team)}" data-pw="${esc(j.pw)}">DM it to ${esc(foOf(j.team).name)}</button>` : `<span class="note" style="margin-right:auto">No FO on this team to DM.</span>`}<button class="btn gold" data-copy="${esc(j.pw)}">Copy</button><button class="btn" data-close>Done</button></div>`; return; }
           dlg.close(); toast(j.text || "Done."); await afterChange();
         }catch(err){ msg($("#wmsg"), err.message, false); b.disabled = false; }
       }
