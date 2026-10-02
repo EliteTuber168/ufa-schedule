@@ -154,11 +154,12 @@ async function league(env, fresh = false) {
     const [cfg, S, dr] = await Promise.all([getJSON(env, "config.json").then((x) => x.D).catch(() => ({})), loadSched(env), loadDraft(env)]);
     const D = dr.D, guild = cfg.guild || env.GUILD_ID;
     const R = { ...(cfg.roles || {}) }, C = { ...(cfg.channels || {}) };
-    if (guild && env.DISCORD_BOT_TOKEN && (!R.fo || !R.draftable)) {
+    if (guild && env.DISCORD_BOT_TOKEN && (!R.fo || !R.draftable || !R.fa)) {
       const roles = await discord(env, "GET", `/guilds/${guild}/roles`).catch(() => []);
       const byName = (n) => roles.find((r) => r.name.toLowerCase().trim() === n.toLowerCase())?.id;
       R.fo ||= byName(env.FO_ROLE || "Franchise owner");
       R.draftable ||= byName(env.DRAFT_ROLE || "Draftable");
+      R.fa ||= byName(env.FA_ROLE || "Free Agent") || byName("Free Agents");
     }
     const teams = S.teams.map((t) => {
       const d = D.teams.find((x) => x.abbr === t.abbr) || {};
@@ -225,6 +226,9 @@ async function klist(env, prefix) {
 // ---------- roles / posts ----------
 const addRole = (env, L, uid, r, why) => r && discord(env, "PUT", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
 const delRole = (env, L, uid, r, why) => r && discord(env, "DELETE", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
+// after the draft, anyone who leaves a team goes to free agency (Free Agent role); joining a team removes it
+const toFA = (env, L, uid, why) => L.draftStatus === "done" && L.R.fa ? addRole(env, L, uid, L.R.fa, why).catch(() => {}) : null;
+const offFA = (env, L, uid, why) => L.R.fa ? delRole(env, L, uid, L.R.fa, why).catch(() => {}) : null;
 async function stripTeam(env, L, uid, abbr, why) {
   await delRole(env, L, uid, teamOf(L, abbr)?.roleId, why);
   for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r, why).catch(() => {});
@@ -315,6 +319,7 @@ async function answerOffer(env, id, uid, accept) {
   if (n >= cap(L)) return `Sorry — the ${team.name} roster is full (${n}/${cap(L)}).`;
   await addRole(env, L, uid, team.roleId, `Signed via offer from ${o.byName}`);
   await delRole(env, L, uid, L.R.draftable, "Signed with a team").catch(() => {});
+  await offFA(env, L, uid, "Signed with a team");
   o.status = "accepted"; o.answered = Date.now(); await saveOffer(env, o);
   for (const k of await klist(env, "offer:")) if (k.metadata?.uid === uid && k.metadata?.status === "pending" && k.name !== `offer:${id}`) {
     const x = await kget(env, k.name); if (x) { x.status = "void"; await saveOffer(env, x); }
@@ -336,6 +341,7 @@ async function releasePlayer(env, L, actor, uid) {
   if (actor.rank === "gm" && ["gm", "hc"].includes(t.rank)) throw UE("Only the franchise owner can release team staff.");
   const team = teamOf(L, t.team), n = rosterOf(L, M, t.team).length - 1;
   await stripTeam(env, L, uid, t.team, `Released by ${actor.name}`);
+  await toFA(env, L, uid, "Released — free agent");
   bust("members");
   await logTx(env, L, { title: "Player Released", teams: [t.team], desc: `<@${uid}> has been released from the **${team.name}**`,
     lines: [`👤 Released by · ${actor.id ? `<@${actor.id}>` : `**${actor.name}**`}${actor.staff && !actor.team ? " (staff)" : ""}`, capLine(L, n)] });
@@ -456,7 +462,7 @@ async function decide(env, id, approve, reason, staff) {
   if (approve) {
     if (r.type === "demand") {
       const p = I(r.uid);
-      if (p?.team === r.team) await stripTeam(env, L, r.uid, r.team, `Demand approved by ${staff.name}`);
+      if (p?.team === r.team) { await stripTeam(env, L, r.uid, r.team, `Demand approved by ${staff.name}`); await toFA(env, L, r.uid, "Demand approved — free agent"); }
       await logTx(env, L, { title: "Demand Successful", teams: [r.team], desc: `<@${r.uid}> has demanded from the **${t.name}**`,
         lines: [`🛡️ Approved by · ${staff.id ? `<@${staff.id}>` : `**${staff.name}**`}`, capLine(L, rosterOf(L, M, r.team).length - (p?.team === r.team ? 1 : 0))] });
       await dm(env, r.uid, `✅ Your demand to leave the ${t.name} was approved. You're now a free agent.\nStaff note: ${reason}`);
@@ -542,6 +548,7 @@ async function staffAssign(env, L, staff, uid, abbr) {
   if (from) await stripTeam(env, L, uid, p.team, `Moved by ${staff.name}`);
   await addRole(env, L, uid, t.roleId, `Assigned by ${staff.name}`);
   await delRole(env, L, uid, L.R.draftable, "Assigned to a team").catch(() => {});
+  await offFA(env, L, uid, "Assigned to a team");
   bust("members");
   await logTx(env, L, { title: from ? "Roster Move" : "Staff Signing", teams: [abbr, ...(from ? [from.abbr] : [])],
     desc: from ? `<@${uid}> has been moved from the **${from.name}** to the **${t.name}**` : `<@${uid}> has been added to the **${t.name}**`,
