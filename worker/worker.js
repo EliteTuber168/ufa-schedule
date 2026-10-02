@@ -716,6 +716,45 @@ async function scanDMs(env, L, page = 0) {
 }
 
 // ---------- admin: players directory ----------
+const posDM = (pos) => `Staff updated your positions for the UFA draft.\n\n**Your positions: ${pos.length ? pos.join(" / ") : "none"}**\n\nThis is what franchise owners see when they draft. If it's wrong, hit **Reply to staff** below (or DM a staff member) and we'll fix it.`;
+async function recentPosEdits(env, D, days = 7) {   // pool entries staff changed lately that haven't been told yet
+  const since = new Date(Date.now() - days * 86400000).toISOString(), seen = new Map();
+  for (let page = 1; page <= 5; page++) {
+    const r = await fetch(`https://api.github.com/repos/${repo(env)}/commits?path=draft.json&since=${since}&per_page=100&page=${page}`,
+      { headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "ufa-draft-worker" } });
+    if (!r.ok) break;
+    const list = await r.json();
+    for (const c of list) {
+      const m = /^Staff \((.*?)\): ([^:\n]+): /.exec(c.commit?.message || ""); if (!m) continue;
+      const at = Date.parse(c.commit.author?.date || c.commit.committer?.date) || 0, k = m[2].trim().toLowerCase();
+      if (!seen.has(k) || seen.get(k) < at) seen.set(k, at);
+    }
+    if (list.length < 100) break;
+  }
+  const out = [];
+  for (const p of D.pool) {
+    const at = Math.max(p.posAt || 0, seen.get(String(p.name).toLowerCase()) || 0);
+    if (at && p.discord && !(p.posNotified >= at - 60000)) out.push({ poolId: p.id, uid: p.discord, name: p.name, pos: p.pos || [], at });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+async function notifyPositions(env, ids) {   // DM up to 12 pool players their current positions, then mark them as told
+  ids = [...new Set((ids || []).map(Number))].slice(0, 12);
+  const { D } = await loadDraft(env), results = [];
+  for (const id of ids) {
+    const p = D.pool.find((x) => x.id === id);
+    if (!p?.discord) { results.push({ id, ok: false, name: p?.name || String(id) }); continue; }
+    results.push({ id, name: p.name, ok: await staffSend(env, p.discord, posDM(p.pos || []), "UFA Staff") });
+  }
+  const ok = results.filter((r) => r.ok).map((r) => r.id);
+  for (let attempt = 0; attempt < 3 && ok.length; attempt++) {
+    const { D, sha } = await loadDraft(env), now = Date.now();
+    D.pool.forEach((p) => { if (ok.includes(p.id)) p.posNotified = now; });
+    try { await putJSON(env, "draft.json", D, sha, `Told ${ok.length} player(s) their updated positions`); break; }
+    catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
+  }
+  return { results };
+}
 async function adminPlayers(env, L) {
   const [M, { D }] = await Promise.all([members(env, L, true), loadDraft(env)]), H = helpers(D);
   const draftedBy = new Map(D.picks.map((pk, n) => [pk.player, { team: H.slot(n).team, overall: n + 1 }]));
@@ -730,7 +769,8 @@ async function adminPlayers(env, L) {
   for (const p of D.pool) if (!p.discord || !inServer.has(p.discord))
     rows.push({ id: p.discord || null, name: p.name, avatar: p.avatar || null, team: null, rank: null, staff: false, gone: true,
       pool: { id: p.id, pos: p.pos || [], drafted: draftedBy.get(p.id) || null, rank: p.rank ?? null } });
-  return { rows, positions: D.positions || [], draftStatus: D.status, roles: { draftable: !!L.R.draftable, fa: !!L.R.fa } };
+  const recent = await recentPosEdits(env, D).catch(() => []);
+  return { rows, recent, positions: D.positions || [], draftStatus: D.status, roles: { draftable: !!L.R.draftable, fa: !!L.R.fa } };
 }
 async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos?: "WR/CB" | [..], pool?: "add" | "remove"}
   const uid = body.uid ? String(body.uid) : null, poolId = body.poolId != null ? +body.poolId : null;
@@ -752,7 +792,9 @@ async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos
         D.pool.push(p);
         if (L.R.draftable && body.pool !== "add") await addRole(env, L, uid, L.R.draftable, "Added to the draft pool by staff").catch(() => {});   // the hourly sync keeps the pool = Draftable role
       }
+      let tell = false;
       if (body.pos != null) {
+        const before = (p.pos || []).join("/");
         const pos = [];   // standard positions are normalised (HB -> RB); anything else is kept as a custom position
         for (const raw of (Array.isArray(body.pos) ? body.pos : String(body.pos).split(/[\/,]+/))) {
           const t = String(raw).replace(/[^\w .+\-\/]/g, "").trim().slice(0, 16); if (!t) continue;
@@ -761,12 +803,15 @@ async function adminPlayer(env, L, body, by = "admin") {   // {uid | poolId, pos
         }
         pos.splice(20);
         p.pos = pos; p.locked = true;
+        if (pos.join("/") !== before) { p.posAt = Date.now(); if (m && body.notify !== false) { tell = true; p.posNotified = p.posAt; } }
         D.positions = D.positions || []; for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
       }
       what = `${p.name}: ${posTxt(p) || "no positions"}`;
     }
-    try { await putJSON(env, "draft.json", D, sha, `Staff (${by}): ${what}`); return { ok: true, text: what, pos: p.pos || [] }; }
+    try { await putJSON(env, "draft.json", D, sha, `Staff (${by}): ${what}`); }
     catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
+    const dmed = tell ? await staffSend(env, uid, posDM(p.pos || []), by) : null;
+    return { ok: true, text: what, pos: p.pos || [], dmed };
   }
   throw UE("The draft file was busy — try again.");
 }
@@ -1367,6 +1412,7 @@ async function web(req, url, env, ctx) {
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
       if (p === "/api/admin/players") return out(await adminPlayers(env, L));
+      if (p === "/api/admin/notifypos") return out(await notifyPositions(env, body.ids));
       if (p === "/api/admin/player") return out(await adminPlayer(env, L, body, staffSig(admin)));
       if (p === "/api/admin/autopick") return out({ ok: true, ...(await autoPick(env, { n: body.n, by: staffSig(admin) })) });   // force an auto-pick for the team on the clock
       if (p === "/api/admin/queue") {   // staff edit a team's draft queue
