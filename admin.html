@@ -174,6 +174,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .plist .badge{min-width:36px;height:26px;font-size:15px}
 .posgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
 .posgrid label{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px 6px;font-weight:700;cursor:pointer;background:var(--panel2)}
+.posgrid label input{flex:none;width:16px;height:16px}
+.posgrid label{text-align:center;line-height:1.15;word-break:break-word}
 .posgrid label:has(input:checked){border-color:var(--blue);background:rgba(61,123,255,.18)}
 .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
@@ -1161,18 +1163,32 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     const one = rows.length === 1 ? rows[0] : null, cur = new Set(one?.pool?.pos || []);
     wz.innerHTML = `<div class="row between"><h2>${one ? esc(one.name) : `Set positions for ${rows.length} players`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
       ${one ? `<div class="note">${one.team ? `${esc(T(one.team).name)}${one.rank && one.rank !== "player" ? " · " + RANK[one.rank] : ""} · ` : ""}${one.pool ? (one.pool.drafted ? `Drafted #${one.pool.drafted.overall} by ${esc(T(one.pool.drafted.team).name)}` : "In the draft pool") : "Not in the draft pool — saving positions adds them"}</div>` : `<div class="note">Replaces the positions of everyone selected. Anyone not in the draft pool gets added.</div>`}
-      <div class="posgrid">${plPos().map(p => `<label><input type="checkbox" value="${esc(p)}" ${cur.has(p) ? "checked" : ""}> ${esc(p)}</label>`).join("")}</div>
+      <div class="posgrid" id="plgrid">${[...new Set([...plPos(), ...cur])].map(p => `<label><input type="checkbox" value="${esc(p)}" ${cur.has(p) ? "checked" : ""}> ${esc(p)}</label>`).join("")}</div>
+      <div class="row" style="align-items:flex-end"><label class="f" style="flex:1 1 200px">Custom position<input type="text" id="plcus" maxlength="16" placeholder="e.g. KR, Slot WR, Wildcat" autocomplete="off"></label><button class="btn" id="plcusadd">+ Add</button></div>
+      <div class="note" style="margin-top:-6px">Add as many as you want — each one shows up as a box above, ticked. Separate several with commas.</div>
       <div class="bar hide" id="plebar"><i style="width:0"></i></div><span class="msg" id="plemsg"></span>
       <div class="row between">${one && one.pool && !one.pool.drafted ? `<button class="btn x" id="plerm">Remove from draft pool</button>` : one && !one.pool && one.id && !one.gone ? `<button class="btn" id="pleadd">Add to pool (no positions)</button>` : "<span></span>"}
         <div class="row"><button class="btn" data-close>Cancel</button><button class="btn gold" id="plesave">Save</button></div></div>`;
+    const addCustom = () => {
+      const inp = $("#plcus"); inp.value.split(",").map(x => x.trim()).filter(Boolean).forEach(v => {
+        v = v.slice(0, 16);
+        const ex = $$("#plgrid input").find(x => x.value.toLowerCase() === v.toLowerCase());
+        if (ex){ ex.checked = true; return; }
+        $("#plgrid").insertAdjacentHTML("beforeend", `<label><input type="checkbox" value="${esc(v)}" checked> ${esc(v)}</label>`);
+      });
+      inp.value = ""; inp.focus();
+    };
+    $("#plcus").onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); addCustom(); } };
     const target = r => r.id && !r.gone ? {uid: r.id} : {poolId: r.pool.id};
     const finish = async t => { toast(t); dlg.close(); await loadPlayers(); };
     wz.onclick = async e => {
       const b = e.target.closest("button"); if (!b || b.disabled) return;
       if (b.hasAttribute("data-close")) return dlg.close();
       try{
+        if (b.id === "plcusadd") return addCustom();
         if (b.id === "plesave"){
-          const pos = $$(".posgrid input:checked").map(x => x.value); b.disabled = true;
+          if ($("#plcus").value.trim()) addCustom();
+          const pos = $$("#plgrid input:checked").map(x => x.value); b.disabled = true;
           if (rows.length > 1) $("#plebar").classList.remove("hide");
           let done = 0, bad = [];
           for (const r of rows){ try{ await bot("/api/admin/player", {...target(r), pos}); }catch(err){ bad.push(`${r.name} (${err.message})`); } done++; $("#plebar i").style.width = done / rows.length * 100 + "%"; msg($("#plemsg"), `${done} / ${rows.length}…`); }
