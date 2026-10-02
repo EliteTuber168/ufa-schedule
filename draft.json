@@ -230,7 +230,8 @@
   "DB",
   "WR Deep",
   "Slot FS Short",
-  "OS/Deep"
+  "OS/Deep",
+  "OS/Short"
  ],
  "pool": [
   {
@@ -532,9 +533,12 @@
   {
    "id": 42,
    "name": "4zxr",
-   "pos": [],
+   "pos": [
+    "OS/Short"
+   ],
    "discord": "1511918194607001691",
-   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/0b03d56fd34da64809dd031e789f8b1c.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/0b03d56fd34da64809dd031e789f8b1c.png?size=96",
+   "locked": true
   },
   {
    "id": 43,
