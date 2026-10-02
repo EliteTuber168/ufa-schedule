@@ -261,9 +261,13 @@
   {
    "id": 5,
    "name": "joep6132",
-   "pos": [],
+   "pos": [
+    "TE",
+    "LB"
+   ],
    "discord": "409134443916165142",
-   "avatar": "https://cdn.discordapp.com/avatars/409134443916165142/f4c10dd4c0392b0de3e24f617f323318.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/409134443916165142/f4c10dd4c0392b0de3e24f617f323318.png?size=96",
+   "locked": true
   },
   {
    "id": 6,
