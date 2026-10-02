@@ -1210,9 +1210,15 @@
   {
    "id": 138,
    "name": "Hvhd9774",
-   "pos": [],
+   "pos": [
+    "TE",
+    "DB",
+    "DE",
+    "LB"
+   ],
    "discord": "1312654271715479617",
-   "avatar": "https://cdn.discordapp.com/avatars/1312654271715479617/e0a66e4515759edea4b2de68a8042fe3.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1312654271715479617/e0a66e4515759edea4b2de68a8042fe3.png?size=96",
+   "locked": true
   },
   {
    "id": 139,
