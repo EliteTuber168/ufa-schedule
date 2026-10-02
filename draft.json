@@ -1550,9 +1550,14 @@
   {
    "id": 182,
    "name": "Flock",
-   "pos": [],
+   "pos": [
+    "QB",
+    "WR",
+    "DE"
+   ],
    "discord": "1418788305289613393",
-   "avatar": "https://cdn.discordapp.com/avatars/1418788305289613393/9519c0b0e2293c05c9bdc343272dd0ba.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1418788305289613393/9519c0b0e2293c05c9bdc343272dd0ba.png?size=96",
+   "locked": true
   },
   {
    "id": 183,
