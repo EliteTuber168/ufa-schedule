@@ -739,19 +739,19 @@ async function recentPosEdits(env, D, days = 7) {   // pool entries staff change
   }
   return out.sort((a, b) => b.at - a.at);
 }
-async function notifyPositions(env, ids) {   // DM up to 12 pool players their current positions, then mark them as told
+async function notifyPositions(env, ids, silent = false) {   // silent: just take them off the "needs telling" list   // DM up to 12 pool players their current positions, then mark them as told
   ids = [...new Set((ids || []).map(Number))].slice(0, 12);
   const { D } = await loadDraft(env), results = [];
   for (const id of ids) {
     const p = D.pool.find((x) => x.id === id);
     if (!p?.discord) { results.push({ id, ok: false, name: p?.name || String(id) }); continue; }
-    results.push({ id, name: p.name, ok: await staffSend(env, p.discord, posDM(p.pos || []), "UFA Staff") });
+    results.push({ id, name: p.name, ok: silent ? true : await staffSend(env, p.discord, posDM(p.pos || []), "UFA Staff") });
   }
   const ok = results.filter((r) => r.ok).map((r) => r.id);
   for (let attempt = 0; attempt < 3 && ok.length; attempt++) {
     const { D, sha } = await loadDraft(env), now = Date.now();
     D.pool.forEach((p) => { if (ok.includes(p.id)) p.posNotified = now; });
-    try { await putJSON(env, "draft.json", D, sha, `Told ${ok.length} player(s) their updated positions`); break; }
+    try { await putJSON(env, "draft.json", D, sha, silent ? `Skipped telling ${ok.length} player(s) about position changes` : `Told ${ok.length} player(s) their updated positions`); break; }
     catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
   }
   return { results };
@@ -1412,7 +1412,7 @@ async function web(req, url, env, ctx) {
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
       if (p === "/api/admin/players") return out(await adminPlayers(env, L));
-      if (p === "/api/admin/notifypos") return out(await notifyPositions(env, body.ids));
+      if (p === "/api/admin/notifypos") return out(await notifyPositions(env, body.ids, !!body.silent));
       if (p === "/api/admin/player") return out(await adminPlayer(env, L, body, staffSig(admin)));
       if (p === "/api/admin/autopick") return out({ ok: true, ...(await autoPick(env, { n: body.n, by: staffSig(admin) })) });   // force an auto-pick for the team on the clock
       if (p === "/api/admin/queue") {   // staff edit a team's draft queue
