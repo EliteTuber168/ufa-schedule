@@ -592,9 +592,15 @@
   {
    "id": 47,
    "name": "DarkSpark78505095",
-   "pos": [],
+   "pos": [
+    "QB",
+    "DB"
+   ],
    "discord": "1523444412695318589",
-   "avatar": "https://cdn.discordapp.com/avatars/1523444412695318589/235ac3663e50bc3500b5911573e4ed75.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1523444412695318589/235ac3663e50bc3500b5911573e4ed75.png?size=96",
+   "locked": true,
+   "posAt": 1790995699614,
+   "posNotified": 1790995699614
   },
   {
    "id": 48,
