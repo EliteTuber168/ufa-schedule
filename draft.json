@@ -655,9 +655,15 @@
   {
    "id": 54,
    "name": "нех",
-   "pos": [],
+   "pos": [
+    "WR",
+    "Short"
+   ],
    "discord": "1530752930586820750",
-   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/78cff9b469684bd0c1546d58ed31eaee.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/78cff9b469684bd0c1546d58ed31eaee.png?size=96",
+   "locked": true,
+   "posAt": 1790995781118,
+   "posNotified": 1790995781118
   },
   {
    "id": 55,
