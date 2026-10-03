@@ -227,7 +227,7 @@ async function klist(env, prefix) {
 const addRole = (env, L, uid, r, why) => r && discord(env, "PUT", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
 const delRole = (env, L, uid, r, why) => r && discord(env, "DELETE", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, why);
 // after the draft, anyone who leaves a team goes to free agency (Free Agent role); joining a team removes it
-const toFA = (env, L, uid, why) => L.draftStatus === "done" && L.R.fa ? addRole(env, L, uid, L.R.fa, why).catch(() => {}) : null;
+const toFA = (env, L, uid, why) => ["done", "skipped"].includes(L.draftStatus) && L.R.fa ? addRole(env, L, uid, L.R.fa, why).catch(() => {}) : null;
 const offFA = (env, L, uid, why) => L.R.fa ? delRole(env, L, uid, L.R.fa, why).catch(() => {}) : null;
 async function stripTeam(env, L, uid, abbr, why) {
   await delRole(env, L, uid, teamOf(L, abbr)?.roleId, why);
@@ -739,6 +739,49 @@ async function recentPosEdits(env, D, days = 7) {   // pool entries staff change
   }
   return out.sort((a, b) => b.at - a.at);
 }
+// ---------- open free agency (skip the draft) ----------
+// Runs in small steps (Workers can only make so many calls per request): the page keeps calling until done.
+async function openFreeAgency(env, L, admin, body) {
+  const teamIds = new Set(L.teams.map((t) => t.roleId).filter(Boolean)), M = body.preview || body.start ? await members(env, L, true) : [];
+  let job = await kget(env, "job:openfa");
+  if (body.preview) {
+    const d = L.R.draftable ? M.filter((m) => (m.roles || []).includes(L.R.draftable)) : [];
+    return { draftable: d.length, toFA: d.filter((m) => !(m.roles || []).some((r) => teamIds.has(r))).length, faRole: !!L.R.fa, draftStatus: L.draftStatus, running: job ? { i: job.i, total: job.list.length } : null };
+  }
+  if (body.start) {
+    if (["live", "paused"].includes(L.draftStatus)) throw UE("The draft is running — end it in the draft room first.");
+    if (String(body.confirm || "").trim().toUpperCase() !== "FREE AGENCY") throw UE('Type FREE AGENCY to confirm.');
+    let fa = L.R.fa;
+    if (!fa) { const r = await discord(env, "POST", `/guilds/${L.guild}/roles`, { name: "Free Agent", mentionable: false, hoist: false }, "Free agency opened"); fa = r.id; bust("league"); }
+    const list = L.R.draftable ? M.filter((m) => (m.roles || []).includes(L.R.draftable)).map((m) => [m.user.id, !(m.roles || []).some((r) => teamIds.has(r))]) : [];
+    job = { list, i: 0, fa, draftable: L.R.draftable, by: staffSig(admin), moved: 0, errors: 0, announce: !!body.announce, started: Date.now() };
+    // mark the draft as skipped so post-draft releases send people to free agency too
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { D, sha } = await loadDraft(env); D.status = "skipped";
+      try { await putJSON(env, "draft.json", D, sha, `Staff (${job.by}): skipped the draft — free agency is open`); break; }
+      catch (e) { if (e.status !== 409 && e.status !== 422) throw e; }
+    }
+    bust("league");
+  }
+  if (!job) return { done: true, i: 0, total: 0, moved: 0 };
+  const end = Math.min(job.list.length, job.i + (body.start ? 8 : 14));
+  for (; job.i < end; job.i++) {
+    const [uid, free] = job.list[job.i];
+    try {
+      await discord(env, "DELETE", `/guilds/${L.guild}/members/${uid}/roles/${job.draftable}`, null, "Free agency opened");
+      if (free) { await discord(env, "PUT", `/guilds/${L.guild}/members/${uid}/roles/${job.fa}`, null, "Free agency opened"); job.moved++; }
+    } catch (e) { if (e.status === 403) { await kput(env, "job:openfa", job, 3600); throw UE("Discord refused a role change — the bot's role must sit above Draftable and Free Agent. Fix that, then press the button again to continue."); } if (e.status !== 404) job.errors++; }
+  }
+  if (job.i < job.list.length) { await kput(env, "job:openfa", job, 3600); return { done: false, i: job.i, total: job.list.length, moved: job.moved }; }
+  await KV(env).delete("job:openfa"); bust("members");
+  if (job.announce && L.C.transactions) {
+    await discord(env, "POST", `/channels/${L.C.transactions}/messages`, { embeds: [{ title: "🆓 Free agency is open!", color: 0x4fd18b,
+      description: `There's no draft this season — **${job.moved}** players are now **Free Agents**.\n\n**Franchise owners:** sign players with **/offer** (they accept from their DMs).\n**Players:** check your offers with **/offers**, or use **/fa list** to see who's available.\n\nRosters are capped at **${cap(L)}**.`,
+      footer: { text: `Opened by ${job.by}` }, timestamp: new Date().toISOString() }] }).catch(() => {});
+  }
+  return { done: true, i: job.i, total: job.list.length, moved: job.moved, errors: job.errors };
+}
+
 async function deletePosition(env, name, by) {   // remove a (custom) position from the list and from everyone who has it
   name = String(name || "").trim(); if (!name) throw UE("Which position?");
   if (["QB", "RB", "WR", "TE", "OL", "DE", "LB", "CB", "S", "K/P"].includes(name)) throw UE("Standard positions can't be deleted.");
@@ -1161,8 +1204,9 @@ async function faJoin(i, sub, env) {
     let p = D.pool.find((x) => x.discord === uid);
     if (p && H.taken.has(p.id)) return "You've already been drafted.";
     if (attempt === 0) {
-      if (!L.R.draftable) return "⚠️ Couldn't find the draft-pool role. Ask the commissioner to check the DRAFT_ROLE setting.";
-      await discord(env, "PUT", `/guilds/${gid}/members/${uid}/roles/${L.R.draftable}`);
+      const faOpen = ["done", "skipped"].includes(L.draftStatus) && L.R.fa;   // after the draft (or once it's skipped) new sign-ups are free agents
+      if (!faOpen && !L.R.draftable) return "⚠️ Couldn't find the draft-pool role. Ask the commissioner to check the DRAFT_ROLE setting.";
+      await discord(env, "PUT", `/guilds/${gid}/members/${uid}/roles/${faOpen ? L.R.fa : L.R.draftable}`);
     }
     if (!p) { p = { id: Math.max(0, ...D.pool.map((x) => x.id)) + 1, name: cleanName(m.nick || m.user.global_name || m.user.username) || m.user.username, pos: [], discord: uid }; D.pool.push(p); }
     p.pos = pos; p.avatar = avatarUrl(gid, m); p.locked = true;
@@ -1433,6 +1477,7 @@ async function web(req, url, env, ctx) {
         return out({ rows, players, status: D.status, pickMinutes: D.pickMinutes || 0, autoMode: D.autoMode || "random", pool: H.avail.length });
       }
       if (p === "/api/admin/players") return out(await adminPlayers(env, L));
+      if (p === "/api/admin/openfa") return out(await openFreeAgency(env, L, admin, body));
       if (p === "/api/admin/position/delete") return out(await deletePosition(env, body.name, staffSig(admin)));
       if (p === "/api/admin/notifypos") return out(await notifyPositions(env, body.ids, !!body.silent));
       if (p === "/api/admin/player") return out(await adminPlayer(env, L, body, staffSig(admin)));
