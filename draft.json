@@ -413,9 +413,16 @@
   {
    "id": 26,
    "name": "Sequnse",
-   "pos": [],
+   "pos": [
+    "QB",
+    "WR",
+    "Deep"
+   ],
    "discord": "1406497927894929450",
-   "avatar": "https://cdn.discordapp.com/avatars/1406497927894929450/0458a771f180ab91b34f88ec0e1039ed.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1406497927894929450/0458a771f180ab91b34f88ec0e1039ed.png?size=96",
+   "locked": true,
+   "posAt": 1790995688725,
+   "posNotified": 1790995688725
   },
   {
    "id": 27,
