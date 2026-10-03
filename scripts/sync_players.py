@@ -43,8 +43,12 @@ def main():
     role = find_role(roles, ROLE)
     if not role: sys.exit(f"No role named/with ID '{ROLE}'. Roles: {', '.join(r['name'] for r in roles)}")
     humans = guild_members()
-    tagged = {m["user"]["id"]: m for m in humans if role["id"] in m.get("roles", [])}
-    print(f"{len(humans)} members, {len(tagged)} with the '{role['name']}' role.")
+    fa_phase = draft.get("status") in ("done", "skipped")   # after the draft / once it's skipped: free agents count as the pool
+    fa_role = find_role(roles, os.environ.get("FA_ROLE", "").strip() or "Free Agent") or find_role(roles, "Free Agents")
+    keep_ids = {role["id"]} | ({fa_role["id"]} if fa_phase and fa_role else set())
+    tagged = {m["user"]["id"]: m for m in humans if keep_ids & set(m.get("roles", []))}
+    in_server = {m["user"]["id"] for m in humans}
+    print(f"{len(humans)} members, {len(tagged)} in the player pool{' (Draftable + Free Agent)' if fa_phase else ''}.")
 
     # ---- players ----
     pool, drafted = draft.setdefault("pool", []), {p["player"] for p in draft.get("picks", [])}
@@ -70,7 +74,8 @@ def main():
             if x not in draft.setdefault("positions", []): draft["positions"].append(x)
     keep = []
     for p in pool:
-        if p.get("discord") and p["discord"] not in tagged and p["id"] not in drafted:
+        gone = p["discord"] not in in_server if fa_phase else p["discord"] not in tagged   # in free agency: keep everyone's positions until they leave the server
+        if p.get("discord") and gone and p["id"] not in drafted:
             removed += 1; continue
         keep.append(p)
     draft["pool"] = keep
