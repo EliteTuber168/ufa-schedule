@@ -434,9 +434,17 @@
   {
    "id": 28,
    "name": "B4NKR8LL",
-   "pos": [],
+   "pos": [
+    "RB",
+    "LB",
+    "KR",
+    "DE"
+   ],
    "discord": "1444694412759138424",
-   "avatar": "https://cdn.discordapp.com/avatars/1444694412759138424/02bac92644feb8a4348920e0cdc8cf96.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1444694412759138424/02bac92644feb8a4348920e0cdc8cf96.png?size=96",
+   "locked": true,
+   "posAt": 1790995773122,
+   "posNotified": 1790995773122
   },
   {
    "id": 29,
