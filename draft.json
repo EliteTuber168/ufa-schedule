@@ -237,7 +237,8 @@
   "Deep",
   "Short",
   "KR",
-  "Plays Anything"
+  "Plays Anything",
+  "Backup Kicker"
  ],
  "pool": [
   {
@@ -436,15 +437,16 @@
    "name": "B4NKR8LL",
    "pos": [
     "RB",
+    "DE",
     "LB",
     "KR",
-    "DE"
+    "Backup Kicker"
    ],
    "discord": "1444694412759138424",
    "avatar": "https://cdn.discordapp.com/avatars/1444694412759138424/02bac92644feb8a4348920e0cdc8cf96.png?size=96",
    "locked": true,
-   "posAt": 1790995773122,
-   "posNotified": 1790995773122
+   "posAt": 1790996636258,
+   "posNotified": 1790996636258
   },
   {
    "id": 29,
