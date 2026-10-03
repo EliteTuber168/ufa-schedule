@@ -238,7 +238,8 @@
   "Short",
   "KR",
   "Plays Anything",
-  "Backup Kicker"
+  "Backup Kicker",
+  "C"
  ],
  "pool": [
   {
@@ -922,9 +923,19 @@
   {
    "id": 92,
    "name": "Lostxzly",
-   "pos": [],
+   "pos": [
+    "WR",
+    "TE",
+    "DE",
+    "CB",
+    "C",
+    "LB"
+   ],
    "discord": "1010314190176657498",
-   "avatar": "https://cdn.discordapp.com/avatars/1010314190176657498/bdafaf7634cca7fcb1eced791255f7bc.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1010314190176657498/bdafaf7634cca7fcb1eced791255f7bc.png?size=96",
+   "locked": true,
+   "posAt": 1791070726592,
+   "posNotified": 1791070726592
   },
   {
    "id": 93,
