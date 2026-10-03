@@ -1927,9 +1927,16 @@
   {
    "id": 233,
    "name": "._rell",
-   "pos": [],
+   "pos": [
+    "WR",
+    "DE",
+    "S"
+   ],
    "discord": "1546563074750939342",
-   "avatar": "https://cdn.discordapp.com/avatars/1546563074750939342/443844adfbb54d3b1ec8aae2a8bb4a27.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1546563074750939342/443844adfbb54d3b1ec8aae2a8bb4a27.png?size=96",
+   "locked": true,
+   "posAt": 1791070749183,
+   "posNotified": 1791070749183
   },
   {
    "id": 234,
