@@ -510,9 +510,16 @@
   {
    "id": 38,
    "name": "Blitz",
-   "pos": [],
+   "pos": [
+    "WR",
+    "KR",
+    "S"
+   ],
    "discord": "1488385577261863035",
-   "avatar": "https://cdn.discordapp.com/avatars/1488385577261863035/938c560bf03a8aad213aba82fd0aa878.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1488385577261863035/938c560bf03a8aad213aba82fd0aa878.png?size=96",
+   "locked": true,
+   "posAt": 1790995742041,
+   "posNotified": 1790995742041
   },
   {
    "id": 39,
