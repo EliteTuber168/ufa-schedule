@@ -243,6 +243,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     <div id="tab-dash" style="display:flex;flex-direction:column;gap:16px">
       <div class="stats" id="stats"></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+        <section class="panel hide" id="fapanel" style="border-color:var(--good);grid-column:1/-1"><div class="row between"><div><h2>🆓 Skip the draft — open free agency</h2><div class="note" id="fanote">Moves everyone in the draft pool to free agency so FOs can start signing with /offer.</div></div><button class="btn good" id="fago">Open free agency…</button></div></section>
         <section class="panel"><h2>Needs attention</h2><div class="attn" id="attn"></div></section>
         <section class="panel"><h2>Quick actions</h2>
           <div class="row">
@@ -593,7 +594,47 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   }
 
   // ---------- dashboard ----------
+  function faPanel(){
+    const st = LIVE?.draftStatus, show = LIVE && (st === "setup" || st === "skipped");
+    $("#fapanel").classList.toggle("hide", !show); if (!show) return;
+    if (st === "skipped"){ $("#fanote").innerHTML = `Free agency is open — the draft was skipped. Use this again if new people got the Draftable role and should become free agents.`; $("#fago").textContent = "Move Draftable → Free Agent…"; }
+  }
+  $("#fago").onclick = async () => {
+    wz.innerHTML = `<div class="row between"><h2>Open free agency</h2><button class="btn sm" data-close aria-label="Close">✕</button></div><div class="note">Checking…</div>`; dlg.showModal();
+    let pv; try{ pv = await bot("/api/admin/openfa", {preview: true}); }catch(e){ wz.innerHTML = `<div class="msg err">${esc(e.message)}</div><button class="btn" data-close>Close</button>`; wz.onclick = ev => { if (ev.target.closest("[data-close]")) dlg.close(); }; return; }
+    const s = D.settings;
+    wz.innerHTML = `<div class="row between"><h2 style="color:var(--good)">Open free agency</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="confirm">This skips the draft:
+        <ul style="margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+          <li>The <b>Draftable</b> role comes off <b>${pv.draftable}</b> people.</li>
+          <li><b>${pv.toFA}</b> of them (everyone not on a team) get the <b>Free Agent</b> role${pv.faRole ? "" : " — the role gets created"}.</li>
+          <li>The draft is marked as skipped. From now on, anyone released or leaving a team becomes a free agent automatically.</li></ul></div>
+      ${pv.running ? `<div class="warnbox">A previous run stopped at ${pv.running.i} / ${pv.running.total}. Confirming continues it.</div>` : ""}
+      <label class="c"><input type="checkbox" id="faunf" ${s.signingFreeze ? "checked" : ""} ${s.signingFreeze ? "" : "disabled"}> Unfreeze signings &amp; trades ${s.signingFreeze ? "" : "(already open)"}</label>
+      <label class="c"><input type="checkbox" id="faann" checked> Post "Free agency is open" in #transactions</label>
+      <label class="f" style="flex:none">Roster cap<input type="number" id="facap" min="1" max="60" value="${s.rosterCap}"></label>
+      <label class="f" style="flex:none"><span>Type <span class="phrase">FREE AGENCY</span> to confirm</span><input type="text" id="faph" autocomplete="off" spellcheck="false"></label>
+      <div class="bar hide" id="fabar"><i style="width:0"></i></div><span class="msg" id="famsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn good" id="farun" disabled>Open free agency</button></div>`;
+    $("#faph").oninput = e => { $("#farun").disabled = e.target.value.trim().toUpperCase() !== "FREE AGENCY"; };
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")){ if (!$("#farun")?.dataset.busy) dlg.close(); return; }
+      if (b.id !== "farun") return;
+      b.disabled = true; b.dataset.busy = "1"; $("#fabar").classList.remove("hide");
+      try{
+        const cap = parseInt($("#facap").value), unf = $("#faunf").checked;
+        if ((unf && s.signingFreeze) || (cap > 0 && cap !== s.rosterCap)){ msg($("#famsg"), "Saving settings…"); if (unf) s.signingFreeze = false; if (cap > 0) s.rosterCap = cap; await save(true); }
+        let r = await bot("/api/admin/openfa", {start: !pv.running, confirm: $("#faph").value, announce: $("#faann").checked});
+        const upd = () => { $("#fabar i").style.width = (r.total ? r.i / r.total * 100 : 100) + "%"; msg($("#famsg"), `${r.i} / ${r.total} people updated…`); };
+        upd(); while (!r.done){ r = await bot("/api/admin/openfa", {}); upd(); }
+        msg($("#famsg"), `Done — ${r.moved} free agents${r.errors ? ` (${r.errors} skipped)` : ""}. Signings ${D.settings.signingFreeze ? "are still frozen" : "are open"}.`);
+        toast("Free agency is open!"); delete b.dataset.busy; await loadLive(); renderDash(); setTimeout(() => dlg.close(), 2500);
+      }catch(err){ msg($("#famsg"), err.message, false); b.disabled = false; delete b.dataset.busy; }
+    };
+  };
   async function renderDash(){
+    faPanel();
     const act = D.teams.filter(t => t.active).length, ms = members();
     const tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
     $("#stats").innerHTML = tile(`${act}<span style="font-size:24px;color:var(--mute)">/${D.teams.length}</span>`, "Active teams", "var(--good)")
