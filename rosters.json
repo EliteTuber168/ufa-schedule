@@ -1,12 +1,12 @@
 {
- "updated": "2026-10-03T00:32:30+00:00",
+ "updated": "2026-10-03T06:36:27+00:00",
  "teams": {
   "ARI": [],
   "ATL": [
    {
     "id": "1384410671625539634",
-    "name": "dont get",
-    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/1b2a0933323aaf144c53ba07f7ecc605.png?size=96",
+    "name": "josh allen",
+    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/9d6ce7b9ce08b4f923379378a9d21dd5.png?size=96",
     "fo": true
    }
   ],
@@ -28,6 +28,12 @@
   "DET": [],
   "GB": [],
   "HOU": [
+   {
+    "id": "1552716188461834264",
+    "name": "KA1",
+    "avatar": "https://cdn.discordapp.com/avatars/1552716188461834264/3f58b1d726037d278ac8c55ce25b60e2.png?size=96",
+    "fo": true
+   },
    {
     "id": "1432252161688997978",
     "name": "sh8dow",
