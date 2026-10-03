@@ -91,7 +91,7 @@
   },
   {
    "abbr": "ATL",
-   "fo": "Clamps is black",
+   "fo": "dont get",
    "in": true,
    "roleId": "1548502224949346378",
    "foId": "1384410671625539634"
@@ -167,9 +167,10 @@
   },
   {
    "abbr": "SEA",
-   "fo": "",
+   "fo": "Big Booty Bennz",
    "in": false,
-   "roleId": "1548502338170396802"
+   "roleId": "1548502338170396802",
+   "foId": "1437892983901917295"
   },
   {
    "abbr": "CAR",
@@ -211,9 +212,10 @@
   },
   {
    "abbr": "HOU",
-   "fo": "",
+   "fo": "sh8dow",
    "in": false,
-   "roleId": "1548502272600842341"
+   "roleId": "1548502272600842341",
+   "foId": "1432252161688997978"
   }
  ],
  "positions": [
@@ -435,13 +437,6 @@
    "pos": [],
    "discord": "1452945406408527912",
    "avatar": "https://cdn.discordapp.com/avatars/1452945406408527912/ad50c85a255699147d1134536fe7c772.png?size=96"
-  },
-  {
-   "id": 30,
-   "name": "Viperkings1",
-   "pos": [],
-   "discord": "1457203498394325127",
-   "avatar": "https://cdn.discordapp.com/avatars/1457203498394325127/dae38ce366b816efc130e51e9ab99187.png?size=96"
   },
   {
    "id": 31,
@@ -730,13 +725,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/587358226190827525/60d4b3d36ab1bacf1d5509ab1acfa97a.png?size=96"
   },
   {
-   "id": 69,
-   "name": "trackstar",
-   "pos": [],
-   "discord": "646484061065576458",
-   "avatar": "https://cdn.discordapp.com/avatars/646484061065576458/69a57402a8f2a10fdf385e53250df6b5.png?size=96"
-  },
-  {
    "id": 70,
    "name": "Bat",
    "pos": [],
@@ -900,7 +888,7 @@
    "name": "Trellski",
    "pos": [],
    "discord": "1000563656368586762",
-   "avatar": "https://cdn.discordapp.com/avatars/1000563656368586762/8fc564d7abc79b4e64fc45b615d0e459.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1000563656368586762/df5d9f97c88f8c4da0e3fdb4244129df.png?size=96"
   },
   {
    "id": 92,
@@ -1137,13 +1125,6 @@
    "pos": [],
    "discord": "1234229995522756724",
    "avatar": "https://cdn.discordapp.com/avatars/1234229995522756724/f8c0f874a3627b762faf55b593795e52.png?size=96"
-  },
-  {
-   "id": 125,
-   "name": "Block_Bozy",
-   "pos": [],
-   "discord": "1247596522300768361",
-   "avatar": "https://cdn.discordapp.com/avatars/1247596522300768361/dc5f636623b760646bc35275dcea728c.png?size=96"
   },
   {
    "id": 126,
@@ -1591,13 +1572,6 @@
    "locked": true
   },
   {
-   "id": 187,
-   "name": "Big Booty Bennz",
-   "pos": [],
-   "discord": "1437892983901917295",
-   "avatar": "https://cdn.discordapp.com/avatars/1437892983901917295/0fa483e48c9621f018552d8fd799eb54.png?size=96"
-  },
-  {
    "id": 188,
    "name": "Leedakid",
    "pos": [],
@@ -1867,13 +1841,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1535752387044708492/6497cb780b0df2065a1d385b0174d176.png?size=96",
    "locked": true,
    "posNotified": 1790976589373
-  },
-  {
-   "id": 228,
-   "name": "Dollyfitz",
-   "pos": [],
-   "discord": "1539050626108104844",
-   "avatar": "https://cdn.discordapp.com/avatars/1539050626108104844/657050911daa819b25fe31d8da0eb7f3.png?size=96"
   },
   {
    "id": 229,

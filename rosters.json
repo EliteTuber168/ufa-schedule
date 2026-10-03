@@ -1,11 +1,11 @@
 {
- "updated": "2026-10-02T20:48:01+00:00",
+ "updated": "2026-10-03T00:32:30+00:00",
  "teams": {
   "ARI": [],
   "ATL": [
    {
     "id": "1384410671625539634",
-    "name": "Clamps is black",
+    "name": "dont get",
     "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/1b2a0933323aaf144c53ba07f7ecc605.png?size=96",
     "fo": true
    }
@@ -27,7 +27,14 @@
   "DEN": [],
   "DET": [],
   "GB": [],
-  "HOU": [],
+  "HOU": [
+   {
+    "id": "1432252161688997978",
+    "name": "sh8dow",
+    "avatar": "https://cdn.discordapp.com/avatars/1432252161688997978/d7911ae4e863b2a02b1d8dacb257f73d.png?size=96",
+    "fo": true
+   }
+  ],
   "IND": [
    {
     "id": "1455465653761736930",
@@ -92,7 +99,14 @@
     "fo": true
    }
   ],
-  "SEA": [],
+  "SEA": [
+   {
+    "id": "1437892983901917295",
+    "name": "Big Booty Bennz",
+    "avatar": "https://cdn.discordapp.com/avatars/1437892983901917295/0fa483e48c9621f018552d8fd799eb54.png?size=96",
+    "fo": true
+   }
+  ],
   "TB": [],
   "TEN": [],
   "WAS": [
