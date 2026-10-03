@@ -1683,9 +1683,16 @@
   {
    "id": 196,
    "name": "lord heals",
-   "pos": [],
+   "pos": [
+    "QB",
+    "WR",
+    "S"
+   ],
    "discord": "1458997210254676130",
-   "avatar": "https://cdn.discordapp.com/avatars/1458997210254676130/8a979dd82576b80e5a38db6c9b01700d.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1458997210254676130/8a979dd82576b80e5a38db6c9b01700d.png?size=96",
+   "locked": true,
+   "posAt": 1791070762184,
+   "posNotified": 1791070762184
   },
   {
    "id": 198,
