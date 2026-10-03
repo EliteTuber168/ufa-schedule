@@ -934,9 +934,17 @@
   {
    "id": 93,
    "name": "SlideInDaPuzz",
-   "pos": [],
+   "pos": [
+    "QB",
+    "WR",
+    "LB",
+    "DB"
+   ],
    "discord": "1035388077188849684",
-   "avatar": "https://cdn.discordapp.com/avatars/1035388077188849684/5e1f36f3c3a5f3edfe565e5ef974aa04.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1035388077188849684/5e1f36f3c3a5f3edfe565e5ef974aa04.png?size=96",
+   "locked": true,
+   "posAt": 1790995794552,
+   "posNotified": 1790995794552
   },
   {
    "id": 94,
