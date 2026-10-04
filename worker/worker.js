@@ -769,6 +769,16 @@ async function recentPosEdits(env, D, days = 7) {   // pool entries staff change
   }
   return out.sort((a, b) => b.at - a.at);
 }
+// how many teams have each player in their draft queue (+ best spot), cached for a minute
+const queuePopularity = (env) => cached("qpop", 60000, async () => {
+  const pop = {};
+  for (const k of await klist(env, "queue:")) {
+    const q = await kget(env, k.name) || [];
+    q.forEach((id, i) => { const x = pop[id] || (pop[id] = { n: 0, best: 999 }); x.n++; x.best = Math.min(x.best, i + 1); });
+  }
+  return pop;
+});
+
 // ---------- open free agency (skip the draft) ----------
 // Runs in small steps (Workers can only make so many calls per request): the page keeps calling until done.
 async function openFreeAgency(env, L, admin, body) {
@@ -1568,6 +1578,7 @@ async function web(req, url, env, ctx) {
         const q = [...new Set((body.ids || []).map(Number))].filter((x) => ids.has(x)).slice(0, 60);
         const byId = actor.id || (actor.pw ? foOf(L, M, abbr)?.id : null) || null;
         await kput(env, `queue:${abbr}`, q, 120 * 86400, { n: q.length, ts: Date.now(), by: actor.name, byId });
+        bust("qpop");
         return out({ ok: true, queue: q });
       }
       // a queue someone who's no longer in this front office made (e.g. the previous FO) → ask the new FO to review it
@@ -1582,7 +1593,7 @@ async function web(req, url, env, ctx) {
       const cur = D.picks.length < H.total ? H.slot(D.picks.length) : null;
       return out({ queue: await getQueue(env, abbr), available: H.avail.map(({ id, name, pos, rank, tier, avatar, discord }) => ({ id, name, pos, rank, tier, avatar, discord: discord || null })),
         status: D.status, pickMinutes: D.pickMinutes || 0, clockStart: D.clockStart || null, onClock: cur ? { team: cur.team, name: N[cur.team], round: cur.round, pick: cur.pick } : null,
-        next, mine, rounds: D.rounds, teams: H.T, inherited: inheritedQ ? { by, ts: qmeta.ts || null, n: qlist.length, available: qlist.filter((id) => !H.taken.has(id)).length } : null });
+        next, mine, rounds: D.rounds, teams: H.T, popular: await queuePopularity(env), inherited: inheritedQ ? { by, ts: qmeta.ts || null, n: qlist.length, available: qlist.filter((id) => !H.taken.has(id)).length } : null });
     }
     if (p === "/api/franchises") return out({ teams: L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { ...t, count: r.length, fo: r.find((x) => x.rank === "fo") || null }; }), cap: cap(L) });
     if (p === "/api/transactions") {
