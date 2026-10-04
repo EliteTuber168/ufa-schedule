@@ -252,7 +252,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
             <button class="btn" data-wz="remove">➖ Remove player</button>
             <a class="btn" href="plan.html">📅 Plan a week</a>
             <a class="btn" href="draftroom.html">🏈 Draft room</a>
-            <button class="btn blue" id="syncall" title="Re-check everything against Discord: team FOs, stale portal passwords and logins, player counts, the live owner list">🔄 Update everything</button>
+            <button class="btn blue" id="syncall" title="Re-check everything against Discord: team FOs, FOs/rostered players with Draftable or Free Agent, stale portal passwords and logins, player counts, the live owner list">🔄 Update everything</button>
           </div>
           <span class="msg" id="syncmsg"></span>
           <h3 style="margin-top:6px">Latest transactions</h3><div class="attn" id="dashtx"></div>
@@ -639,8 +639,11 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     const b = $("#syncall"); b.disabled = true; msg($("#syncmsg"), "Checking everything…");
     try{
       const j = await bot("/api/admin/syncall", {});
+      let fixed = j.roles.fixed, names = j.roles.names, rem = j.roles.remaining;
+      while (rem > 0){ msg($("#syncmsg"), `Fixing roles… ${fixed} done, ${rem} left`); const r = await bot("/api/admin/syncall", {rolesOnly: true}); fixed += r.roles.fixed; names = names.concat(r.roles.names); if (!r.roles.fixed) break; rem = r.roles.remaining; }
       await loadLive();   // pulls fresh players/FOs and saves counts to the site
       const bits = [`${j.teamsWithFO} team(s) with an FO`];
+      bits.push(fixed ? `took Draftable/Free Agent off ${[...new Set(names)].length} FO/rostered player(s) (${[...new Set(names)].slice(0, 8).join(", ")}${names.length > 8 ? "…" : ""})` : "roles OK");
       bits.push(j.passwords.length ? `deleted ${j.passwords.length} password(s) for teams with no FO (${j.passwords.join(", ")})` : "passwords OK");
       bits.push(j.sessions ? `logged out ${j.sessions} stale portal login(s)` : "logins OK");
       if (j.board) bits.push("owner list refreshed");
