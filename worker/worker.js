@@ -1566,9 +1566,15 @@ async function web(req, url, env, ctx) {
       if (req.method === "POST") {
         const { D } = await loadDraft(env), ids = new Set(D.pool.map((x) => x.id));
         const q = [...new Set((body.ids || []).map(Number))].filter((x) => ids.has(x)).slice(0, 60);
-        await kput(env, `queue:${abbr}`, q, 120 * 86400, { n: q.length, ts: Date.now(), by: actor.name });
+        const byId = actor.id || (actor.pw ? foOf(L, M, abbr)?.id : null) || null;
+        await kput(env, `queue:${abbr}`, q, 120 * 86400, { n: q.length, ts: Date.now(), by: actor.name, byId });
         return out({ ok: true, queue: q });
       }
+      // a queue someone who's no longer in this front office made (e.g. the previous FO) → ask the new FO to review it
+      const qm = await KV(env).getWithMetadata(`queue:${abbr}`), qmeta = qm.metadata || {}, qlist = JSON.parse(qm.value || "[]");
+      const front = rosterOf(L, M, abbr).filter((x) => ["fo", "gm"].includes(x.rank));
+      const by = String(qmeta.by || "");
+      const inheritedQ = qlist.length && !by.endsWith("(staff)") && (qmeta.byId ? !front.some((x) => x.id === qmeta.byId) : (by && !by.endsWith("front office") && !front.some((x) => x.name === by)));
       const { D } = await loadDraft(env), H = helpers(D), N = names(await loadSched(env));
       const mine = D.picks.map((pk, k) => ({ pk, s: H.slot(k) })).filter((x) => x.s.team === abbr).map((x) => ({ ...D.pool.find((y) => y.id === x.pk.player), round: x.s.round, pick: x.s.pick, auto: x.pk.auto || null }));
       let next = null;
@@ -1576,7 +1582,7 @@ async function web(req, url, env, ctx) {
       const cur = D.picks.length < H.total ? H.slot(D.picks.length) : null;
       return out({ queue: await getQueue(env, abbr), available: H.avail.map(({ id, name, pos, rank, tier, avatar, discord }) => ({ id, name, pos, rank, tier, avatar, discord: discord || null })),
         status: D.status, pickMinutes: D.pickMinutes || 0, clockStart: D.clockStart || null, onClock: cur ? { team: cur.team, name: N[cur.team], round: cur.round, pick: cur.pick } : null,
-        next, mine, rounds: D.rounds, teams: H.T });
+        next, mine, rounds: D.rounds, teams: H.T, inherited: inheritedQ ? { by, ts: qmeta.ts || null, n: qlist.length, available: qlist.filter((id) => !H.taken.has(id)).length } : null });
     }
     if (p === "/api/franchises") return out({ teams: L.teams.map((t) => { const r = rosterOf(L, M, t.abbr); return { ...t, count: r.length, fo: r.find((x) => x.rank === "fo") || null }; }), cap: cap(L) });
     if (p === "/api/transactions") {
