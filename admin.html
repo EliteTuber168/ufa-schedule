@@ -395,6 +395,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="tester"><input type="text" id="modtest" placeholder="Test a message… e.g. yo when is the draft" style="flex:1 1 260px" aria-label="Test a message"><span id="modtres" class="note"></span></div>
       </section>
       <section class="panel" id="ctrpanel" style="border-color:var(--gold)"><div class="note">Loading counter…</div></section>
+      <section class="panel" id="excpanel" style="border-color:var(--red)"></section>
       <div><h2 style="font-size:22px">Quick add</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:8px" id="modpre"></div></div>
       <div><h2 style="font-size:22px">Your rules</h2><div id="modrules" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><div class="note">Loading…</div></div></div>
     </div>
@@ -1729,12 +1730,12 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     {key: "preset", icon: "🧼", title: "Slurs & NSFW (Discord's lists)", desc: "Discord-maintained lists of slurs, sexual content and profanity.", rule: {name: "UFA: Slurs & NSFW", trigger_type: 4, presets: [1,2,3], message: "That language isn't allowed here."}},
     {key: "mention", icon: "📣", title: "Mass mentions", desc: "Blocks messages that ping 6+ people/roles at once (raid & spam protection).", rule: {name: "UFA: Mass mentions", trigger_type: 5, mentions: 6, message: "Too many mentions in one message."}},
   ];
-  let CTR = null;
+  let CTR = null, EXC = null;
   async function loadMod(){
     $("#modrules").innerHTML = `<div class="note">Loading…</div>`;
-    try{ MOD = await bot("/api/admin/automod"); }catch(e){ $("#modrules").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; $("#modpre").innerHTML = ""; $("#ctrpanel").innerHTML = ""; return; }
-    try{ CTR = (await bot("/api/admin/counter", {})).counter; }catch{ CTR = null; }
-    renderMod(); renderCtr();
+    try{ MOD = await bot("/api/admin/automod"); }catch(e){ $("#modrules").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; $("#modpre").innerHTML = ""; $("#ctrpanel").innerHTML = ""; $("#excpanel").innerHTML = ""; return; }
+    try{ [CTR, EXC] = (await Promise.all([bot("/api/admin/counter", {key: "draft"}), bot("/api/admin/counter", {key: "excuse"})])).map(x => x.counter); }catch{ CTR = EXC = null; }
+    renderMod(); renderCtr(); renderExc();
   }
   // the "when is the draft" counter
   function renderCtr(){
@@ -1761,7 +1762,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     else if (b.id === "ctrrm"){ if (!confirm("Remove the counter? Its message gets deleted.")) return; body = {remove: true}; }
     else body = {add: +b.dataset.ctradd};
     b.disabled = true;
-    try{ CTR = (await bot("/api/admin/counter", body)).counter; renderCtr(); toast(body.setup ? "Counter is live." : body.remove ? "Counter removed." : "Updated."); }
+    try{ CTR = (await bot("/api/admin/counter", {key: "draft", ...body})).counter; renderCtr(); toast(body.setup ? "Counter is live." : body.remove ? "Counter removed." : "Updated."); }
     catch(err){ msg($("#ctrmsg"), err.message, false); b.disabled = false; }
   });
   const chName = id => MOD.channels.find(c => c.id === id)?.name || id;
@@ -1776,12 +1777,53 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       const what = r.trigger_type === 1 ? `${(tm.keyword_filter || []).slice(0, 14).map(k => `<span class="kw">${esc(k)}</span>`).join("")}${(tm.keyword_filter || []).length > 14 ? `<span class="note">+${tm.keyword_filter.length - 14} more</span>` : ""}${(tm.regex_patterns || []).length ? ` <span class="note">+ ${tm.regex_patterns.length} pattern(s)</span>` : ""}`
         : r.trigger_type === 4 ? (tm.presets || []).map(x => `<span class="kw">${({1: "Profanity", 2: "Sexual content", 3: "Slurs"})[x]}</span>`).join("")
         : r.trigger_type === 5 ? `<span class="kw">${tm.mention_total_limit}+ mentions</span>` : "";
-      return `<div class="modrule ${r.enabled ? "" : "off"}"><div class="row between"><div><h3>${esc(r.name)}</h3><div class="note">${kinds[r.trigger_type] || "Rule"}${block ? " · deletes the message" : ""}${alert ? ` · alerts #${esc(chName(alert.metadata.channel_id))}` : ""}${to ? ` · times out ${Math.round(to.metadata.duration_seconds / 60)} min` : ""}${r.exempt_roles?.length ? ` · skips ${r.exempt_roles.map(x => "@" + esc(roleName(x))).join(", ")}` : ""}</div></div>
+      return `<div class="modrule ${r.enabled ? "" : "off"}"><div class="row between"><div><h3>${esc(r.name)}</h3><div class="note">${kinds[r.trigger_type] || "Rule"}${block ? " · deletes the message" : " · counts only (doesn't delete)"}${alert ? ` · alerts #${esc(chName(alert.metadata.channel_id))}` : ""}${to ? ` · times out ${Math.round(to.metadata.duration_seconds / 60)} min` : ""}${r.exempt_roles?.length ? ` · skips ${r.exempt_roles.map(x => "@" + esc(roleName(x))).join(", ")}` : ""}</div></div>
         <div class="row"><label class="switch"><input type="checkbox" data-modtog="${r.id}" ${r.enabled ? "checked" : ""}> ${r.enabled ? "On" : "Off"}</label>${[1, 4, 5].includes(r.trigger_type) ? `<button class="btn sm" data-modedit="${r.id}">Edit</button>` : ""}<button class="btn sm x" data-moddel="${r.id}">Delete</button></div></div>
         <div>${what}</div>${block?.metadata?.custom_message ? `<div class="note">They see: “${esc(block.metadata.custom_message)}”</div>` : ""}</div>`;
     }).join("") || `<div class="note">No rules yet — use Quick add above, or + New word filter.</div>`;
     modTest();
   }
+  // the excuse counter
+  const EXC_WORDS = ["lag","laggy","lagging","lagged","my wifi","wifi died","bad wifi","my internet","high ping","my ping","input delay","desync","low fps","frame drops","i dced","disconnected","rigged","the refs","scripted","game is rigged","glitched","bugged","glitch","its bugged","my controller","stick drift","controller died","my keyboard","my mouse","battery died","game crashed","i crashed","wasnt trying","wasn't trying","not even trying","didnt try","didn't try","i was afk","was afk","i was tired","warming up"];
+  function renderExc(){
+    const rule = MOD.rules.find(r => r.name === "UFA: Excuses"), c = EXC, nm = id => members().find(m => m.id === id)?.name || id;
+    const alertCh = rule?.actions.find(a => a.type === 2)?.metadata?.channel_id || c?.alertCh || "";
+    const top = c ? Object.entries(c.users || {}).sort((a, b) => b[1] - a[1]).slice(0, 5) : [];
+    const cats = c?.cats && Object.values(c.cats).some(Boolean) ? Object.entries(c.cats).sort((a, b) => b[1] - a[1]) : [];
+    $("#excpanel").innerHTML = `<div class="row between"><div><h2>😤 Excuse counter</h2><div class="note">Counts every time someone blames lag, wifi, the refs, their controller… <b>Messages are NOT deleted</b> — they just get counted. A live board shows the total, what got blamed and the biggest excuse makers.</div></div>
+        ${c ? `<div style="text-align:right"><div style="font-family:var(--num);font-size:56px;line-height:1;color:var(--red)">${c.count || 0}</div><div class="note">excuses made</div></div>` : ""}</div>
+      ${c?.err ? `<div class="msg err">${esc(c.err)}</div>` : ""}
+      ${cats.length ? `<div class="note">Blamed: ${cats.map(([k, n]) => `<b>${esc(k)}</b> ${n}`).join(" · ")}</div>` : ""}
+      ${top.length ? `<div class="note">Biggest excuse makers: ${top.map(([u, n]) => `<b>${esc(nm(u))}</b> (${n})`).join(" · ")}</div>` : ""}
+      ${!rule ? `<div class="note"><b>Step 1:</b> create the excuse filter. AutoMod needs a log channel for flagged messages — the bot can make a hidden <b>#excuse-log</b> (staff only) so it doesn't spam anywhere.</div>
+        <div class="row"><label class="f">Log channel<select id="excalert"><option value="">➕ Create hidden #excuse-log</option>${MOD.channels.map(x => `<option value="${x.id}">#${esc(x.name)}</option>`).join("")}</select></label></div>
+        <details><summary class="note" style="cursor:pointer">Excuse words (${EXC_WORDS.length}) — edit before creating</summary><textarea id="excwords" rows="6" style="width:100%;margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-size:13px">${esc(EXC_WORDS.join("\n"))}</textarea></details>
+        <div class="row"><button class="btn red" id="excmake">Create excuse filter</button><span class="msg" id="excmsg"></span></div>`
+      : `<div class="note">Filter: <b>UFA: Excuses</b> (${(rule.trigger_metadata?.keyword_filter || []).length} words, logs to #${esc(chName(alertCh))}) — edit or turn it off under Your rules below.</div>
+        <div class="row"><label class="f">Counter message goes in<select id="excch">${MOD.channels.map(x => `<option value="${x.id}" ${x.id === c?.ch ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select></label>
+          <label class="f">Title<input type="text" id="exctitle" maxlength="200" value="${esc(c?.title || "")}" placeholder="😤 Excuse Counter"></label></div>
+        <div class="row"><button class="btn gold" id="excgo" data-alert="${esc(alertCh)}">${c?.msg ? "Save / move counter" : "Post counter"}</button>${c ? `<button class="btn sm" data-excadd="1">+1</button><button class="btn sm" data-excadd="-1">−1</button><button class="btn sm" id="excreset">Reset to 0</button><button class="btn sm x" id="excrm">Remove counter</button>` : ""}<span class="msg" id="excmsg"></span></div>
+        ${c?.msg ? `<div class="note">Live in <b>#${esc(chName(c.ch))}</b> · checks every minute${c.last ? ` · last excuse ${ago(c.last.ts)} ago` : ""}. The "what got blamed" breakdown needs <b>Message Content Intent</b> turned on for the bot (Discord Developer Portal → Bot); the total and leaderboard work without it.</div>` : ""}`}`;
+  }
+  $("#tab-mod").addEventListener("click", async e => {
+    const b = e.target.closest("#excmake,#excgo,#excreset,#excrm,[data-excadd]"); if (!b) return;
+    b.disabled = true;
+    try{
+      if (b.id === "excmake"){
+        msg($("#excmsg"), "Setting up…");
+        const words = $("#excwords").value.split("\n").map(x => x.trim()).filter(Boolean);
+        const j = await bot("/api/admin/excuse/setup", {alertCh: $("#excalert").value, words});
+        MOD = await bot("/api/admin/automod"); EXC = (await bot("/api/admin/counter", {key: "excuse", setup: {rule: "UFA: Excuses", alertCh: j.alertCh}})).counter;
+        renderMod(); renderExc(); toast("Excuse filter is live — now post the counter."); return;
+      }
+      let body;
+      if (b.id === "excgo") body = {setup: {rule: "UFA: Excuses", channel: $("#excch").value, title: $("#exctitle").value.trim(), alertCh: b.dataset.alert}};
+      else if (b.id === "excreset"){ if (!confirm("Reset the excuse counter to 0?")) { b.disabled = false; return; } body = {reset: true}; }
+      else if (b.id === "excrm"){ if (!confirm("Remove the excuse counter? Its message gets deleted (the filter stays — delete it under Your rules).")) { b.disabled = false; return; } body = {remove: true}; }
+      else body = {add: +b.dataset.excadd};
+      EXC = (await bot("/api/admin/counter", {key: "excuse", ...body})).counter; renderExc(); toast(body.setup ? "Excuse counter is live." : "Updated.");
+    }catch(err){ msg($("#excmsg"), err.message, false); b.disabled = false; }
+  });
   // rough local preview of what Discord would catch
   function kwRe(k){ const a = k.startsWith("*"), z = k.endsWith("*"), core = k.replace(/^\*|\*$/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"); return new RegExp((a ? "" : "(?:^|[^a-z0-9])") + core + (z ? "" : "(?:$|[^a-z0-9])"), "i"); }
   function catches(r, t){
@@ -1793,8 +1835,10 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
   }
   function modTest(){
     const t = $("#modtest").value.trim(), el = $("#modtres"); if (!t || !MOD){ el.textContent = ""; return; }
-    const hit = MOD.rules.filter(r => r.enabled).map(r => [r, catches(r, t)]).find(([, h]) => h);
-    el.innerHTML = hit ? `<span class="hit" style="color:var(--red)">🚫 Blocked by “${esc(hit[0].name)}”</span> <span class="note">(${hit[1] === "pattern" ? "matched a pattern" : `matched “${esc(hit[1])}”`})</span>` : `<span class="hit" style="color:var(--good)">✓ Would go through</span>`;
+    const hits = MOD.rules.filter(r => r.enabled).map(r => [r, catches(r, t)]).filter(([, h]) => h);
+    const blk = hits.find(([r]) => r.actions.some(a => a.type === 1)), cnt = hits.find(([r]) => !r.actions.some(a => a.type === 1));
+    const why = h => `<span class="note">(${h[1] === "pattern" ? "matched a pattern" : `matched “${esc(h[1])}”`})</span>`;
+    el.innerHTML = blk ? `<span class="hit" style="color:var(--red)">🚫 Blocked by “${esc(blk[0].name)}”</span> ${why(blk)}` : cnt ? `<span class="hit" style="color:var(--warn)">😤 Goes through, but counted by “${esc(cnt[0].name)}”</span> ${why(cnt)}` : `<span class="hit" style="color:var(--good)">✓ Would go through</span>`;
   }
   $("#modtest").oninput = modTest;
   $("#modload").onclick = loadMod;
@@ -1803,7 +1847,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     const pre = e.target.closest("[data-modpre]"); if (pre) return modEdit({...MOD_PRESETS.find(p => p.key === pre.dataset.modpre).rule});
     const ed = e.target.closest("[data-modedit]"); if (ed){ const r = MOD.rules.find(x => x.id === ed.dataset.modedit), tm = r.trigger_metadata || {}, a = t => r.actions.find(x => x.type === t);
       return modEdit({id: r.id, name: r.name, trigger_type: r.trigger_type, keywords: tm.keyword_filter || [], regex: tm.regex_patterns || [], allow: tm.allow_list || [], presets: tm.presets, mentions: tm.mention_total_limit,
-        message: a(1)?.metadata?.custom_message || "", alert: a(2)?.metadata?.channel_id || "", timeout: a(3)?.metadata?.duration_seconds || 0, exemptRoles: r.exempt_roles || [], exemptChannels: r.exempt_channels || [], enabled: r.enabled}); }
+        message: a(1)?.metadata?.custom_message || "", alert: a(2)?.metadata?.channel_id || "", timeout: a(3)?.metadata?.duration_seconds || 0, exemptRoles: r.exempt_roles || [], exemptChannels: r.exempt_channels || [], enabled: r.enabled, flagOnly: !a(1)}); }
     const del = e.target.closest("[data-moddel]"); if (del){ const r = MOD.rules.find(x => x.id === del.dataset.moddel); if (!confirm(`Delete "${r.name}"? Messages it was blocking will go through again.`)) return;
       try{ await bot("/api/admin/automod", {delete: r.id}); toast("Rule deleted."); loadMod(); }catch(err){ toast(err.message, false); } }
   });
@@ -1824,7 +1868,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
           <label class="f" style="flex:none">Never block these (exceptions) — one per line<textarea id="mallow" rows="2" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px;text-transform:none;letter-spacing:0" placeholder="draft queue&#10;draft board">${esc((r.allow || []).join("\n"))}</textarea></label></details>` : ""}
       ${type === 4 ? `<div class="chk" style="max-height:none">${[[1, "Profanity"], [2, "Sexual content"], [3, "Slurs"]].map(([v, l]) => `<label><input type="checkbox" class="mpre" value="${v}" ${(r.presets || [1, 2, 3]).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div>` : ""}
       ${type === 5 ? `<label class="f" style="flex:none">Block messages with this many mentions or more<input type="number" id="mmen" min="1" max="50" value="${r.mentions || 6}"></label>` : ""}
-      <label class="f" style="flex:none">What they see when it's blocked (max 150)<input type="text" id="mmsg" maxlength="150" value="${esc(r.message || "")}" placeholder="Draft info gets posted in announcements."></label>
+      ${r.flagOnly ? `<div class="note">This rule only <b>counts</b> messages (they aren't deleted).</div><input type="hidden" id="mmsg" value="">` : `<label class="f" style="flex:none">What they see when it's blocked (max 150)<input type="text" id="mmsg" maxlength="150" value="${esc(r.message || "")}" placeholder="Draft info gets posted in announcements."></label>`}
       <div class="row"><label class="f">Send an alert to<select id="malert"><option value="">Nowhere</option>${MOD.channels.map(c => `<option value="${c.id}" ${c.id === alert ? "selected" : ""}>#${esc(c.name)}</option>`).join("")}</select></label>
         <label class="f">Also time them out<select id="mto">${[[0, "No"], [60, "1 minute"], [300, "5 minutes"], [600, "10 minutes"], [3600, "1 hour"]].map(([v, l]) => `<option value="${v}" ${+r.timeout === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
       <div class="note">Roles that are allowed to say it (skipped by this rule):</div>
@@ -1840,7 +1884,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       const lines = id => ($(id)?.value || "").split("\n").map(x => x.trim()).filter(Boolean);
       const save = {id: r.id, name: $("#mname").value.trim() || "UFA filter", trigger_type: type, keywords: lines("#mkw"), regex: lines("#mrx"), allow: lines("#mallow"),
         presets: $$(".mpre:checked").map(x => +x.value), mentions: $("#mmen")?.value, message: $("#mmsg").value.trim(), alert: $("#malert").value, timeout: +$("#mto").value,
-        exemptRoles: $$(".mexr:checked").map(x => x.value), exemptChannels: $$(".mexc:checked").map(x => x.value), enabled: $("#men").checked};
+        exemptRoles: $$(".mexr:checked").map(x => x.value), exemptChannels: $$(".mexc:checked").map(x => x.value), enabled: $("#men").checked, flagOnly: !!r.flagOnly};
       b.disabled = true; msg($("#mmsgout"), "Saving…");
       try{ await bot("/api/admin/automod", {save}); dlg.close(); toast(isNew ? "Rule created — it's live now." : "Rule saved."); loadMod(); }
       catch(err){ msg($("#mmsgout"), err.message, false); b.disabled = false; }
