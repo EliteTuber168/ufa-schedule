@@ -112,10 +112,10 @@
   },
   {
    "abbr": "NYG",
-   "fo": "Kjxtocold",
+   "fo": "Dart",
    "in": true,
    "roleId": "1548502317035425966",
-   "foId": "965940037474717716"
+   "foId": "1514016653569163416"
   },
   {
    "abbr": "ARI",
@@ -558,7 +558,7 @@
     "OS/Short"
    ],
    "discord": "1511918194607001691",
-   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/8a379843cbd432221a9b9d23496cc272.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/b46040b94f37befc7a3da6596d9b66f0.png?size=96",
    "locked": true,
    "posNotified": 1790976589373
   },
@@ -567,20 +567,7 @@
    "name": "Shinebeforeglory",
    "pos": [],
    "discord": "1512522656124113038",
-   "avatar": "https://cdn.discordapp.com/avatars/1512522656124113038/5ed1385712af91d2aad165d5d235e46d.png?size=96"
-  },
-  {
-   "id": 44,
-   "name": "Dart",
-   "pos": [
-    "QB",
-    "LB",
-    "CB"
-   ],
-   "discord": "1514016653569163416",
-   "avatar": "https://cdn.discordapp.com/avatars/1514016653569163416/8c8ed965290650edd683b38bbe68adf8.png?size=96",
-   "locked": true,
-   "posNotified": 1790976589373
+   "avatar": "https://cdn.discordapp.com/avatars/1512522656124113038/f2485c3d8581677bfa51a375cf2f9050.png?size=96"
   },
   {
    "id": 45,
@@ -1102,7 +1089,7 @@
    "name": "5m8qq",
    "pos": [],
    "discord": "1179749110006415511",
-   "avatar": "https://cdn.discordapp.com/avatars/1179749110006415511/c58645c8d5860184e9f381f67c56e06a.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1179749110006415511/876945af614ad40350ae5a95ce626a36.png?size=96"
   },
   {
    "id": 115,
@@ -1279,7 +1266,7 @@
    "name": "wovifa",
    "pos": [],
    "discord": "1314545290539433984",
-   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/816f429d63d23b1388ea34ed25580bcd.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/55833a38045602efdfe67a79e7a6d9e7.png?size=96"
   },
   {
    "id": 141,
@@ -1331,13 +1318,6 @@
    "pos": [],
    "discord": "1330011071490162791",
    "avatar": "https://cdn.discordapp.com/avatars/1330011071490162791/f8c7e5dae27b8ace6ffe1f2fb49e2c83.png?size=96"
-  },
-  {
-   "id": 148,
-   "name": "BGEFITS",
-   "pos": [],
-   "discord": "1341662491671003188",
-   "avatar": "https://cdn.discordapp.com/avatars/1341662491671003188/da91fa57f774d2804717779292304b0e.png?size=96"
   },
   {
    "id": 149,

@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-03T06:36:27+00:00",
+ "updated": "2026-10-04T00:43:17+00:00",
  "teams": {
   "ARI": [],
   "ATL": [
@@ -14,14 +14,7 @@
   "BUF": [],
   "CAR": [],
   "CHI": [],
-  "CIN": [
-   {
-    "id": "1280377167565422604",
-    "name": "Georgerussel",
-    "avatar": "https://cdn.discordapp.com/avatars/1280377167565422604/d2e4a7f7e18c46ed8e80dd87a3423f01.png?size=96",
-    "fo": true
-   }
-  ],
+  "CIN": [],
   "CLE": [],
   "DAL": [],
   "DEN": [],
@@ -69,14 +62,7 @@
    }
   ],
   "MIA": [],
-  "MIN": [
-   {
-    "id": "296046630619054090",
-    "name": "CrazyAndrew",
-    "avatar": "https://cdn.discordapp.com/avatars/296046630619054090/118405449643495349408d6221d14c8d.png?size=96",
-    "fo": true
-   }
-  ],
+  "MIN": [],
   "NE": [],
   "NO": [
    {
@@ -86,7 +72,14 @@
     "fo": true
    }
   ],
-  "NYG": [],
+  "NYG": [
+   {
+    "id": "1514016653569163416",
+    "name": "Dart",
+    "avatar": "https://cdn.discordapp.com/avatars/1514016653569163416/8c8ed965290650edd683b38bbe68adf8.png?size=96",
+    "fo": true
+   }
+  ],
   "NYJ": [
    {
     "id": "1530311998997266583",
