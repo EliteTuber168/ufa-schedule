@@ -360,7 +360,7 @@
    "name": "Łoser",
    "pos": [],
    "discord": "1364684672960827535",
-   "avatar": "https://cdn.discordapp.com/avatars/1364684672960827535/a_b94155738e770c55022c135162dbeee6.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1364684672960827535/ba4e9cf0904bc34c5dbce4f9ce070c2c.png?size=96"
   },
   {
    "id": 21,
@@ -605,7 +605,7 @@
    "name": "Mookie",
    "pos": [],
    "discord": "1524230783903203459",
-   "avatar": "https://cdn.discordapp.com/avatars/1524230783903203459/ae3157541778227f142ae552f9384850.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1524230783903203459/f21de7c49fc71d4666f50561a75b47b2.png?size=96"
   },
   {
    "id": 49,
@@ -643,7 +643,7 @@
     "Short"
    ],
    "discord": "1530752930586820750",
-   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/78cff9b469684bd0c1546d58ed31eaee.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/8476e9d1fe94049227e242bf5e056eb7.png?size=96",
    "locked": true,
    "posAt": 1790995781118,
    "posNotified": 1790995781118
@@ -697,7 +697,7 @@
     "K/P"
    ],
    "discord": "1550520545496400023",
-   "avatar": "https://cdn.discordapp.com/avatars/1550520545496400023/de30d6317a7bc41a28b03fa2a8cb1bc8.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1550520545496400023/a8ddda8e6d67f3788488c2857f2c36ec.png?size=96"
   },
   {
    "id": 62,
@@ -1124,7 +1124,7 @@
    "name": "Mr serious",
    "pos": [],
    "discord": "1218445447278886983",
-   "avatar": "https://cdn.discordapp.com/avatars/1218445447278886983/fd1f556ce17ea3fa0adc1cd61d554a30.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1218445447278886983/03c61e234f86ba40f08e7cbe1c558921.png?size=96"
   },
   {
    "id": 120,
@@ -1317,7 +1317,7 @@
    "name": "SILVA",
    "pos": [],
    "discord": "1330011071490162791",
-   "avatar": "https://cdn.discordapp.com/avatars/1330011071490162791/f8c7e5dae27b8ace6ffe1f2fb49e2c83.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1330011071490162791/95b07e6cb3d8e3132d4f570a31ad111b.png?size=96"
   },
   {
    "id": 149,
@@ -1374,17 +1374,6 @@
    "pos": [],
    "discord": "1359320607782867146",
    "avatar": "https://cdn.discordapp.com/avatars/1359320607782867146/f14fa7e6e800333ae448781fb1b908d4.png?size=96"
-  },
-  {
-   "id": 157,
-   "name": "M E R X Y",
-   "pos": [
-    "WR",
-    "CB"
-   ],
-   "discord": "1361130560113741856",
-   "avatar": "https://cdn.discordapp.com/avatars/1361130560113741856/12a22f4bb3872ce815718e967f018712.png?size=96",
-   "locked": true
   },
   {
    "id": 158,
@@ -1600,16 +1589,6 @@
    "pos": [],
    "discord": "1431841445190438956",
    "avatar": "https://cdn.discordapp.com/avatars/1431841445190438956/846c6179448b25c79ff18202ff8d03d8.png?size=96"
-  },
-  {
-   "id": 186,
-   "name": "sh8dow",
-   "pos": [
-    "QB"
-   ],
-   "discord": "1432252161688997978",
-   "avatar": "https://cdn.discordapp.com/avatars/1432252161688997978/d7911ae4e863b2a02b1d8dacb257f73d.png?size=96",
-   "locked": true
   },
   {
    "id": 188,
@@ -1945,13 +1924,6 @@
    "avatar": "https://cdn.discordapp.com/embed/avatars/0.png"
   },
   {
-   "id": 235,
-   "name": "Balenxi.",
-   "pos": [],
-   "discord": "1549890942817804412",
-   "avatar": "https://cdn.discordapp.com/avatars/1549890942817804412/878a025828d00251e0d10df723c21ea7.png?size=96"
-  },
-  {
    "id": 236,
    "name": "Eli",
    "pos": [],
@@ -2059,6 +2031,13 @@
    "discord": "1182919450782081157",
    "avatar": "https://cdn.discordapp.com/avatars/1182919450782081157/bcc7294479def4ad0c23f2111c2e1557.png?size=96",
    "locked": true
+  },
+  {
+   "id": 248,
+   "name": "CrazyAndrew",
+   "pos": [],
+   "discord": "296046630619054090",
+   "avatar": "https://cdn.discordapp.com/avatars/296046630619054090/118405449643495349408d6221d14c8d.png?size=96"
   }
  ],
  "picks": [],

@@ -1,15 +1,8 @@
 {
- "updated": "2026-10-04T00:43:17+00:00",
+ "updated": "2026-10-04T07:00:13+00:00",
  "teams": {
   "ARI": [],
-  "ATL": [
-   {
-    "id": "1384410671625539634",
-    "name": "josh allen",
-    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/9d6ce7b9ce08b4f923379378a9d21dd5.png?size=96",
-    "fo": true
-   }
-  ],
+  "ATL": [],
   "BAL": [],
   "BUF": [],
   "CAR": [],
