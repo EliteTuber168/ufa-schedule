@@ -994,7 +994,7 @@ function parseAmt(raw, w, cfg) {
   if (n > cfg.maxBet) throw UE(`Max bet is ${COIN} ${fmt(cfg.maxBet)}.`);
   return n;
 }
-const tally = (w, net) => { w.g = w.g || { won: 0, lost: 0, best: 0 }; if (net > 0) { w.g.won++; w.g.best = Math.max(w.g.best || 0, net); } else if (net < 0) w.g.lost++; };
+const ecoTally = (w, net) => { w.g = w.g || { won: 0, lost: 0, best: 0 }; if (net > 0) { w.g.won++; w.g.best = Math.max(w.g.best || 0, net); } else if (net < 0) w.g.lost++; };
 const ecoEmbed = (title, desc, color = 0xffc62f, extra = {}) => ({ embeds: [{ title, description: desc, color, ...extra }], allowed_mentions: { parse: [] } });
 const pub = (data) => json({ type: 4, data });
 const ephem = (content) => reply(content, true);
@@ -1058,7 +1058,7 @@ async function econCommand(i, env, ctx, cmd) {
     }
     case "coinflip": {
       const amt = parseAmt(opt(o, "amount"), w, cfg), side = opt(o, "side") || "heads", flip = Math.random() < 0.5 ? "heads" : "tails", win = side === flip;
-      const net = win ? amt : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const net = win ? amt : -amt; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
       return pub(ecoEmbed(`🪙 Coin flip — ${flip.toUpperCase()}`, `<@${uid}> called **${side}** and ${win ? `won **${COIN} ${fmt(amt)}** 🎉` : `lost **${COIN} ${fmt(amt)}** 💀`}\nBalance: **${COIN} ${fmt(w.c)}**`, win ? 0x4fd18b : 0xe8424a));
     }
     case "slots": {
@@ -1069,7 +1069,7 @@ async function econCommand(i, env, ctx, cmd) {
       let mult = 0;
       if (r[0] === r[1] && r[1] === r[2]) mult = pay[r[0]];
       else if (r[0] === r[1] || r[1] === r[2] || r[0] === r[2]) mult = r.includes("💎") && r.filter((x) => x === "💎").length === 2 ? 3 : 1.5;
-      const net = Math.round(amt * mult) - amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const net = Math.round(amt * mult) - amt; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
       return pub(ecoEmbed("🎰 Slots", `## ${r.join(" ┃ ")}\n<@${uid}> ${mult ? `won **${COIN} ${fmt(amt * mult)}** (${mult}x)${mult >= 8 ? " 🚨 **JACKPOT**" : ""}` : `lost **${COIN} ${fmt(amt)}**`}\nBalance: **${COIN} ${fmt(w.c)}**`, mult ? 0x4fd18b : 0xe8424a));
     }
     case "roulette": {
@@ -1082,20 +1082,20 @@ async function econCommand(i, env, ctx, cmd) {
       else if (bet === "odd" || bet === "even") mult = n && (n % 2 === 1) === (bet === "odd") ? 2 : 0;
       else if (bet === "low" || bet === "high") mult = n && (n <= 18) === (bet === "low") ? 2 : 0;
       else return ephem("Bet on `red`, `black`, `green`, `odd`, `even`, `low` (1–18), `high` (19–36) or a number 0–36.");
-      const net = amt * mult - amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const net = amt * mult - amt; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
       const dot = { red: "🔴", black: "⚫", green: "🟢" }[col];
       return pub(ecoEmbed(`🎡 Roulette — ${dot} ${n}`, `<@${uid}> bet **${COIN} ${fmt(amt)}** on **${bet}** and ${mult ? `won **${COIN} ${fmt(amt * mult)}** (${mult}x) 🎉` : "lost 💀"}\nBalance: **${COIN} ${fmt(w.c)}**`, mult ? 0x4fd18b : 0xe8424a));
     }
     case "dice": {
       const amt = parseAmt(opt(o, "amount"), w, cfg), d = () => rint(1, 6), me = [d(), d()], bot = [d(), d()], a = me[0] + me[1], b = bot[0] + bot[1];
-      const net = a > b ? amt : a < b ? -amt : 0; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const net = a > b ? amt : a < b ? -amt : 0; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
       const face = (x) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][x - 1];
       return pub(ecoEmbed("🎲 Dice", `<@${uid}> rolled ${face(me[0])}${face(me[1])} **${a}** · Bot rolled ${face(bot[0])}${face(bot[1])} **${b}**\n${net > 0 ? `You win **${COIN} ${fmt(amt)}** 🎉` : net < 0 ? `You lose **${COIN} ${fmt(amt)}** 💀` : "Push — bet returned."}\nBalance: **${COIN} ${fmt(w.c)}**`, net > 0 ? 0x4fd18b : net < 0 ? 0xe8424a : 0x93a0bf));
     }
     case "crash": {
       const amt = parseAmt(opt(o, "amount"), w, cfg), target = Math.max(1.1, Math.min(50, parseFloat(String(opt(o, "cashout") || "2").replace("x", "")) || 2));
       const crashAt = Math.max(1, Math.floor((0.97 / (1 - Math.random())) * 100) / 100);
-      const win = crashAt >= target, net = win ? Math.round(amt * target) - amt : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const win = crashAt >= target, net = win ? Math.round(amt * target) - amt : -amt; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
       return pub(ecoEmbed(`🚀 Crash — rocket blew up at ${crashAt.toFixed(2)}x`, `<@${uid}> was cashing out at **${target.toFixed(2)}x** with **${COIN} ${fmt(amt)}**\n${win ? `Cashed out **${COIN} ${fmt(amt * target)}** 🎉` : "Boom. Lost it all 💥"}\nBalance: **${COIN} ${fmt(w.c)}**`, win ? 0x4fd18b : 0xe8424a));
     }
     case "rob": {
@@ -1200,14 +1200,14 @@ async function econComponent(i, env, kind, owner, acts) {
     const st = bjState(w.bj, acts);
     if (!st.done) return json({ type: 7, data: bjView(uid, w.bj, acts) });
     const g = w.bj; if (acts.endsWith("d")) w.c -= g.bet;
-    w.c += st.pay; tally(w, st.pay - st.bet); delete w.bj; await saveW(env, uid, w, name);
+    w.c += st.pay; ecoTally(w, st.pay - st.bet); delete w.bj; await saveW(env, uid, w, name);
     return json({ type: 7, data: bjView(uid, g, acts, { bal: w.c }) });
   }
   if (kind === "dr") {
     if (!w.dr) return json({ type: 7, data: { components: [] } });
     const st = driveState(w.dr, acts);
     if (!st.done) return json({ type: 7, data: driveView(uid, w.dr, acts) });
-    const g = w.dr; w.c += st.pay; tally(w, st.pay - g.bet); delete w.dr; await saveW(env, uid, w, name);
+    const g = w.dr; w.c += st.pay; ecoTally(w, st.pay - g.bet); delete w.dr; await saveW(env, uid, w, name);
     return json({ type: 7, data: driveView(uid, g, acts, w.c) });
   }
   return ephem("Unknown game.");
@@ -1232,7 +1232,7 @@ async function simGame(i, env, cfg, w, uid, name, o) {
   if (sc.a === sc.b) { const wa = Math.random() < 0.5; sc[wa ? "a" : "b"] += 6; ot = ` (OT — ${nick(wa ? mine : opp)} walk-off TD)`; }
   const won = sc.a > sc.b;
   let money = "";
-  if (amt) { const net = won ? Math.round(amt * 0.9) : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+  if (amt) { const net = won ? Math.round(amt * 0.9) : -amt; w.c += net; ecoTally(w, net); await saveW(env, uid, w, name);
     money = `\n\n<@${uid}> bet **${COIN} ${fmt(amt)}** on the **${nick(mine)}** — ${won ? `won **${COIN} ${fmt(amt + net)}** 🎉` : "lost 💀"}\nBalance: **${COIN} ${fmt(w.c)}**`; }
   const table = "```\n" + `      Q1 Q2 Q3 Q4  F\n${mine.abbr.padEnd(5)} ${q.map((x) => String(x[0]).padStart(2)).join(" ")} ${String(sc.a).padStart(2)}\n${opp.abbr.padEnd(5)} ${q.map((x) => String(x[1]).padStart(2)).join(" ")} ${String(sc.b).padStart(2)}\n` + "```";
   return pub({ embeds: [{ title: `🏟️ ${mine.name} ${sc.a} – ${sc.b} ${opp.name}${ot}`, color: won ? 0x4fd18b : 0xe8424a,
@@ -1273,7 +1273,7 @@ async function econAdmin(env, L, b, by) {
     const ks = (await klist(env, `bet:${b.settle.week}:${b.settle.game}:`)); let paid = 0, n = 0;
     for (const k of ks) { const bt = await kget(env, k.name); if (!bt) continue; n++;
       const w = await wallet(env, bt.u), win = b.settle.winner === "refund" ? bt.a : bt.t === b.settle.winner ? Math.round(bt.a * 1.9) : 0;
-      if (win) { w.c += win; paid += win; } if (b.settle.winner !== "refund") tally(w, win - bt.a);
+      if (win) { w.c += win; paid += win; } if (b.settle.winner !== "refund") ecoTally(w, win - bt.a);
       await saveW(env, bt.u, w); await KV(env).delete(k.name);
       if (win && b.settle.winner !== "refund") await dm(env, bt.u, `🎟️ Your bet on the **${bt.t}** hit! You won ${COIN} **${fmt(win)}** UFA Coins.`).catch(() => {});
     }
