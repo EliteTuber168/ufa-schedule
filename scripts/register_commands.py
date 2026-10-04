@@ -49,5 +49,25 @@ cmds = [
             {"type": STR, "name": "options", "description": "Choices separated by commas (2–25)", "required": True},
             {"type": INT, "name": "hours", "description": "Close voting after this many hours (optional)", "required": False, "min_value": 1, "max_value": 720}]}]},
 ]
+# ---- UFA Coins ----
+amt = lambda req=True, desc="How much (a number, 1.5k, half or all)": {"type": STR, "name": "amount", "description": desc, "required": req, "max_length": 12}
+cmds += [
+    {"name": "coinhelp", "description": "How UFA Coins work + every coin command"},
+    {"name": "balance", "description": "Check your (or someone's) UFA Coins", "options": [user("user", "Whose wallet", False)]},
+    {"name": "daily", "description": "Claim your daily UFA Coins (streaks pay more)"},
+    {"name": "work", "description": "Work a shift for coins (every hour)"},
+    {"name": "give", "description": "Give someone UFA Coins", "options": [user("user", "Who gets them"), amt(True, "How much")]},
+    {"name": "leaderboard", "description": "Richest people in the UFA"},
+    {"name": "coinflip", "description": "Double or nothing", "options": [amt(), {"type": STR, "name": "side", "description": "Heads or tails", "required": False, "choices": [{"name": "Heads", "value": "heads"}, {"name": "Tails", "value": "tails"}]}]},
+    {"name": "slots", "description": "Spin the UFA slot machine", "options": [amt()]},
+    {"name": "roulette", "description": "Bet on the roulette wheel", "options": [amt(), {"type": STR, "name": "bet", "description": "red, black, green, odd, even, low, high, or a number 0-36", "required": True, "max_length": 6}]},
+    {"name": "dice", "description": "Roll 2 dice against the bot", "options": [amt()]},
+    {"name": "crash", "description": "Pick a cash-out multiplier — hope the rocket gets there", "options": [amt(), {"type": STR, "name": "cashout", "description": "Cash out at… e.g. 2x (1.1x - 50x)", "required": False, "max_length": 6}]},
+    {"name": "blackjack", "description": "Play blackjack against the dealer", "options": [amt()]},
+    {"name": "drive", "description": "Call the plays from the opponent's 35 — score to win", "options": [amt()]},
+    {"name": "simgame", "description": "Simulate a football game (optionally bet on your team)", "options": [team(False), {"type": STR, "name": "opponent", "description": "Opponent (random if empty)", "required": False, "autocomplete": True}, amt(False, "Bet on your team (optional) — pays 1.9x")]},
+    {"name": "bet", "description": "Bet on a real UFA game this week (pays 1.9x)", "options": [team(True), amt()]},
+    {"name": "rob", "description": "Try to rob someone (risky — 2h cooldown)", "options": [user("user", "Your target")]},
+]
 res = call("PUT", f"/applications/{app['id']}/guilds/{GUILD}/commands", cmds)
 print(f"Registered for app {app['name']} ({app['id']}): " + ", ".join("/" + c["name"] for c in res))
