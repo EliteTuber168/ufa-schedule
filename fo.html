@@ -42,6 +42,7 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing
 .teamhead{flex-direction:row;gap:14px;align-items:center;flex-wrap:wrap;border-left:6px solid var(--team)}
 .teamhead .tn{font-family:var(--num);font-size:38px;letter-spacing:.04em;line-height:1}
 .meter{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;flex:1 1 140px;min-width:120px}.meter i{display:block;height:100%;background:var(--team)}
+.hot{font-size:12px;font-weight:800;color:#ff8a3d;background:rgba(255,138,61,.12);border:1px solid rgba(255,138,61,.4);border-radius:6px;padding:0 5px;margin-left:4px;white-space:nowrap}
 .inherit{background:rgba(61,123,255,.12);border:1px solid var(--blue,#3d7bff);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
 .inherit b{color:#fff}
 .banner{background:rgba(255,162,74,.12);border:1px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 14px;font-weight:700}
@@ -121,7 +122,9 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="grid2">
         <div class="panel" style="background:var(--panel2)"><div class="row" style="justify-content:space-between"><b>Your queue</b><span class="note" id="dqcount"></span></div><div class="list" id="dq"></div>
           <div class="row"><button class="btn red" id="dqsave">Save queue</button><span class="msg" id="dqmsg"></span></div></div>
-        <div class="panel" style="background:var(--panel2)"><b>Available players</b><input type="search" id="dqq" placeholder="Search name, position or Discord user ID…" aria-label="Search available players"><div class="note" id="dqhint"></div><div class="list" id="dqa" style="max-height:520px;overflow:auto"></div></div>
+        <div class="panel" style="background:var(--panel2)"><b>Available players</b><input type="search" id="dqq" placeholder="Search name, position or Discord user ID…" aria-label="Search available players">
+          <div class="row" style="gap:8px"><select id="dqsort" aria-label="Sort players" style="flex:1"><option value="rank">League rank</option><option value="pop">🔥 Most queued</option><option value="name">Name A–Z</option><option value="pos">Position</option></select>
+          <select id="dqpos" aria-label="Position" style="flex:1"><option value="">All positions</option></select></div><div class="note" id="dqhint"></div><div class="list" id="dqa" style="max-height:520px;overflow:auto"></div></div>
       </div>
       <div id="dqmine"></div>
     </section>
@@ -322,15 +325,22 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     $("#dq").innerHTML = QUEUE.map((id, k) => { const p = pname(id); return `<div class="p"><b style="width:22px;text-align:right">${k + 1}</b>${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span>
       <span class="acts"><button class="btn sm" data-qup="${k}" aria-label="Move up" ${k ? "" : "disabled"}>↑</button><button class="btn sm" data-qdn="${k}" aria-label="Move down" ${k < QUEUE.length - 1 ? "" : "disabled"}>↓</button><button class="btn sm" data-qrm="${k}" aria-label="Remove">✕</button></span></div>`; }).join("")
       || `<div class="note">Empty — add players from the right.</div>`;
-    const q = $("#dqq").value.trim().toLowerCase();
-    const av = DQ.available.filter(p => !QUEUE.includes(p.id) && (!q || p.name.toLowerCase().includes(q) || ppos(p).toLowerCase().includes(q) || (p.discord && p.discord === q)));
+    const q = $("#dqq").value.trim().toLowerCase(), srt = $("#dqsort").value, fp = $("#dqpos").value, POP = DQ.popular || {};
+    const allPos = [...new Set(DQ.available.flatMap(p => p.pos || []))].sort();
+    if ($("#dqpos").options.length !== allPos.length + 1){ $("#dqpos").innerHTML = `<option value="">All positions</option>` + allPos.map(x => `<option ${x === fp ? "selected" : ""}>${esc(x)}</option>`).join(""); }
+    const popN = p => POP[p.id]?.n || 0;
+    const av = DQ.available.filter(p => !QUEUE.includes(p.id) && (!fp || (p.pos || []).includes(fp)) && (!q || p.name.toLowerCase().includes(q) || ppos(p).toLowerCase().includes(q) || (p.discord && p.discord === q)))
+      .sort({ rank: (a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9) || a.name.localeCompare(b.name),
+              pop: (a, b) => popN(b) - popN(a) || (POP[a.id]?.best ?? 999) - (POP[b.id]?.best ?? 999) || a.name.localeCompare(b.name),
+              name: (a, b) => a.name.localeCompare(b.name),
+              pos: (a, b) => ppos(a).localeCompare(ppos(b)) || a.name.localeCompare(b.name) }[srt] || (() => 0));
     const isId = /^\d{15,20}$/.test(q);
     $("#dqhint").innerHTML = isId && !av.length ? (QUEUE.some(id => pname(id).discord === q) ? "That player is already in your queue." : "Nobody with that user ID is in the draft pool. They need to run <b>/fa join</b> (or get the Draftable role) before they can be queued.") : "";
-    $("#dqa").innerHTML = av.slice(0, 400).map(p => `<div class="p">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${p.rank ? `<span class="note">#${p.rank}</span> ` : ""}${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}</span><span class="acts"><button class="btn sm red" data-qadd="${p.id}">Add</button></span></div>`).join("") || `<div class="note">No players match.</div>`;
+    $("#dqa").innerHTML = av.slice(0, 400).map(p => `<div class="p">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="nm">${p.rank ? `<span class="note">#${p.rank}</span> ` : ""}${esc(p.name)}${ppos(p) ? ` <span class="note">${esc(ppos(p))}</span>` : ""}${popN(p) ? ` <span class="hot" title="In ${popN(p)} team${popN(p) === 1 ? "'s" : "s'"} draft queue${popN(p) === 1 ? "" : "s"} · highest spot #${POP[p.id].best}">🔥 ${popN(p)}</span>` : ""}</span><span class="acts"><button class="btn sm red" data-qadd="${p.id}">Add</button></span></div>`).join("") || `<div class="note">No players match.</div>`;
     $("#dqsave").textContent = qDirty ? "Save queue •" : "Save queue";
     $("#dqmine").innerHTML = DQ.mine.length ? `<h2 style="font-size:22px;margin-top:8px">Your picks</h2><div class="list">${DQ.mine.map(p => `<div class="p"><span class="tag">R${p.round} P${p.pick}</span><span class="nm">${esc(p.name || "?")}</span>${p.auto ? `<span class="tag">auto</span>` : ""}</div>`).join("")}</div>` : "";
   }
-  $("#dqq").oninput = renderQueue;
+  $("#dqq").oninput = renderQueue; $("#dqsort").onchange = renderQueue; $("#dqpos").onchange = renderQueue;
   document.addEventListener("click", e => {
     const b = e.target.closest("[data-qadd],[data-qup],[data-qdn],[data-qrm]"); if (!b || !DQ) return;
     if (b.dataset.qadd) QUEUE.push(+b.dataset.qadd);
