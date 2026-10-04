@@ -521,7 +521,7 @@ async function appoint(env, L, abbr, uid, staffName) {
   if (p.team && p.team !== abbr) await stripTeam(env, L, uid, p.team, "Appointed FO of another team");
   await addRole(env, L, uid, t.roleId, `Appointed FO by ${staffName}`);
   await addRole(env, L, uid, L.R.fo, `Appointed FO by ${staffName}`);
-  for (const r of [L.R.gm, L.R.hc]) await delRole(env, L, uid, r).catch(() => {});
+  for (const r of [L.R.gm, L.R.hc, L.R.draftable, L.R.fa]) await delRole(env, L, uid, r, "Appointed FO").catch(() => {});
   bust("members");
   await logTx(env, L, { title: "Franchise Owner Appointed", teams: [abbr], desc: `<@${uid}> is the new franchise owner of the **${t.name}**`, lines: [`🛡️ Appointed by · **${staffName}**`] });
   await dm(env, uid, `👑 You've been appointed franchise owner of the **${t.name}**! Manage your team at ${SITE}fo.html`);
@@ -549,9 +549,29 @@ async function unappoint(env, L, abbr, staffName, removeFromTeam = false) {
   return `${fo.name} is no longer ${removeFromTeam ? "on" : "FO of"} the ${t.name}.${pw.had ? " The team password was deleted" + (pw.ended ? ` and ${pw.ended} portal login(s) ended` : "") + "." : ""}`;
 }
 // admin "sync everything": stale passwords/logins, caches, the live owner list
-async function syncAll(env, L) {
+function roleConflicts(L, M) {   // FOs / people on a team who still have Draftable or Free Agent
+  const teamIds = new Set(L.teams.map((t) => t.roleId).filter(Boolean)), bad = [L.R.draftable, L.R.fa].filter(Boolean), ops = [];
+  for (const m of M) {
+    const r = m.roles || [];
+    if (!(r.includes(L.R.fo) || r.some((x) => teamIds.has(x)))) continue;
+    for (const b of bad) if (r.includes(b)) ops.push([m.user.id, b, display(m)]);
+  }
+  return ops;
+}
+async function fixRoleConflicts(env, L, M, max = 30) {
+  const ops = roleConflicts(L, M), done = [];
+  for (const [uid, role, name] of ops.slice(0, max)) {
+    try { await delRole(env, L, uid, role, "On a team / FO — can't be Draftable or a Free Agent"); done.push(name); } catch {}
+  }
+  if (done.length) bust("members");
+  return { fixed: done.length, names: [...new Set(done)], remaining: Math.max(0, ops.length - max) };
+}
+async function syncAll(env, L, rolesOnly = false) {
   bust("members", "league", "emojis"); L = await league(env, true);
-  const M = await members(env, L, true), out = { passwords: [], sessions: 0, board: false };
+  const M = await members(env, L, true);
+  const roles = await fixRoleConflicts(env, L, M);
+  if (rolesOnly) return { roles };
+  const out = { passwords: [], sessions: 0, board: false, roles };
   const pwTeams = (await klist(env, "pw:")).map((k) => k.name.slice(3));
   for (const abbr of pwTeams) if (!teamOf(L, abbr) || !foOf(L, M, abbr)) { await KV(env).delete(`pw:${abbr}`); out.passwords.push(abbr); }
   for (const k of await klist(env, "sess:")) {
@@ -1402,7 +1422,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/decide") { const r = await decide(env, body.id, !!body.approve, body.reason, admin); return out({ ok: true, status: r.status, note: r.decisionReason }); }
       if (p === "/api/admin/appoint") return out({ ok: true, text: await appoint(env, L, body.team, body.uid, admin.name) });
       if (p === "/api/admin/unappoint") return out({ ok: true, text: await unappoint(env, L, body.team, admin.name, !!body.removeFromTeam) });
-      if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L)) });
+      if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L, !!body.rolesOnly)) });
       if (p === "/api/admin/password") {
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
         if (!body.password) { await killTeamPassword(env, abbr); return out({ ok: true }); }
