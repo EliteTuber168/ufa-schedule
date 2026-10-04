@@ -246,6 +246,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
       <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
       <button role="tab" data-tab="mod" aria-selected="false">Moderation</button>
+      <button role="tab" data-tab="econ" aria-selected="false">🪙 Coins</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
       <button role="tab" data-tab="tx" aria-selected="false">Transactions</button>
@@ -399,6 +400,18 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <section class="panel" id="excpanel" style="border-color:var(--red)"></section>
       <div><h2 style="font-size:22px">Quick add</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:8px" id="modpre"></div></div>
       <div><h2 style="font-size:22px">Your rules</h2><div id="modrules" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><div class="note">Loading…</div></div></div>
+    </div>
+
+    <div id="tab-econ" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="stats" id="ecstats"></div>
+      <section class="panel"><div class="row between"><h2>🪙 UFA Coins</h2><button class="btn sm" id="ecload">↻ Refresh</button></div>
+        <div class="note">Fake currency for fun: <b>/daily</b>, <b>/work</b>, casino games (<b>/blackjack /slots /roulette /coinflip /dice /crash</b>), football games (<b>/drive /simgame</b>), <b>/bet</b> on real UFA games, <b>/give</b>, <b>/rob</b>, <b>/leaderboard</b>. Players type <b>/coinhelp</b> for the full list.</div>
+        <div id="eccfg"></div></section>
+      <section class="panel"><h2 style="font-size:22px">🎟️ Open bets on UFA games</h2><div class="note">When a game's done, pick the winner — winners get 1.9x and a DM. Refund gives everyone their coins back.</div><div id="ecbets"></div></section>
+      <section class="panel"><h2 style="font-size:22px">🏆 Leaderboard</h2>
+        <div class="row" style="align-items:flex-end"><label class="f">Give / take coins<select id="ecuser"></select></label><label class="f" style="flex:0 1 140px">Amount (− to take)<input type="number" id="ecamt" value="500"></label><button class="btn gold" id="ecadj">Apply</button><span class="msg" id="ecmsg"></span></div>
+        <div class="tscroll"><table><thead><tr><th>#</th><th>Player</th><th style="text-align:right">Coins</th></tr></thead><tbody id="ectop"></tbody></table></div></section>
+      <section class="panel" style="border-color:var(--red)"><h2 style="font-size:20px;color:var(--red)">Reset economy</h2><div class="note">Deletes every wallet — everyone starts over. Can't be undone.</div><div class="row"><button class="btn x" id="ecreset">Reset all coins…</button></div></section>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -616,8 +629,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","spin","mod","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, mod: loadMod, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -1898,6 +1911,43 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     };
     dlg.showModal();
   }
+
+  // ---------- UFA Coins ----------
+  let EC = null;
+  async function loadEcon(){
+    $("#ectop").innerHTML = `<tr><td colspan="3" class="note">Loading…</td></tr>`;
+    try{ EC = await bot("/api/admin/econ", {}); }catch(e){ $("#ectop").innerHTML = `<tr><td colspan="3" class="msg err">${esc(e.message)}</td></tr>`; return; }
+    const c = EC.cfg, tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    const fmtc = n => Math.round(n).toLocaleString("en-US");
+    $("#ecstats").innerHTML = tile(EC.players, "Players with coins", "var(--gold)") + tile(fmtc(EC.total), "Coins in circulation") + tile(EC.top[0] ? fmtc(EC.top[0].c) : "—", "Richest wallet", "var(--good)") + tile(EC.games.reduce((n, g) => n + g.bets.length, 0), "Open bets", "var(--blue)");
+    const chn = id => EC.channels.find(x => x.id === id)?.name;
+    $("#eccfg").innerHTML = `<div class="row" style="align-items:flex-end;margin-top:6px">
+        <label class="f">Commands only work in<select id="ecch"><option value="">Any channel</option>${EC.channels.map(x => `<option value="${x.id}" ${x.id === c.ch ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select></label>
+        <label class="f" style="flex:0 1 130px">Daily amount<input type="number" id="ecdaily" value="${c.daily}" min="0"></label>
+        <label class="f" style="flex:0 1 130px">Starting coins<input type="number" id="ecstart" value="${c.start}" min="0"></label>
+        <label class="c" style="margin-bottom:10px"><input type="checkbox" id="ecen" ${c.enabled ? "checked" : ""}> Enabled</label>
+        <button class="btn gold" id="ecsave">Save</button></div>
+      <div class="row">${c.ch && chn(c.ch) ? `<span class="note">Coin channel: <b>#${esc(chn(c.ch))}</b></span>` : `<button class="btn red" id="ecmk">➕ Create a public #🪙│ufa-coins channel in UFA Members</button><span class="note">Posts a welcome message with every command.</span>`}<span class="msg" id="eccmsg"></span></div>`;
+    const tn = a => EC.teams.find(t => t.abbr === a)?.name || a;
+    $("#ecbets").innerHTML = EC.games.length ? EC.games.map(g => { const [a, b] = g.game.split("-"), on = t => g.bets.filter(x => x.t === t);
+      return `<div class="modrule"><div class="row between"><div><b>Week ${g.week}: ${esc(tn(a))} vs ${esc(tn(b))}</b><div class="note">${g.bets.length} bet(s) · pool 🪙 ${fmtc(g.pool)} · ${esc(a)}: ${on(a).length} (${fmtc(on(a).reduce((s, x) => s + x.a, 0))}) · ${esc(b)}: ${on(b).length} (${fmtc(on(b).reduce((s, x) => s + x.a, 0))})${g.result ? ` · result entered: <b>${esc(g.result)}</b>` : ""}</div></div>
+        <div class="row"><button class="btn sm good" data-settle="${esc(g.week)}|${esc(g.game)}|${esc(a)}">${esc(a)} won</button><button class="btn sm good" data-settle="${esc(g.week)}|${esc(g.game)}|${esc(b)}">${esc(b)} won</button><button class="btn sm" data-settle="${esc(g.week)}|${esc(g.game)}|refund">Refund</button></div></div></div>`; }).join("") : `<div class="note">No open bets.</div>`;
+    const nm = x => members().find(m => m.id === x.id)?.name || x.n || x.id;
+    $("#ectop").innerHTML = EC.top.map((x, k) => `<tr><td>${["🥇","🥈","🥉"][k] || k + 1}</td><td><b>${esc(nm(x))}</b></td><td style="text-align:right;font-weight:800">🪙 ${fmtc(x.c)}</td></tr>`).join("") || `<tr><td colspan="3" class="note">Nobody has coins yet.</td></tr>`;
+    $("#ecuser").innerHTML = members().slice().sort((a, b) => a.name.localeCompare(b.name)).map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  }
+  $("#ecload").onclick = loadEcon;
+  $("#tab-econ").addEventListener("click", async e => {
+    const b = e.target.closest("button"); if (!b || b.disabled) return;
+    try{
+      if (b.id === "ecsave"){ b.disabled = true; await bot("/api/admin/econ", {cfg: {ch: $("#ecch").value, daily: +$("#ecdaily").value, start: +$("#ecstart").value, enabled: $("#ecen").checked}}); toast("Saved."); return loadEcon(); }
+      if (b.id === "ecmk"){ b.disabled = true; msg($("#eccmsg"), "Creating…"); const j = await bot("/api/admin/econ", {createChannel: true}); toast(`Created #🪙│ufa-coins${j.category ? ` in ${j.category}` : ""} — commands now only work there.`); return loadEcon(); }
+      if (b.id === "ecadj"){ const uid = $("#ecuser").value, amount = +$("#ecamt").value; if (!uid || !amount) return; b.disabled = true; const m = members().find(x => x.id === uid); const j = await bot("/api/admin/econ", {adjust: {uid, amount, name: m?.name}}); msg($("#ecmsg"), `${m?.name || "They"} now have 🪙 ${Math.round(j.c).toLocaleString()}.`); b.disabled = false; return loadEcon(); }
+      if (b.dataset.settle){ const [week, game, winner] = b.dataset.settle.split("|"); if (!confirm(winner === "refund" ? `Refund every bet on ${game}?` : `Pay out ${game} with ${winner} as the winner?`)) return; b.disabled = true;
+        const j = await bot("/api/admin/econ", {settle: {week: +week, game, winner}}); toast(`Settled ${j.bets} bet(s) — paid 🪙 ${Math.round(j.paid).toLocaleString()}.`); return loadEcon(); }
+      if (b.id === "ecreset"){ const c = prompt("This deletes EVERY wallet. Type RESET COINS to confirm."); if (!c) return; b.disabled = true; const j = await bot("/api/admin/econ", {reset: true, confirm: c}); toast(`Reset — ${j.deleted} wallets deleted.`); return loadEcon(); }
+    }catch(err){ toast(err.message, false); b.disabled = false; }
+  });
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
