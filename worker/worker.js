@@ -965,6 +965,331 @@ async function excuseSetup(env, L, b, by) {
   return { rule, alertCh };
 }
 
+// =====================================================================================================
+// UFA Coins — economy & casino. Wallets live in KV ("w:<uid>", balance mirrored in metadata so the
+// leaderboard is one list call). Interactive games keep their state in the button ids + the wallet.
+// =====================================================================================================
+const COIN = "🪙";
+const fmt = (n) => Math.round(n).toLocaleString("en-US");
+const ECON_DEF = { ch: "", daily: 250, start: 500, enabled: true, minBet: 10, maxBet: 100000 };
+const econCfg = async (env) => ({ ...ECON_DEF, ...((await kget(env, "econ:cfg")) || {}) });
+const rint = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pickr = (a) => a[Math.floor(Math.random() * a.length)];
+async function wallet(env, uid, cfg) {
+  const w = await kget(env, `w:${uid}`);
+  return w || { c: (cfg || ECON_DEF).start, g: { won: 0, lost: 0, best: 0 }, new: true };
+}
+async function saveW(env, uid, w, name) {
+  delete w.new; w.n = name || w.n || "";
+  await kput(env, `w:${uid}`, w, 3650 * 86400, { c: Math.round(w.c), n: String(w.n).slice(0, 40) });
+}
+const memName = (i) => i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || i.user?.username || "someone";
+function parseAmt(raw, w, cfg) {
+  const s = String(raw ?? "").trim().toLowerCase().replace(/[, ]/g, "");
+  let n = s === "all" || s === "max" ? w.c : s === "half" ? Math.floor(w.c / 2) : /^\d+(\.\d+)?k$/.test(s) ? parseFloat(s) * 1000 : parseInt(s);
+  n = Math.floor(n);
+  if (!n || n < 1) throw UE(`How much? Use a number, \`half\` or \`all\`.`);
+  if (n > w.c) throw UE(`You only have ${COIN} **${fmt(w.c)}**.`);
+  if (n < cfg.minBet) throw UE(`Minimum bet is ${COIN} ${fmt(cfg.minBet)}.`);
+  if (n > cfg.maxBet) throw UE(`Max bet is ${COIN} ${fmt(cfg.maxBet)}.`);
+  return n;
+}
+const tally = (w, net) => { w.g = w.g || { won: 0, lost: 0, best: 0 }; if (net > 0) { w.g.won++; w.g.best = Math.max(w.g.best || 0, net); } else if (net < 0) w.g.lost++; };
+const ecoEmbed = (title, desc, color = 0xffc62f, extra = {}) => ({ embeds: [{ title, description: desc, color, ...extra }], allowed_mentions: { parse: [] } });
+const pub = (data) => json({ type: 4, data });
+const ephem = (content) => reply(content, true);
+// mulberry32: seeded rng for games whose state lives in button ids
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const seed32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
+
+const WORK = [
+  ["held the first-down chains for a JV game", 1], ["sold overpriced nachos at the stadium", 1], ["reffed a 5v5 and only got yelled at twice", 1.2],
+  ["washed the team bus", 0.9], ["edited a highlight tape for a FO", 1.3], ["played mascot for the Bills (it was hot)", 1.1],
+  ["filmed a scrimmage on a cracked phone", 1], ["coached peewee flag football", 1.2], ["painted the end zone", 1], ["streamed the UFA game to 3 viewers", 0.8],
+  ["fixed the stadium wifi so nobody can blame lag", 1.5], ["carried the water bottles", 0.9], ["wrote a hot take thread that went viral", 1.4],
+];
+
+async function econCommand(i, env, ctx, cmd) {
+  const cfg = await econCfg(env), uid = uidOf(i), o = i.data.options || [], name = memName(i);
+  if (!cfg.enabled) return ephem("🪙 UFA Coins is turned off right now.");
+  const anywhere = ["balance", "leaderboard", "coinhelp"].includes(cmd);
+  if (cfg.ch && i.channel_id !== cfg.ch && !anywhere) return ephem(`🎰 Use coin commands in <#${cfg.ch}>.`);
+  const w = await wallet(env, uid, cfg), now = Date.now();
+  switch (cmd) {
+    case "coinhelp": return ephem([`**🪙 UFA Coins** — everyone starts with ${COIN} ${fmt(cfg.start)}`,
+      "`/daily` free coins every day (streaks pay more) · `/work` every hour · `/balance` · `/leaderboard` · `/give`",
+      "**Casino:** `/coinflip` `/slots` `/roulette` `/dice` `/blackjack` `/crash`",
+      "**Football:** `/drive` (call the plays, score a TD) · `/simgame` (bet on a simulated game) · `/bet` (bet on real UFA games)",
+      "`/rob` someone… if you dare. Bets accept numbers, `1.5k`, `half` or `all`."].join("\n"));
+    case "balance": {
+      const target = opt(o, "user") || uid, tw = target === uid ? w : await wallet(env, target, cfg);
+      const g = tw.g || {};
+      return pub(ecoEmbed(`${COIN} ${target === uid ? "Your" : "Their"} wallet`, `<@${target}> has **${COIN} ${fmt(tw.c)}**\n\nGames won **${g.won || 0}** · lost **${g.lost || 0}** · biggest win **${fmt(g.best || 0)}**${tw.s ? `\nDaily streak 🔥 **${tw.s}**` : ""}`));
+    }
+    case "daily": {
+      const left = (w.d || 0) + 20 * 3600e3 - now;
+      if (left > 0) return ephem(`⏳ Daily resets <t:${Math.floor((now + left) / 1000)}:R>.`);
+      w.s = now - (w.d || 0) < 48 * 3600e3 ? Math.min((w.s || 0) + 1, 30) : 1;
+      const bonus = Math.min(w.s - 1, 10) * 50, amt = cfg.daily + bonus;
+      w.c += amt; w.d = now; await saveW(env, uid, w, name);
+      return pub(ecoEmbed("🎁 Daily coins", `<@${uid}> claimed **${COIN} ${fmt(amt)}**${bonus ? ` (incl. 🔥 ${w.s}-day streak bonus +${fmt(bonus)})` : ""}\nBalance: **${COIN} ${fmt(w.c)}**`, 0x4fd18b));
+    }
+    case "work": {
+      const left = (w.wk || 0) + 3600e3 - now;
+      if (left > 0) return ephem(`😮‍💨 You're tired. Work again <t:${Math.floor((now + left) / 1000)}:R>.`);
+      const [job, mult] = pickr(WORK), amt = Math.round(rint(60, 160) * mult);
+      w.c += amt; w.wk = now; await saveW(env, uid, w, name);
+      return pub(ecoEmbed("💼 Work", `<@${uid}> ${job} and earned **${COIN} ${fmt(amt)}**.\nBalance: **${COIN} ${fmt(w.c)}**`, 0x3d7bff));
+    }
+    case "give": {
+      const to = opt(o, "user"); if (!to || to === uid) return ephem("Pick someone else.");
+      const amt = parseAmt(opt(o, "amount"), w, { ...cfg, minBet: 1, maxBet: 1e12 });
+      const tw = await wallet(env, to, cfg); w.c -= amt; tw.c += amt;
+      const target = i.data.resolved?.members?.[to], tname = target?.nick || i.data.resolved?.users?.[to]?.global_name || i.data.resolved?.users?.[to]?.username || tw.n;
+      await saveW(env, uid, w, name); await saveW(env, to, tw, tname);
+      return pub(ecoEmbed("🤝 Coins sent", `<@${uid}> gave <@${to}> **${COIN} ${fmt(amt)}**.`, 0x4fd18b));
+    }
+    case "leaderboard": {
+      const ks = await klist(env, "w:"), top = ks.map((k) => ({ id: k.name.slice(2), c: k.metadata?.c || 0, n: k.metadata?.n })).sort((a, b) => b.c - a.c).slice(0, 10);
+      const me = ks.map((k) => k.metadata?.c || 0).sort((a, b) => b - a).indexOf(Math.round(w.c));
+      const medal = ["🥇", "🥈", "🥉"];
+      return pub(ecoEmbed("🏆 Richest in the UFA", top.map((x, k) => `${medal[k] || `**${k + 1}.**`} <@${x.id}> — ${COIN} **${fmt(x.c)}**`).join("\n") || "Nobody has coins yet. `/daily`!", 0xffc62f,
+        { footer: { text: w.new ? "You're not on the board yet — /daily to start" : `You: ${fmt(w.c)} coins · rank #${me + 1} of ${ks.length}` } }));
+    }
+    case "coinflip": {
+      const amt = parseAmt(opt(o, "amount"), w, cfg), side = opt(o, "side") || "heads", flip = Math.random() < 0.5 ? "heads" : "tails", win = side === flip;
+      const net = win ? amt : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      return pub(ecoEmbed(`🪙 Coin flip — ${flip.toUpperCase()}`, `<@${uid}> called **${side}** and ${win ? `won **${COIN} ${fmt(amt)}** 🎉` : `lost **${COIN} ${fmt(amt)}** 💀`}\nBalance: **${COIN} ${fmt(w.c)}**`, win ? 0x4fd18b : 0xe8424a));
+    }
+    case "slots": {
+      const amt = parseAmt(opt(o, "amount"), w, cfg);
+      const reel = ["🏈", "🏈", "🏈", "🏟️", "🏟️", "🏆", "🏆", "💎", "🍒", "🍒", "🍒", "🧢", "🧢"];
+      const r = [pickr(reel), pickr(reel), pickr(reel)];
+      const pay = { "💎": 25, "🏆": 12, "🏟️": 8, "🏈": 5, "🍒": 4, "🧢": 3 };
+      let mult = 0;
+      if (r[0] === r[1] && r[1] === r[2]) mult = pay[r[0]];
+      else if (r[0] === r[1] || r[1] === r[2] || r[0] === r[2]) mult = r.includes("💎") && r.filter((x) => x === "💎").length === 2 ? 3 : 1.5;
+      const net = Math.round(amt * mult) - amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      return pub(ecoEmbed("🎰 Slots", `## ${r.join(" ┃ ")}\n<@${uid}> ${mult ? `won **${COIN} ${fmt(amt * mult)}** (${mult}x)${mult >= 8 ? " 🚨 **JACKPOT**" : ""}` : `lost **${COIN} ${fmt(amt)}**`}\nBalance: **${COIN} ${fmt(w.c)}**`, mult ? 0x4fd18b : 0xe8424a));
+    }
+    case "roulette": {
+      const amt = parseAmt(opt(o, "amount"), w, cfg), bet = String(opt(o, "bet") || "red").toLowerCase().trim();
+      const n = rint(0, 36), reds = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36], col = n === 0 ? "green" : reds.includes(n) ? "red" : "black";
+      let mult = 0;
+      if (/^\d+$/.test(bet)) { if (+bet > 36) return ephem("Numbers go 0–36."); mult = +bet === n ? 36 : 0; }
+      else if (bet === "green" || bet === "0") mult = n === 0 ? 36 : 0;
+      else if (bet === "red" || bet === "black") mult = col === bet ? 2 : 0;
+      else if (bet === "odd" || bet === "even") mult = n && (n % 2 === 1) === (bet === "odd") ? 2 : 0;
+      else if (bet === "low" || bet === "high") mult = n && (n <= 18) === (bet === "low") ? 2 : 0;
+      else return ephem("Bet on `red`, `black`, `green`, `odd`, `even`, `low` (1–18), `high` (19–36) or a number 0–36.");
+      const net = amt * mult - amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const dot = { red: "🔴", black: "⚫", green: "🟢" }[col];
+      return pub(ecoEmbed(`🎡 Roulette — ${dot} ${n}`, `<@${uid}> bet **${COIN} ${fmt(amt)}** on **${bet}** and ${mult ? `won **${COIN} ${fmt(amt * mult)}** (${mult}x) 🎉` : "lost 💀"}\nBalance: **${COIN} ${fmt(w.c)}**`, mult ? 0x4fd18b : 0xe8424a));
+    }
+    case "dice": {
+      const amt = parseAmt(opt(o, "amount"), w, cfg), d = () => rint(1, 6), me = [d(), d()], bot = [d(), d()], a = me[0] + me[1], b = bot[0] + bot[1];
+      const net = a > b ? amt : a < b ? -amt : 0; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      const face = (x) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][x - 1];
+      return pub(ecoEmbed("🎲 Dice", `<@${uid}> rolled ${face(me[0])}${face(me[1])} **${a}** · Bot rolled ${face(bot[0])}${face(bot[1])} **${b}**\n${net > 0 ? `You win **${COIN} ${fmt(amt)}** 🎉` : net < 0 ? `You lose **${COIN} ${fmt(amt)}** 💀` : "Push — bet returned."}\nBalance: **${COIN} ${fmt(w.c)}**`, net > 0 ? 0x4fd18b : net < 0 ? 0xe8424a : 0x93a0bf));
+    }
+    case "crash": {
+      const amt = parseAmt(opt(o, "amount"), w, cfg), target = Math.max(1.1, Math.min(50, parseFloat(String(opt(o, "cashout") || "2").replace("x", "")) || 2));
+      const crashAt = Math.max(1, Math.floor((0.97 / (1 - Math.random())) * 100) / 100);
+      const win = crashAt >= target, net = win ? Math.round(amt * target) - amt : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+      return pub(ecoEmbed(`🚀 Crash — rocket blew up at ${crashAt.toFixed(2)}x`, `<@${uid}> was cashing out at **${target.toFixed(2)}x** with **${COIN} ${fmt(amt)}**\n${win ? `Cashed out **${COIN} ${fmt(amt * target)}** 🎉` : "Boom. Lost it all 💥"}\nBalance: **${COIN} ${fmt(w.c)}**`, win ? 0x4fd18b : 0xe8424a));
+    }
+    case "rob": {
+      const to = opt(o, "user"); if (!to || to === uid) return ephem("Rob someone else.");
+      const left = (w.rb || 0) + 2 * 3600e3 - now; if (left > 0) return ephem(`🚔 Lay low. You can rob again <t:${Math.floor((now + left) / 1000)}:R>.`);
+      if (w.c < 200) return ephem(`You need at least ${COIN} 200 to attempt a robbery (bail money).`);
+      const tw = await wallet(env, to, cfg); if (tw.new || tw.c < 200) return ephem("They're broke. Not worth it.");
+      w.rb = now;
+      if (Math.random() < 0.42) {
+        const take = Math.min(Math.round(tw.c * (rint(10, 25) / 100)), 2500); w.c += take; tw.c -= take;
+        await saveW(env, uid, w, name); await saveW(env, to, tw);
+        return pub(ecoEmbed("🦹 Robbery", `<@${uid}> robbed <@${to}> for **${COIN} ${fmt(take)}**! 💰`, 0x4fd18b, {}));
+      }
+      const fine = Math.min(Math.round(w.c * 0.15), 1500); w.c -= fine; tw.c += fine;
+      await saveW(env, uid, w, name); await saveW(env, to, tw);
+      return pub(ecoEmbed("🚔 Caught!", `<@${uid}> tried to rob <@${to}> and got caught — paid them **${COIN} ${fmt(fine)}** in damages.`, 0xe8424a));
+    }
+    case "simgame": return simGame(i, env, cfg, w, uid, name, o);
+    case "blackjack": {
+      if (w.bj && now - w.bj.t < 10 * 60e3) return ephem("You already have a blackjack hand going — finish it first.");
+      const amt = parseAmt(opt(o, "amount"), w, cfg), seed = seed32();
+      w.c -= amt; w.bj = { bet: amt, seed, t: now }; await saveW(env, uid, w, name);
+      return pub(bjView(uid, w.bj, ""));
+    }
+    case "drive": {
+      if (w.dr && now - w.dr.t < 10 * 60e3) return ephem("You've got a drive going — finish it first.");
+      const amt = parseAmt(opt(o, "amount"), w, cfg), seed = seed32();
+      w.c -= amt; w.dr = { bet: amt, seed, t: now }; await saveW(env, uid, w, name);
+      return pub(driveView(uid, w.dr, ""));
+    }
+    case "bet": return betCmd(i, env, cfg, w, uid, name, o);
+  }
+  return ephem("Unknown coin command.");
+}
+
+// ---------- blackjack (state = seed + actions in the button id; payout settles once against the wallet) ----------
+const CARD = (k) => ({ r: ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"][k % 13], s: ["♠", "♥", "♦", "♣"][Math.floor(k / 13) % 4] });
+function deck(seed) { const r = rng(seed), d = [...Array(52).keys()]; for (let k = 51; k > 0; k--) { const j = Math.floor(r() * (k + 1)); [d[k], d[j]] = [d[j], d[k]]; } return d.map(CARD); }
+const hv = (h) => { let t = 0, a = 0; for (const c of h) { t += c.r === "A" ? 11 : ["J", "Q", "K"].includes(c.r) ? 10 : +c.r; if (c.r === "A") a++; } while (t > 21 && a) { t -= 10; a--; } return t; };
+const show = (h) => h.map((c) => `\`${c.r}${c.s}\``).join(" ");
+function bjState(g, acts) {
+  const d = deck(g.seed); let p = 0; const P = [d[p++], d[p++]], D = [d[p++], d[p++]]; let bet = g.bet, done = false, msg = "";
+  if (hv(P) === 21) { done = true; }
+  for (const a of acts) { if (done) break;
+    if (a === "h") { P.push(d[p++]); if (hv(P) >= 21) done = true; }
+    else if (a === "d") { bet *= 2; P.push(d[p++]); done = true; }
+    else if (a === "s") done = true; }
+  let pay = 0;
+  if (done) {
+    const pv = hv(P), bj = pv === 21 && P.length === 2;
+    if (pv <= 21 && !bj) while (hv(D) < 17) D.push(d[p++]);
+    const dv = hv(D), dbj = dv === 21 && D.length === 2;
+    if (pv > 21) { msg = "Bust 💀"; pay = 0; }
+    else if (bj && !dbj) { msg = "BLACKJACK! 🃏"; pay = Math.floor(bet * 2.5); }
+    else if (dbj && !bj) { msg = "Dealer has blackjack 💀"; pay = 0; }
+    else if (dv > 21) { msg = "Dealer busts — you win 🎉"; pay = bet * 2; }
+    else if (pv > dv) { msg = "You win 🎉"; pay = bet * 2; }
+    else if (pv < dv) { msg = "Dealer wins 💀"; pay = 0; }
+    else { msg = "Push — bet back"; pay = bet; }
+  }
+  return { P, D, done, pay, bet, msg };
+}
+function bjView(uid, g, acts, final) {
+  const st = bjState(g, acts), s = final || st;
+  const desc = `<@${uid}> · bet **${COIN} ${fmt(st.bet)}**\n\n**You** (${hv(st.P)}): ${show(st.P)}\n**Dealer** (${st.done ? hv(st.D) : "?"}): ${st.done ? show(st.D) : `${show([st.D[0]])} \`??\``}${st.done ? `\n\n**${st.msg}**${st.pay ? ` — paid **${COIN} ${fmt(st.pay)}**` : ""}${s.bal != null ? `\nBalance: **${COIN} ${fmt(s.bal)}**` : ""}` : ""}`;
+  const comps = st.done ? [] : [row(btn("Hit", 1, `bj:${uid}:${acts}h`), btn("Stand", 2, `bj:${uid}:${acts}s`), ...(acts === "" ? [btn("Double", 3, `bj:${uid}:${acts}d`)] : []))];
+  return { embeds: [{ title: "🃏 Blackjack", description: desc, color: st.done ? (st.pay > st.bet ? 0x4fd18b : st.pay === st.bet ? 0x93a0bf : 0xe8424a) : 0x3d7bff }], components: comps, allowed_mentions: { parse: [] } };
+}
+
+// ---------- drive: call plays from the opponent's 35, score a TD in 4 downs (or kick a FG) ----------
+const PLAYS = { r: "🏃 Run", p: "🎯 Short pass", d: "🚀 Deep shot", k: "🦵 Field goal" };
+function driveState(g, acts) {
+  const r = rng(g.seed); let yl = 35, down = 1, done = false, res = "", log = [], mult = 0;
+  for (const a of acts) { if (done) break;
+    const x = r();
+    if (a === "k") { const dist = yl + 17, chance = Math.max(0.15, 1 - (dist - 20) * 0.022); done = true;
+      if (x < chance) { res = `🦵 ${dist}-yard field goal is GOOD`; mult = 1.25; } else res = `🦵 ${dist}-yard field goal… no good 💀`; break; }
+    let gain = 0, txt = "";
+    if (a === "r") { if (x < 0.03) { done = true; res = "🏃 FUMBLE! Defense recovers 💀"; break; } gain = Math.round(-2 + r() * 11); txt = gain <= 0 ? `stuffed for ${gain}` : `${gain}-yard run`; }
+    if (a === "p") { if (x < 0.05) { done = true; res = "🎯 INTERCEPTED 💀"; break; } if (x < 0.22) { gain = 0; txt = "incomplete"; } else { gain = Math.round(4 + r() * 12); txt = `${gain}-yard catch`; } }
+    if (a === "d") { if (x < 0.14) { done = true; res = "🚀 Picked off deep 💀"; break; } if (x < 0.68) { gain = 0; txt = "incomplete deep"; } else { gain = Math.round(14 + r() * 26); txt = `${gain}-yard bomb`; } }
+    yl -= gain; log.push(`${down}${["st", "nd", "rd", "th"][down - 1]} down — ${PLAYS[a]}: ${txt}`);
+    if (yl <= 0) { done = true; res = `🏈 TOUCHDOWN!`; mult = 2; break; }
+    down++; if (down > 4) { done = true; res = "Turnover on downs 💀"; }
+  }
+  return { yl: Math.max(yl, 0), down, done, res, log, mult, pay: Math.round(g.bet * mult) };
+}
+function driveView(uid, g, acts, bal) {
+  const st = driveState(g, acts), field = Math.round((35 - Math.min(35, st.yl)) / 35 * 14);
+  const bar = "🟩".repeat(Math.max(0, field)) + "🏈" + "⬛".repeat(Math.max(0, 14 - field)) + "🥅";
+  const desc = `<@${uid}> · bet **${COIN} ${fmt(g.bet)}** · TD pays **2x**, FG pays **1.25x**\n${bar}\n${st.log.map((l) => `> ${l}`).join("\n")}${st.log.length ? "\n" : ""}${st.done ? `\n**${st.res}**${st.pay ? ` — won **${COIN} ${fmt(st.pay)}**` : ""}${bal != null ? `\nBalance: **${COIN} ${fmt(bal)}**` : ""}` : `\n**${st.down}${["st", "nd", "rd", "th"][st.down - 1]} down**, ball on the opponent's **${st.yl}**. Call a play:`}`;
+  const comps = st.done ? [] : [row(btn(PLAYS.r, 2, `dr:${uid}:${acts}r`), btn(PLAYS.p, 1, `dr:${uid}:${acts}p`), btn(PLAYS.d, 4, `dr:${uid}:${acts}d`), ...(st.yl + 17 <= 55 ? [btn(PLAYS.k, 3, `dr:${uid}:${acts}k`)] : []))];
+  return { embeds: [{ title: "🏈 Drive for the win", description: desc, color: st.done ? (st.pay ? 0x4fd18b : 0xe8424a) : 0x3d7bff }], components: comps, allowed_mentions: { parse: [] } };
+}
+async function econComponent(i, env, kind, owner, acts) {
+  const uid = uidOf(i);
+  if (uid !== owner) return ephem("That's not your game — start your own!");
+  const cfg = await econCfg(env), w = await wallet(env, uid, cfg), name = memName(i);
+  if (kind === "bj") {
+    if (!w.bj) return json({ type: 7, data: { components: [] } });
+    if (acts.endsWith("d") && w.c < w.bj.bet) return ephem("Not enough coins to double — hit or stand.");
+    const st = bjState(w.bj, acts);
+    if (!st.done) return json({ type: 7, data: bjView(uid, w.bj, acts) });
+    const g = w.bj; if (acts.endsWith("d")) w.c -= g.bet;
+    w.c += st.pay; tally(w, st.pay - st.bet); delete w.bj; await saveW(env, uid, w, name);
+    return json({ type: 7, data: bjView(uid, g, acts, { bal: w.c }) });
+  }
+  if (kind === "dr") {
+    if (!w.dr) return json({ type: 7, data: { components: [] } });
+    const st = driveState(w.dr, acts);
+    if (!st.done) return json({ type: 7, data: driveView(uid, w.dr, acts) });
+    const g = w.dr; w.c += st.pay; tally(w, st.pay - g.bet); delete w.dr; await saveW(env, uid, w, name);
+    return json({ type: 7, data: driveView(uid, g, acts, w.c) });
+  }
+  return ephem("Unknown game.");
+}
+
+// ---------- simulated game ----------
+async function simGame(i, env, cfg, w, uid, name, o) {
+  const L = await league(env), T = L.teams;
+  const find = (q) => { q = String(q || "").toLowerCase().trim(); return T.find((t) => t.abbr.toLowerCase() === q || t.name.toLowerCase() === q) || T.find((t) => t.name.toLowerCase().includes(q)); };
+  const mine = find(opt(o, "team")) || pickr(T); let opp = find(opt(o, "opponent")); if (!opp || opp.abbr === mine.abbr) { do { opp = pickr(T); } while (opp.abbr === mine.abbr); }
+  const amt = opt(o, "amount") ? parseAmt(opt(o, "amount"), w, cfg) : 0;
+  const nick = (t) => t.name.split(" ").pop(), sc = { a: 0, b: 0 }, q = [[0, 0], [0, 0], [0, 0], [0, 0]], plays = [];
+  const ratA = 0.9 + Math.random() * 0.4, ratB = 0.9 + Math.random() * 0.4;
+  const td = ["%s %d-yard TD pass", "%s %d-yard TD run", "%s pick-six from %d out", "%s %d-yard catch-and-run TD", "%s punt return TD (%d yds)"];
+  for (let k = 0; k < 4; k++) for (const [side, t, rat] of [["a", mine, ratA], ["b", opp, ratB]]) {
+    const drives = rint(1, 3);
+    for (let d = 0; d < drives; d++) { const x = Math.random() / rat;
+      if (x < 0.32) { q[k][side === "a" ? 0 : 1] += 7; sc[side] += 7; if (plays.length < 7 || Math.random() < 0.3) plays.push(`Q${k + 1} — ${pickr(td).replace("%s", nick(t)).replace("%d", rint(3, 75))}`); }
+      else if (x < 0.5) { q[k][side === "a" ? 0 : 1] += 3; sc[side] += 3; if (Math.random() < 0.3) plays.push(`Q${k + 1} — ${nick(t)} ${rint(22, 54)}-yard FG`); } }
+  }
+  let ot = "";
+  if (sc.a === sc.b) { const wa = Math.random() < 0.5; sc[wa ? "a" : "b"] += 6; ot = ` (OT — ${nick(wa ? mine : opp)} walk-off TD)`; }
+  const won = sc.a > sc.b;
+  let money = "";
+  if (amt) { const net = won ? Math.round(amt * 0.9) : -amt; w.c += net; tally(w, net); await saveW(env, uid, w, name);
+    money = `\n\n<@${uid}> bet **${COIN} ${fmt(amt)}** on the **${nick(mine)}** — ${won ? `won **${COIN} ${fmt(amt + net)}** 🎉` : "lost 💀"}\nBalance: **${COIN} ${fmt(w.c)}**`; }
+  const table = "```\n" + `      Q1 Q2 Q3 Q4  F\n${mine.abbr.padEnd(5)} ${q.map((x) => String(x[0]).padStart(2)).join(" ")} ${String(sc.a).padStart(2)}\n${opp.abbr.padEnd(5)} ${q.map((x) => String(x[1]).padStart(2)).join(" ")} ${String(sc.b).padStart(2)}\n` + "```";
+  return pub({ embeds: [{ title: `🏟️ ${mine.name} ${sc.a} – ${sc.b} ${opp.name}${ot}`, color: won ? 0x4fd18b : 0xe8424a,
+    description: `${table}${plays.slice(0, 8).map((p) => `> ${p}`).join("\n")}${money}`, footer: { text: "Simulated game · just for fun" } }], allowed_mentions: { parse: [] } });
+}
+
+// ---------- bets on real UFA games (this week's schedule); staff settle them on the admin page ----------
+async function curWeek(env) { const S = await loadSched(env); const k = S.weeks.findIndex((w) => !w.done); const wk = k >= 0 ? S.weeks[k] : S.weeks[S.weeks.length - 1]; return { S, wk }; }
+async function betCmd(i, env, cfg, w, uid, name, o) {
+  const { S, wk } = await curWeek(env); if (!wk) return ephem("There's no schedule yet.");
+  const q = String(opt(o, "team") || "").toLowerCase().trim(), team = S.teams.find((t) => t.abbr.toLowerCase() === q || t.name.toLowerCase() === q) || S.teams.find((t) => t.name.toLowerCase().includes(q));
+  if (!team) return ephem("Which team? Type a team name.");
+  const g = wk.games.find((x) => x.a === team.abbr || x.b === team.abbr); if (!g) return ephem(`The ${team.name} don't play in week ${wk.week}.`);
+  if (g.result) return ephem("That game already has a result — betting is closed.");
+  const key = `bet:${wk.week}:${g.a}-${g.b}:${uid}`;
+  if (await kget(env, key)) return ephem("You already bet on that game.");
+  const amt = parseAmt(opt(o, "amount"), w, cfg); w.c -= amt; await saveW(env, uid, w, name);
+  await kput(env, key, { u: uid, t: team.abbr, a: amt, n: name }, 60 * 86400, { w: wk.week, g: `${g.a}-${g.b}`, t: team.abbr, a: amt });
+  const opp = S.teams.find((t) => t.abbr === (g.a === team.abbr ? g.b : g.a));
+  return pub(ecoEmbed("🎟️ Bet placed", `<@${uid}> bet **${COIN} ${fmt(amt)}** on the **${team.name}** to beat the ${opp?.name || "?"} (week ${wk.week}).\nPays **1.9x** if they win. Staff settle bets when the result is in.`, 0x3d7bff));
+}
+async function econAdmin(env, L, b, by) {
+  if (b.cfg) { const c = { ...(await econCfg(env)), ...b.cfg }; c.daily = Math.max(0, +c.daily || 0); c.start = Math.max(0, +c.start || 0); await kput(env, "econ:cfg", c, 3650 * 86400); return { cfg: c }; }
+  if (b.createChannel) {
+    const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+    const cat = chans.find((c) => c.type === 4 && /member/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
+    const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "🪙│ufa-coins", type: 0, ...(cat ? { parent_id: cat.id } : {}),
+      topic: "UFA Coins — /daily /work /balance /leaderboard · casino: /blackjack /slots /roulette /coinflip /dice /crash · football: /drive /simgame /bet · /coinhelp", rate_limit_per_user: 2 }, `UFA Coins channel by ${by}`)
+      .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels to create the channel.") : e; });
+    const c = { ...(await econCfg(env)), ch: ch.id }; await kput(env, "econ:cfg", c, 3650 * 86400);
+    await discord(env, "POST", `/channels/${ch.id}/messages`, { embeds: [{ title: "🪙 Welcome to UFA Coins", color: 0xffc62f, description: [`Everyone starts with **${COIN} ${fmt(c.start)}**. Get rich, go broke, flex on the leaderboard.`,
+      "", "**💰 Earn** — `/daily` (streaks stack!) · `/work` every hour", "**🎰 Casino** — `/blackjack` `/slots` `/roulette` `/coinflip` `/dice` `/crash`",
+      "**🏈 Football** — `/drive` call the plays and score · `/simgame` bet on a simulated game · `/bet` on real UFA games", "**😈 Other** — `/give` · `/rob` (risky) · `/balance` · `/leaderboard`", "", "Fake money, just for fun. Type `/coinhelp` any time."].join("\n") }] }).catch(() => {});
+    return { cfg: c, channel: ch.id, category: cat?.name || null };
+  }
+  if (b.adjust) { const { uid, amount } = b.adjust; const w = await wallet(env, uid); w.c = Math.max(0, w.c + Math.round(+amount || 0)); await saveW(env, uid, w, b.adjust.name); return { ok: true, c: w.c }; }
+  if (b.settle) {   // {week, game:"A-B", winner:"A"|"B"|"refund"}
+    const ks = (await klist(env, `bet:${b.settle.week}:${b.settle.game}:`)); let paid = 0, n = 0;
+    for (const k of ks) { const bt = await kget(env, k.name); if (!bt) continue; n++;
+      const w = await wallet(env, bt.u), win = b.settle.winner === "refund" ? bt.a : bt.t === b.settle.winner ? Math.round(bt.a * 1.9) : 0;
+      if (win) { w.c += win; paid += win; } if (b.settle.winner !== "refund") tally(w, win - bt.a);
+      await saveW(env, bt.u, w); await KV(env).delete(k.name);
+      if (win && b.settle.winner !== "refund") await dm(env, bt.u, `🎟️ Your bet on the **${bt.t}** hit! You won ${COIN} **${fmt(win)}** UFA Coins.`).catch(() => {});
+    }
+    return { ok: true, bets: n, paid };
+  }
+  if (b.reset) { if (String(b.confirm || "").toUpperCase() !== "RESET COINS") throw UE("Type RESET COINS to confirm."); const ks = await klist(env, "w:"); for (const k of ks) await KV(env).delete(k.name); return { ok: true, deleted: ks.length }; }
+  // overview
+  const [cfg, ws, bets, S, chans] = await Promise.all([econCfg(env), klist(env, "w:"), klist(env, "bet:"), loadSched(env), discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => [])]);
+  const top = ws.map((k) => ({ id: k.name.slice(2), c: k.metadata?.c || 0, n: k.metadata?.n || "" })).sort((a, b) => b.c - a.c);
+  const games = {};
+  for (const k of bets) { const m = k.metadata || {}; const g = games[`${m.w}|${m.g}`] = games[`${m.w}|${m.g}`] || { week: m.w, game: m.g, pool: 0, bets: [] }; g.pool += m.a || 0; g.bets.push({ t: m.t, a: m.a }); }
+  for (const g of Object.values(games)) { const wk = S.weeks.find((x) => x.week === g.week), gm = wk?.games.find((x) => `${x.a}-${x.b}` === g.game); g.result = gm?.result || ""; }
+  return { cfg, players: top.length, total: top.reduce((s, x) => s + x.c, 0), top: top.slice(0, 50), games: Object.values(games), teams: S.teams.map(({ abbr, name, color }) => ({ abbr, name, color })),
+    channels: chans.filter((c) => c.type === 0).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) };
+}
+
 // ---------- open free agency (skip the draft) ----------
 // Runs in small steps (Workers can only make so many calls per request): the page keeps calling until done.
 async function openFreeAgency(env, L, admin, body) {
@@ -1158,6 +1483,8 @@ async function command(i, env, ctx) {
     case "roster": return later(i, ctx, () => roster(i, env), false);
     case "franchises": return later(i, ctx, async () => ({ embeds: await franchisesEmbeds(env, await league(env)) }), false);
     case "setownerchannel": return later(i, ctx, () => setOwnerChannel(env, i));
+    case "coinhelp": case "balance": case "daily": case "work": case "give": case "leaderboard": case "coinflip": case "slots": case "roulette":
+    case "dice": case "crash": case "rob": case "simgame": case "blackjack": case "drive": case "bet": return await econCommand(i, env, ctx, cmd);
     case "activity": return await activity(i, env);
     case "fa":
       if (sub?.name === "list") return await faList(sub, env);
@@ -1195,6 +1522,7 @@ async function myOffers(i, env) {
 async function component(i, env, ctx) {
   const [kind, id, k] = String(i.data.custom_id || "").split(":");
   if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
+  if (kind === "bj" || kind === "dr") return econComponent(i, env, kind, id, k || "");
   if (kind === "ans") return json({ type: 9, data: { custom_id: `ansm:${id}`, title: "Answer",
     components: [row({ type: 4, custom_id: "text", style: 2, label: "Your answer (sent as a DM from the bot)", min_length: 1, max_length: 1500, required: true })] } });
   if (kind === "rp") return json({ type: 9, data: { custom_id: `rpm:${id || ""}`, title: "Reply to UFA Staff",
@@ -1287,7 +1615,7 @@ const cleanName = (s) => String(s || "").replace(/[\(\[\{].*?[\)\]\}]/g, "").rep
 async function autocomplete(i, env) {
   const focused = (i.data.options || []).flatMap((o) => o.options ? o.options : [o]).find((o) => o.focused);
   const q = String(focused?.value || "").toLowerCase();
-  if (focused?.name === "team") {
+  if (["team", "opponent"].includes(focused?.name)) {
     const S = await loadSched(env);
     return S.teams.filter((t) => !q || t.name.toLowerCase().includes(q) || t.abbr.toLowerCase().startsWith(q))
       .sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || a.name.localeCompare(b.name)).slice(0, 25)
@@ -1592,6 +1920,7 @@ async function web(req, url, env, ctx) {
         : body.delete ? (await discord(env, "DELETE", `/guilds/${L.guild}/auto-moderation/rules/${body.delete}`).catch((e) => { throw AM_ERR(e); }), { ok: true })
         : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
         : await automodList(env, L));
+      if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
       if (p === "/api/admin/automod/hiddenlog") return out({ ok: true, ...(await ruleToHiddenLog(env, L, String(body.id || ""), staffSig(admin))) });
       if (p === "/api/admin/excuse/movelog") return out({ ok: true, ...(await excuseMoveLog(env, L, staffSig(admin))) });
