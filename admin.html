@@ -105,6 +105,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .opt .pn{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .confirm{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:17px;line-height:1.45}
 .confirm .warnbox{color:var(--warn);font-weight:700;font-size:15px;margin-top:8px}
+.warnbox{color:var(--warn);font-weight:700}
 .pwbox{font-family:ui-monospace,Consolas,monospace;font-size:22px;background:var(--bg);border:1px dashed var(--gold);border-radius:10px;padding:12px;text-align:center;letter-spacing:.04em;user-select:all}
 .sub{display:flex;gap:6px;flex-wrap:wrap}
 .sub button{font:inherit;font-weight:700;font-size:14px;color:var(--mute);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
@@ -1795,24 +1796,29 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       ${c?.err ? `<div class="msg err">${esc(c.err)}</div>` : ""}
       ${cats.length ? `<div class="note">Blamed: ${cats.map(([k, n]) => `<b>${esc(k)}</b> ${n}`).join(" · ")}</div>` : ""}
       ${top.length ? `<div class="note">Biggest excuse makers: ${top.map(([u, n]) => `<b>${esc(nm(u))}</b> (${n})`).join(" · ")}</div>` : ""}
-      ${!rule ? `<div class="note"><b>Step 1:</b> create the excuse filter. AutoMod needs a log channel for flagged messages — the bot can make a hidden <b>#excuse-log</b> (staff only) so it doesn't spam anywhere.</div>
-        <div class="row"><label class="f">Log channel<select id="excalert"><option value="">➕ Create hidden #excuse-log</option>${MOD.channels.map(x => `<option value="${x.id}">#${esc(x.name)}</option>`).join("")}</select></label></div>
+      ${!rule ? `<div class="note"><b>Step 1:</b> create the excuse filter. Nothing gets deleted. AutoMod has to log what it catches somewhere, so the bot makes a hidden staff-only <b>#excuse-log</b> channel for that (mute it).</div>
         <details><summary class="note" style="cursor:pointer">Excuse words (${EXC_WORDS.length}) — edit before creating</summary><textarea id="excwords" rows="6" style="width:100%;margin-top:6px;font-family:ui-monospace,Consolas,monospace;font-size:13px">${esc(EXC_WORDS.join("\n"))}</textarea></details>
         <div class="row"><button class="btn red" id="excmake">Create excuse filter</button><span class="msg" id="excmsg"></span></div>`
-      : `<div class="note">Filter: <b>UFA: Excuses</b> (${(rule.trigger_metadata?.keyword_filter || []).length} words, logs to #${esc(chName(alertCh))}) — edit or turn it off under Your rules below.</div>
+      : `${chName(alertCh) !== "excuse-log" ? `<div class="warnbox" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ AutoMod is posting its excuse alerts in <b>#${esc(chName(alertCh))}</b>${alertCh === c?.ch ? " — the same channel as the board" : ""}. <button class="btn sm red" id="excmove">Move them to a hidden #excuse-log &amp; clean up</button></div>` : ""}
+        <div class="note">Filter: <b>UFA: Excuses</b> (${(rule.trigger_metadata?.keyword_filter || []).length} words, logs to #${esc(chName(alertCh))}) — counts only, never deletes. Edit or turn it off under Your rules below.</div>
         <div class="row"><label class="f">Counter message goes in<select id="excch">${MOD.channels.map(x => `<option value="${x.id}" ${x.id === c?.ch ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select></label>
           <label class="f">Title<input type="text" id="exctitle" maxlength="200" value="${esc(c?.title || "")}" placeholder="😤 Excuse Counter"></label></div>
         <div class="row"><button class="btn gold" id="excgo" data-alert="${esc(alertCh)}">${c?.msg ? "Save / move counter" : "Post counter"}</button>${c ? `<button class="btn sm" data-excadd="1">+1</button><button class="btn sm" data-excadd="-1">−1</button><button class="btn sm" id="excreset">Reset to 0</button><button class="btn sm x" id="excrm">Remove counter</button>` : ""}<span class="msg" id="excmsg"></span></div>
         ${c?.msg ? `<div class="note">Live in <b>#${esc(chName(c.ch))}</b> · checks every minute${c.last ? ` · last excuse ${ago(c.last.ts)} ago` : ""}. The "what got blamed" breakdown needs <b>Message Content Intent</b> turned on for the bot (Discord Developer Portal → Bot); the total and leaderboard work without it.</div>` : ""}`}`;
   }
   $("#tab-mod").addEventListener("click", async e => {
-    const b = e.target.closest("#excmake,#excgo,#excreset,#excrm,[data-excadd]"); if (!b) return;
+    const b = e.target.closest("#excmake,#excgo,#excreset,#excrm,#excmove,[data-excadd]"); if (!b) return;
     b.disabled = true;
     try{
+      if (b.id === "excmove"){
+        const j = await bot("/api/admin/excuse/movelog", {});
+        MOD = await bot("/api/admin/automod"); EXC = (await bot("/api/admin/counter", {key: "excuse"})).counter; renderMod(); renderExc();
+        toast(`Alerts now go to the hidden #excuse-log${j.cleaned ? ` — removed ${j.cleaned} alert message(s) from the public channel` : ""}.`); return;
+      }
       if (b.id === "excmake"){
         msg($("#excmsg"), "Setting up…");
         const words = $("#excwords").value.split("\n").map(x => x.trim()).filter(Boolean);
-        const j = await bot("/api/admin/excuse/setup", {alertCh: $("#excalert").value, words});
+        const j = await bot("/api/admin/excuse/setup", {words});
         MOD = await bot("/api/admin/automod"); EXC = (await bot("/api/admin/counter", {key: "excuse", setup: {rule: "UFA: Excuses", alertCh: j.alertCh}})).counter;
         renderMod(); renderExc(); toast("Excuse filter is live — now post the counter."); return;
       }
