@@ -1558,9 +1558,21 @@
   {
    "id": 179,
    "name": "babysplattfrmnbkk",
-   "pos": [],
+   "pos": [
+    "WR",
+    "TE",
+    "DE",
+    "LB",
+    "QB",
+    "RB",
+    "CB",
+    "S",
+    "K/P",
+    "KR"
+   ],
    "discord": "1409294551834689698",
-   "avatar": "https://cdn.discordapp.com/avatars/1409294551834689698/5a00e7f9b57f8ba0ef47533272e12d44.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1409294551834689698/5a00e7f9b57f8ba0ef47533272e12d44.png?size=96",
+   "locked": true
   },
   {
    "id": 180,
