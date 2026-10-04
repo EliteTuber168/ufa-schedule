@@ -515,7 +515,9 @@ async function appoint(env, L, abbr, uid, staffName) {
   if (!m) throw UE("That person isn't in the server.");
   const p = info(L, m);
   // a team should have exactly one FO — take the role off every other FO on this team
-  for (const old of rosterOf(L, M, abbr).filter((x) => x.rank === "fo" && x.id !== uid)) await delRole(env, L, old.id, L.R.fo, `FO replaced by ${staffName}`);
+  const olds = rosterOf(L, M, abbr).filter((x) => x.rank === "fo" && x.id !== uid);
+  for (const old of olds) await delRole(env, L, old.id, L.R.fo, `FO replaced by ${staffName}`);
+  if (olds.length) await killTeamPassword(env, abbr);   // the old FO knew it
   if (p.team && p.team !== abbr) await stripTeam(env, L, uid, p.team, "Appointed FO of another team");
   await addRole(env, L, uid, t.roleId, `Appointed FO by ${staffName}`);
   await addRole(env, L, uid, L.R.fo, `Appointed FO by ${staffName}`);
@@ -525,13 +527,41 @@ async function appoint(env, L, abbr, uid, staffName) {
   await dm(env, uid, `👑 You've been appointed franchise owner of the **${t.name}**! Manage your team at ${SITE}fo.html`);
   return `👑 ${p.name} is now FO of the ${t.name}.`;
 }
-async function unappoint(env, L, abbr, staffName) {
+// a team's FO-portal password: delete it (logins made with it stop working too)
+async function killTeamPassword(env, abbr) {
+  const had = !!(await kget(env, `pw:${abbr}`));
+  if (had) await KV(env).delete(`pw:${abbr}`);
+  let ended = 0;
+  for (const k of await klist(env, "sess:")) { const x = await kget(env, k.name); if (x?.pw && x.team === abbr) { await KV(env).delete(k.name); ended++; } }
+  return { had, ended };
+}
+async function unappoint(env, L, abbr, staffName, removeFromTeam = false) {
   const M = await members(env, L, true), fos = rosterOf(L, M, abbr).filter((x) => x.rank === "fo"), fo = fos[0], t = teamOf(L, abbr);
   if (!fo) throw UE("That team has no FO.");
-  for (const x of fos) await delRole(env, L, x.id, L.R.fo, `FO removed by ${staffName}`);
+  for (const x of fos) {
+    await delRole(env, L, x.id, L.R.fo, `FO removed by ${staffName}`);
+    if (removeFromTeam) { await stripTeam(env, L, x.id, abbr, `FO removed from the team by ${staffName}`); await toFA(env, L, x.id, "Removed from team"); }
+  }
+  const pw = await killTeamPassword(env, abbr);
   bust("members");
-  await logTx(env, L, { title: "Franchise Owner Removed", teams: [abbr], desc: `${fos.map((x) => `<@${x.id}>`).join(", ")} ${fos.length > 1 ? "are" : "is"} no longer franchise owner of the **${t.name}**`, lines: [`🛡️ By · **${staffName}**`] });
-  return `${fo.name} is no longer FO of the ${t.name}.`;
+  await logTx(env, L, { title: removeFromTeam ? "Franchise Owner Removed From Team" : "Franchise Owner Removed", teams: [abbr],
+    desc: `${fos.map((x) => `<@${x.id}>`).join(", ")} ${fos.length > 1 ? "are" : "is"} no longer ${removeFromTeam ? "on the" : "franchise owner of the"} **${t.name}**`, lines: [`🛡️ By · **${staffName}**`] });
+  return `${fo.name} is no longer ${removeFromTeam ? "on" : "FO of"} the ${t.name}.${pw.had ? " The team password was deleted" + (pw.ended ? ` and ${pw.ended} portal login(s) ended` : "") + "." : ""}`;
+}
+// admin "sync everything": stale passwords/logins, caches, the live owner list
+async function syncAll(env, L) {
+  bust("members", "league", "emojis"); L = await league(env, true);
+  const M = await members(env, L, true), out = { passwords: [], sessions: 0, board: false };
+  const pwTeams = (await klist(env, "pw:")).map((k) => k.name.slice(3));
+  for (const abbr of pwTeams) if (!teamOf(L, abbr) || !foOf(L, M, abbr)) { await KV(env).delete(`pw:${abbr}`); out.passwords.push(abbr); }
+  for (const k of await klist(env, "sess:")) {
+    const x = await kget(env, k.name); if (!x) continue;
+    if (x.pw) { const rec = await kget(env, `pw:${x.team}`); if (!rec || (x.pwTs && rec.ts !== x.pwTs) || !foOf(L, M, x.team)) { await KV(env).delete(k.name); out.sessions++; } }
+    else if (x.uid && !M.some((m) => m.user.id === x.uid)) { await KV(env).delete(k.name); out.sessions++; }   // left the server
+  }
+  out.board = !!(await refreshOwnersBoard(env, L, true).catch(() => null));
+  out.teamsWithFO = L.teams.filter((t) => foOf(L, M, t.abbr)).length;
+  return out;
 }
 
 // ---------- staff overrides (admin page) ----------
@@ -1340,7 +1370,9 @@ async function web(req, url, env, ctx) {
       const { team, password } = await req.json();
       const rec = await kget(env, `pw:${String(team || "").toUpperCase()}`);
       if (!rec || rec.hash !== await sha256(rec.salt + String(password || ""))) return out({ error: "Wrong team or password." }, 401);
-      const s = randToken(); await kput(env, `sess:${s}`, { team: String(team).toUpperCase(), pw: true, ts: Date.now() }, 30 * 86400);
+      const abbr = String(team).toUpperCase();
+      if (L && !foOf(L, await members(env, L), abbr)) return out({ error: "That team doesn't have a franchise owner right now." }, 401);
+      const s = randToken(); await kput(env, `sess:${s}`, { team: abbr, pw: true, pwTs: rec.ts, ts: Date.now() }, 30 * 86400);
       return out({ session: s });
     }
 
@@ -1359,10 +1391,11 @@ async function web(req, url, env, ctx) {
       }
       if (p === "/api/admin/decide") { const r = await decide(env, body.id, !!body.approve, body.reason, admin); return out({ ok: true, status: r.status, note: r.decisionReason }); }
       if (p === "/api/admin/appoint") return out({ ok: true, text: await appoint(env, L, body.team, body.uid, admin.name) });
-      if (p === "/api/admin/unappoint") return out({ ok: true, text: await unappoint(env, L, body.team, admin.name) });
+      if (p === "/api/admin/unappoint") return out({ ok: true, text: await unappoint(env, L, body.team, admin.name, !!body.removeFromTeam) });
+      if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L)) });
       if (p === "/api/admin/password") {
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
-        if (!body.password) { await KV(env).delete(`pw:${abbr}`); return out({ ok: true }); }
+        if (!body.password) { await killTeamPassword(env, abbr); return out({ ok: true }); }
         if (String(body.password).length < 8) return out({ error: "Use at least 8 characters." }, 400);
         const salt = randToken(); await kput(env, `pw:${abbr}`, { salt, hash: await sha256(salt + body.password), ts: Date.now() }, 365 * 86400);
         return out({ ok: true });
@@ -1508,6 +1541,10 @@ async function web(req, url, env, ctx) {
     const s = auth.startsWith("Session ") ? await kget(env, `sess:${auth.slice(8)}`) : null;
     if (!s) return out({ error: "Please log in." }, 401);
     if (p === "/api/logout") { await KV(env).delete(`sess:${auth.slice(8)}`); return out({ ok: true }); }
+    if (s.pw) {
+      const rec = await kget(env, `pw:${s.team}`);
+      if (!rec || rec.ts !== s.pwTs || !foOf(L, await members(env, L), s.team)) { await KV(env).delete(`sess:${auth.slice(8)}`); return out({ error: "This team password doesn't work anymore — log in again (or use Discord login)." }, 401); }
+    }
     let actor;
     if (s.pw) actor = { id: null, name: `${teamOf(L, s.team)?.name || s.team} front office`, team: s.team, rank: "fo", staff: false, pw: true };
     else actor = await actorFromUid(env, L, s.uid);
