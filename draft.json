@@ -1731,9 +1731,15 @@
   {
    "id": 211,
    "name": "The fourth  hokage jalen",
-   "pos": [],
+   "pos": [
+    "WR",
+    "S"
+   ],
    "discord": "1498117753985564793",
-   "avatar": "https://cdn.discordapp.com/avatars/1498117753985564793/a46272da03cc1c699807378e8e68ee87.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1498117753985564793/a46272da03cc1c699807378e8e68ee87.png?size=96",
+   "locked": true,
+   "posAt": 1791155696571,
+   "posNotified": 1791155696571
   },
   {
    "id": 212,
