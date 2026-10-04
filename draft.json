@@ -2047,6 +2047,18 @@
    "locked": true,
    "posAt": 1791084678791,
    "posNotified": 1791084678791
+  },
+  {
+   "id": 247,
+   "name": "Destiny",
+   "pos": [
+    "TE",
+    "LB",
+    "RB"
+   ],
+   "discord": "1182919450782081157",
+   "avatar": "https://cdn.discordapp.com/avatars/1182919450782081157/bcc7294479def4ad0c23f2111c2e1557.png?size=96",
+   "locked": true
   }
  ],
  "picks": [],
