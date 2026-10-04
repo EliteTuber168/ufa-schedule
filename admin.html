@@ -203,6 +203,17 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .pairs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
 .pairs div{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:700}
 .pairs .vs{color:var(--mute);font-size:12px}
+.modrule{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.modrule.off{opacity:.55}
+.modrule h3{margin:0;font-size:18px}
+.kw{display:inline-block;font-size:12px;font-weight:700;background:var(--panel3);border-radius:6px;padding:2px 7px;margin:2px 3px 2px 0;font-family:ui-monospace,Consolas,monospace}
+.preset{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.preset b{font-size:16px}
+.switch{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;cursor:pointer}
+.tester{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tester .hit{font-weight:800}
+.chk{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:4px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
+.chk label{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600}
 .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
 <div class="wrap">
@@ -233,6 +244,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
       <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
+      <button role="tab" data-tab="mod" aria-selected="false">Moderation</button>
       <button role="tab" data-tab="approvals" aria-selected="false">Approvals <span class="count hide" id="pcount"></span></button>
       <button role="tab" data-tab="week" aria-selected="false">Schedule</button>
       <button role="tab" data-tab="tx" aria-selected="false">Transactions</button>
@@ -279,7 +291,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="row between"><h2>Tickets</h2><div class="row"><button class="btn sm" id="tkscan">↻ Check for new messages</button><button class="btn sm red" id="tknew">+ New ticket</button></div></div>
         <div class="note">Every person who talks to the bot gets a ticket. Click one to open the chat — you see what they sent <b>and</b> what you sent. Your messages go to them as a DM from the bot.</div>
         <div class="filters"><input type="search" id="tkq" placeholder="Search tickets…" aria-label="Search tickets" style="flex:1 1 200px">
-          <select id="tkf" aria-label="Filter tickets"><option value="open">Open</option><option value="closed">Closed</option><option value="all">All</option></select></div>
+          <select id="tkf" aria-label="Filter tickets"><option value="open">Open</option><option value="unread">New messages only</option><option value="waiting">Waiting on you (they spoke last)</option><option value="closed">Closed</option><option value="all">All</option></select>
+          <select id="tks" aria-label="Sort tickets"><option value="them">Sort: they messaged most recently</option><option value="recent">Sort: any activity (newest)</option><option value="unread">Sort: new messages first</option><option value="old">Sort: oldest first</option><option value="no">Sort: ticket #</option></select></div>
         <div id="tklist" style="display:flex;flex-direction:column;gap:8px"><div class="note">Loading…</div></div>
         <button class="btn sm hide" id="tkmore" style="align-self:flex-start">Check older conversations</button>
       </section>
@@ -374,6 +387,16 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
           <section class="panel"><div class="row between"><h2 style="font-size:22px">History</h2><button class="btn sm" id="spinclr">Clear</button></div><div class="hist" id="spinhist"></div></section>
         </div>
       </div>
+    </div>
+
+    <div id="tab-mod" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <section class="panel"><div class="row between"><h2>Auto-delete messages</h2><div class="row"><button class="btn sm" id="modload">↻ Refresh</button><button class="btn red" id="modnew">+ New word filter</button></div></div>
+        <div class="note">Uses Discord's built-in AutoMod, so it works 24/7 even when nobody's online. A blocked message <b>never shows up</b> in the channel — the person just sees your message instead. Staff and anyone with Manage Server are skipped automatically.</div>
+        <div class="tester"><input type="text" id="modtest" placeholder="Test a message… e.g. yo when is the draft" style="flex:1 1 260px" aria-label="Test a message"><span id="modtres" class="note"></span></div>
+      </section>
+      <section class="panel" id="ctrpanel" style="border-color:var(--gold)"><div class="note">Loading counter…</div></section>
+      <div><h2 style="font-size:22px">Quick add</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:8px" id="modpre"></div></div>
+      <div><h2 style="font-size:22px">Your rules</h2><div id="modrules" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><div class="note">Loading…</div></div></div>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -591,8 +614,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","spin","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","spin","mod","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, mod: loadMod, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -1046,14 +1069,17 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   }
   function renderTickets(){
     const q = $("#tkq").value.trim().toLowerCase(), f = $("#tkf").value;
-    const list = TICKETS.filter(t => (f === "all" || t.status === f) && (!q || (t.name + " " + t.ticket + " " + (t.preview || "") + " " + (t.team || "")).toLowerCase().includes(q)));
+    const fl = {all: () => true, unread: t => isUnread(t), waiting: t => t.status === "open" && t.lastFrom === "them"}[f] || (t => t.status === f);
+    const them = t => t.lastThem || (t.lastFrom === "them" ? t.updated : 0);
+    const srt = {them: (a, b) => them(b) - them(a) || b.updated - a.updated, recent: (a, b) => b.updated - a.updated, unread: (a, b) => isUnread(b) - isUnread(a) || b.updated - a.updated, old: (a, b) => a.updated - b.updated, no: (a, b) => b.no - a.no}[$("#tks").value] || (() => 0);
+    const list = TICKETS.filter(t => fl(t) && (!q || (t.name + " " + t.ticket + " " + (t.preview || "") + " " + (t.team || "")).toLowerCase().includes(q))).sort(srt);
     $("#tklist").innerHTML = list.map(t => `<button class="tk ${isUnread(t) ? "unread" : ""}" data-tk="${t.uid}">
         <span class="no">${esc(t.ticket)}</span>${t.avatar ? `<img src="${esc(t.avatar)}" alt="" loading="lazy">` : `<span></span>`}
         <span style="min-width:0"><b>${esc(t.name)}</b>${t.team ? ` <span class="tag">${esc(t.team)}</span>` : ""}${t.rank && t.rank !== "player" ? ` <span class="tag ${t.rank}">${RANK[t.rank]}</span>` : ""}${t.status === "closed" ? ` <span class="tag">Closed</span>` : ""}${isUnread(t) ? `<span class="dot" title="New"></span>` : ""}
           <div class="pv">${t.lastFrom === "staff" ? "You: " : ""}${esc(t.preview || "")}</div></span>
         <span class="when">${ago(t.updated)}</span></button>`).join("") || `<div class="note">${f === "open" ? "No open tickets." : "No tickets."}</div>`;
   }
-  $("#tkq").oninput = renderTickets; $("#tkf").onchange = renderTickets;
+  $("#tkq").oninput = renderTickets; $("#tkf").onchange = renderTickets; $("#tks").onchange = renderTickets;
   $("#tklist").onclick = e => { const b = e.target.closest("[data-tk]"); if (b) openTicket(b.dataset.tk); };
   $("#tkscan").onclick = async () => { $("#tkscan").disabled = true; SCANP = 0; const j = await loadTickets(0); toast(j?.scan ? (j.scan.found ? `${j.scan.found} conversation(s) with new messages.` : "No new messages.") : "Checked."); $("#tkscan").disabled = false; };
   $("#tkmore").onclick = async () => { SCANP++; await loadTickets(SCANP); };
@@ -1687,6 +1713,139 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       const iv = setInterval(() => { $("#bn").textContent = a + rnd(z - a + 1); sfx.roll(); if (++k > 18){ clearInterval(iv); $("#bn").textContent = n; SPINNING = false; sfx.win(); addHist("Number", `${n} (${a}–${z})`);
         $("#spinres").innerHTML = `<div class="result"><div class="note">ROLLED ${a}–${z}</div><div class="big">${n}</div><div class="row">${copyBtn(`🎲 Rolled **${n}** (${a}–${z})`)}</div></div>`; } }, 60);
     };
+  }
+
+  // ---------- moderation (Discord AutoMod) ----------
+  let MOD = null;
+  const MOD_PRESETS = [
+    {key: "draft", icon: "🏈", title: "\"When is the draft?\"", desc: "Deletes draft-date questions (when's the draft, draft when, what time is the draft…).",
+      rule: {name: "UFA: Draft questions", trigger_type: 1,
+        keywords: ["when is the draft","whens the draft","when's the draft","when the draft","when draft","draft when","when is draft","when does the draft","when do we draft","when will the draft","what time is the draft","what time draft","draft date","draft time","is the draft today","draft today","draft tonight"],
+        regex: ["(?i)\\bw+h*e+n+'?s?\\b.{0,25}\\bdraft","(?i)\\bdraft\\b.{0,15}\\b(when|wen|whn|date|time)\\b","(?i)what\\s*time.{0,15}draft"],
+        allow: ["draft queue", "draft board", "draft room"],
+        message: "Draft info gets posted in announcements when it's ready. Please don't ask in chat."}},
+    {key: "invite", icon: "🔗", title: "Server invite links", desc: "Blocks discord.gg / discord.com/invite links (advertising other servers).",
+      rule: {name: "UFA: Invite links", trigger_type: 1, keywords: ["*discord.gg/*", "*discord.com/invite*", "*discordapp.com/invite*"], regex: ["(?i)discord(?:app)?\\s*(?:\\.|dot)\\s*(?:gg|com/invite)\\s*/\\s*\\S+"], message: "No server invites here."}},
+    {key: "preset", icon: "🧼", title: "Slurs & NSFW (Discord's lists)", desc: "Discord-maintained lists of slurs, sexual content and profanity.", rule: {name: "UFA: Slurs & NSFW", trigger_type: 4, presets: [1,2,3], message: "That language isn't allowed here."}},
+    {key: "mention", icon: "📣", title: "Mass mentions", desc: "Blocks messages that ping 6+ people/roles at once (raid & spam protection).", rule: {name: "UFA: Mass mentions", trigger_type: 5, mentions: 6, message: "Too many mentions in one message."}},
+  ];
+  let CTR = null;
+  async function loadMod(){
+    $("#modrules").innerHTML = `<div class="note">Loading…</div>`;
+    try{ MOD = await bot("/api/admin/automod"); }catch(e){ $("#modrules").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; $("#modpre").innerHTML = ""; $("#ctrpanel").innerHTML = ""; return; }
+    try{ CTR = (await bot("/api/admin/counter", {})).counter; }catch{ CTR = null; }
+    renderMod(); renderCtr();
+  }
+  // the "when is the draft" counter
+  function renderCtr(){
+    const rules = MOD.rules.filter(r => r.trigger_type === 1), c = CTR;
+    const defRule = c?.rule ?? (rules.find(r => /draft/i.test(r.name))?.name || rules[0]?.name || "");
+    const top = c ? Object.entries(c.users || {}).sort((a, b) => b[1] - a[1]).slice(0, 5) : [];
+    const nm = id => members().find(m => m.id === id)?.name || id;
+    $("#ctrpanel").innerHTML = `<div class="row between"><div><h2>🏈 "When is the draft?" counter</h2><div class="note">Counts every message your filter blocks and keeps a live counter message in a channel — with a leaderboard of the biggest offenders.</div></div>
+        ${c ? `<div style="text-align:right"><div style="font-family:var(--num);font-size:56px;line-height:1;color:var(--gold)">${c.count || 0}</div><div class="note">times asked</div></div>` : ""}</div>
+      ${c?.err ? `<div class="msg err">${esc(c.err)}</div>` : ""}
+      ${top.length ? `<div class="note">Biggest offenders: ${top.map(([u, n]) => `<b>${esc(nm(u))}</b> (${n})`).join(" · ")}</div>` : ""}
+      ${rules.length ? `<div class="row"><label class="f">Count blocks from<select id="ctrrule">${rules.map(r => `<option ${r.name === defRule ? "selected" : ""}>${esc(r.name)}</option>`).join("")}</select></label>
+        <label class="f">Counter message goes in<select id="ctrch">${MOD.channels.map(x => `<option value="${x.id}" ${x.id === c?.ch ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select></label>
+        <label class="f">Title<input type="text" id="ctrtitle" maxlength="200" value="${esc(c?.title || "")}" placeholder='🏈 "When is the draft?" counter'></label></div>
+      <div class="row"><button class="btn gold" id="ctrgo">${c?.msg ? "Save / move counter" : "Post counter"}</button>${c ? `<button class="btn sm" data-ctradd="1">+1</button><button class="btn sm" data-ctradd="-1">−1</button><button class="btn sm" id="ctrreset">Reset to 0</button><button class="btn sm x" id="ctrrm">Remove counter</button>` : ""}<span class="msg" id="ctrmsg"></span></div>
+      ${c?.msg ? `<div class="note">Live in <b>#${esc(chName(c.ch))}</b> · checks every minute${c.last ? ` · last asked ${ago(c.last.ts)} ago` : ""}. Needs the bot to have <b>View Audit Log</b>.</div>` : ""}`
+      : `<div class="note">Add the "When is the draft?" filter below first — the counter counts what it blocks.</div>`}`;
+  }
+  $("#ctrpanel") && $("#tab-mod").addEventListener("click", async e => {
+    const b = e.target.closest("#ctrgo,#ctrreset,#ctrrm,[data-ctradd]"); if (!b) return;
+    let body;
+    if (b.id === "ctrgo") body = {setup: {rule: $("#ctrrule").value, channel: $("#ctrch").value, title: $("#ctrtitle").value.trim()}};
+    else if (b.id === "ctrreset"){ if (!confirm("Reset the counter and leaderboard to 0?")) return; body = {reset: true}; }
+    else if (b.id === "ctrrm"){ if (!confirm("Remove the counter? Its message gets deleted.")) return; body = {remove: true}; }
+    else body = {add: +b.dataset.ctradd};
+    b.disabled = true;
+    try{ CTR = (await bot("/api/admin/counter", body)).counter; renderCtr(); toast(body.setup ? "Counter is live." : body.remove ? "Counter removed." : "Updated."); }
+    catch(err){ msg($("#ctrmsg"), err.message, false); b.disabled = false; }
+  });
+  const chName = id => MOD.channels.find(c => c.id === id)?.name || id;
+  const roleName = id => MOD.roles.find(r => r.id === id)?.name || id;
+  function renderMod(){
+    const R = MOD.rules;
+    $("#modpre").innerHTML = MOD_PRESETS.map(p => { const have = R.some(r => r.name === p.rule.name || (p.rule.trigger_type !== 1 && r.trigger_type === p.rule.trigger_type));
+      return `<div class="preset"><b>${p.icon} ${esc(p.title)}</b><div class="note">${esc(p.desc)}</div><div class="row">${have ? `<span class="tag hc">Added ✓</span>` : `<button class="btn sm red" data-modpre="${p.key}">Add…</button>`}</div></div>`; }).join("");
+    $("#modrules").innerHTML = R.map(r => {
+      const tm = r.trigger_metadata || {}, kinds = {1: "Word filter", 3: "Spam", 4: "Discord's lists", 5: "Mention spam", 6: "Profile names"};
+      const block = r.actions.find(a => a.type === 1), alert = r.actions.find(a => a.type === 2), to = r.actions.find(a => a.type === 3);
+      const what = r.trigger_type === 1 ? `${(tm.keyword_filter || []).slice(0, 14).map(k => `<span class="kw">${esc(k)}</span>`).join("")}${(tm.keyword_filter || []).length > 14 ? `<span class="note">+${tm.keyword_filter.length - 14} more</span>` : ""}${(tm.regex_patterns || []).length ? ` <span class="note">+ ${tm.regex_patterns.length} pattern(s)</span>` : ""}`
+        : r.trigger_type === 4 ? (tm.presets || []).map(x => `<span class="kw">${({1: "Profanity", 2: "Sexual content", 3: "Slurs"})[x]}</span>`).join("")
+        : r.trigger_type === 5 ? `<span class="kw">${tm.mention_total_limit}+ mentions</span>` : "";
+      return `<div class="modrule ${r.enabled ? "" : "off"}"><div class="row between"><div><h3>${esc(r.name)}</h3><div class="note">${kinds[r.trigger_type] || "Rule"}${block ? " · deletes the message" : ""}${alert ? ` · alerts #${esc(chName(alert.metadata.channel_id))}` : ""}${to ? ` · times out ${Math.round(to.metadata.duration_seconds / 60)} min` : ""}${r.exempt_roles?.length ? ` · skips ${r.exempt_roles.map(x => "@" + esc(roleName(x))).join(", ")}` : ""}</div></div>
+        <div class="row"><label class="switch"><input type="checkbox" data-modtog="${r.id}" ${r.enabled ? "checked" : ""}> ${r.enabled ? "On" : "Off"}</label>${[1, 4, 5].includes(r.trigger_type) ? `<button class="btn sm" data-modedit="${r.id}">Edit</button>` : ""}<button class="btn sm x" data-moddel="${r.id}">Delete</button></div></div>
+        <div>${what}</div>${block?.metadata?.custom_message ? `<div class="note">They see: “${esc(block.metadata.custom_message)}”</div>` : ""}</div>`;
+    }).join("") || `<div class="note">No rules yet — use Quick add above, or + New word filter.</div>`;
+    modTest();
+  }
+  // rough local preview of what Discord would catch
+  function kwRe(k){ const a = k.startsWith("*"), z = k.endsWith("*"), core = k.replace(/^\*|\*$/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"); return new RegExp((a ? "" : "(?:^|[^a-z0-9])") + core + (z ? "" : "(?:$|[^a-z0-9])"), "i"); }
+  function catches(r, t){
+    const tm = r.trigger_metadata || {};
+    if (r.trigger_type !== 1) return null;
+    if ((tm.allow_list || []).some(a => { try{ return kwRe(a).test(t); }catch{ return false; } })) return null;
+    const k = (tm.keyword_filter || []).find(k => { try{ return kwRe(k).test(t); }catch{ return false; } }); if (k) return k;
+    const rx = (tm.regex_patterns || []).find(x => { try{ return new RegExp(x.replace(/^\(\?i\)/, ""), "i").test(t); }catch{ return false; } }); return rx ? "pattern" : null;
+  }
+  function modTest(){
+    const t = $("#modtest").value.trim(), el = $("#modtres"); if (!t || !MOD){ el.textContent = ""; return; }
+    const hit = MOD.rules.filter(r => r.enabled).map(r => [r, catches(r, t)]).find(([, h]) => h);
+    el.innerHTML = hit ? `<span class="hit" style="color:var(--red)">🚫 Blocked by “${esc(hit[0].name)}”</span> <span class="note">(${hit[1] === "pattern" ? "matched a pattern" : `matched “${esc(hit[1])}”`})</span>` : `<span class="hit" style="color:var(--good)">✓ Would go through</span>`;
+  }
+  $("#modtest").oninput = modTest;
+  $("#modload").onclick = loadMod;
+  $("#modnew").onclick = () => modEdit({name: "", trigger_type: 1, keywords: [], regex: [], message: ""});
+  $("#tab-mod").addEventListener("click", async e => {
+    const pre = e.target.closest("[data-modpre]"); if (pre) return modEdit({...MOD_PRESETS.find(p => p.key === pre.dataset.modpre).rule});
+    const ed = e.target.closest("[data-modedit]"); if (ed){ const r = MOD.rules.find(x => x.id === ed.dataset.modedit), tm = r.trigger_metadata || {}, a = t => r.actions.find(x => x.type === t);
+      return modEdit({id: r.id, name: r.name, trigger_type: r.trigger_type, keywords: tm.keyword_filter || [], regex: tm.regex_patterns || [], allow: tm.allow_list || [], presets: tm.presets, mentions: tm.mention_total_limit,
+        message: a(1)?.metadata?.custom_message || "", alert: a(2)?.metadata?.channel_id || "", timeout: a(3)?.metadata?.duration_seconds || 0, exemptRoles: r.exempt_roles || [], exemptChannels: r.exempt_channels || [], enabled: r.enabled}); }
+    const del = e.target.closest("[data-moddel]"); if (del){ const r = MOD.rules.find(x => x.id === del.dataset.moddel); if (!confirm(`Delete "${r.name}"? Messages it was blocking will go through again.`)) return;
+      try{ await bot("/api/admin/automod", {delete: r.id}); toast("Rule deleted."); loadMod(); }catch(err){ toast(err.message, false); } }
+  });
+  $("#tab-mod").addEventListener("change", async e => {
+    const t = e.target.closest("[data-modtog]"); if (!t) return;
+    try{ await bot("/api/admin/automod", {toggle: t.dataset.modtog, enabled: t.checked}); toast(t.checked ? "Rule turned on." : "Rule turned off."); loadMod(); }catch(err){ toast(err.message, false); t.checked = !t.checked; }
+  });
+  function modEdit(r){
+    const isNew = !r.id, type = r.trigger_type || 1;
+    const exR = new Set(isNew ? MOD.defaults.exempt : r.exemptRoles || []), exC = new Set(r.exemptChannels || []);
+    const alert = isNew ? MOD.defaults.alert : r.alert || "";
+    wz.innerHTML = `<div class="row between"><h2>${isNew ? "New rule" : "Edit rule"}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <label class="f" style="flex:none">Name<input type="text" id="mname" value="${esc(r.name)}" maxlength="100" placeholder="e.g. Draft questions"></label>
+      ${type === 1 ? `<label class="f" style="flex:none">Words &amp; phrases — one per line<textarea id="mkw" rows="7" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:14px;text-transform:none;letter-spacing:0" placeholder="when is the draft&#10;draft when">${esc((r.keywords || []).join("\n"))}</textarea></label>
+        <div class="note" style="margin-top:-8px">Matches whole words, any capitalization. Use <b>*</b> for "contains": <span class="kw">*draft*</span> catches "drafting", "predraft"… (careful — that's very broad).</div>
+        <details${(r.regex || []).length || (r.allow || []).length ? " open" : ""}><summary class="note" style="cursor:pointer">Advanced: patterns &amp; exceptions</summary>
+          <label class="f" style="flex:none;margin-top:8px">Regex patterns — one per line (max 10)<textarea id="mrx" rows="3" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px;text-transform:none;letter-spacing:0">${esc((r.regex || []).join("\n"))}</textarea></label>
+          <label class="f" style="flex:none">Never block these (exceptions) — one per line<textarea id="mallow" rows="2" style="width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px;text-transform:none;letter-spacing:0" placeholder="draft queue&#10;draft board">${esc((r.allow || []).join("\n"))}</textarea></label></details>` : ""}
+      ${type === 4 ? `<div class="chk" style="max-height:none">${[[1, "Profanity"], [2, "Sexual content"], [3, "Slurs"]].map(([v, l]) => `<label><input type="checkbox" class="mpre" value="${v}" ${(r.presets || [1, 2, 3]).includes(v) ? "checked" : ""}> ${l}</label>`).join("")}</div>` : ""}
+      ${type === 5 ? `<label class="f" style="flex:none">Block messages with this many mentions or more<input type="number" id="mmen" min="1" max="50" value="${r.mentions || 6}"></label>` : ""}
+      <label class="f" style="flex:none">What they see when it's blocked (max 150)<input type="text" id="mmsg" maxlength="150" value="${esc(r.message || "")}" placeholder="Draft info gets posted in announcements."></label>
+      <div class="row"><label class="f">Send an alert to<select id="malert"><option value="">Nowhere</option>${MOD.channels.map(c => `<option value="${c.id}" ${c.id === alert ? "selected" : ""}>#${esc(c.name)}</option>`).join("")}</select></label>
+        <label class="f">Also time them out<select id="mto">${[[0, "No"], [60, "1 minute"], [300, "5 minutes"], [600, "10 minutes"], [3600, "1 hour"]].map(([v, l]) => `<option value="${v}" ${+r.timeout === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+      <div class="note">Roles that are allowed to say it (skipped by this rule):</div>
+      <div class="chk">${MOD.roles.map(x => `<label><input type="checkbox" class="mexr" value="${x.id}" ${exR.has(x.id) ? "checked" : ""}> ${esc(x.name)}</label>`).join("")}</div>
+      <details${exC.size ? " open" : ""}><summary class="note" style="cursor:pointer">Channels where this rule doesn't apply</summary><div class="chk" style="margin-top:6px">${MOD.channels.map(c => `<label><input type="checkbox" class="mexc" value="${c.id}" ${exC.has(c.id) ? "checked" : ""}> #${esc(c.name)}</label>`).join("")}</div></details>
+      <label class="c"><input type="checkbox" id="men" ${r.enabled !== false ? "checked" : ""}> Rule is on</label>
+      <span class="msg" id="mmsgout"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="msave">${isNew ? "Create rule" : "Save"}</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "msave") return;
+      const lines = id => ($(id)?.value || "").split("\n").map(x => x.trim()).filter(Boolean);
+      const save = {id: r.id, name: $("#mname").value.trim() || "UFA filter", trigger_type: type, keywords: lines("#mkw"), regex: lines("#mrx"), allow: lines("#mallow"),
+        presets: $$(".mpre:checked").map(x => +x.value), mentions: $("#mmen")?.value, message: $("#mmsg").value.trim(), alert: $("#malert").value, timeout: +$("#mto").value,
+        exemptRoles: $$(".mexr:checked").map(x => x.value), exemptChannels: $$(".mexc:checked").map(x => x.value), enabled: $("#men").checked};
+      b.disabled = true; msg($("#mmsgout"), "Saving…");
+      try{ await bot("/api/admin/automod", {save}); dlg.close(); toast(isNew ? "Rule created — it's live now." : "Rule saved."); loadMod(); }
+      catch(err){ msg($("#mmsgout"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
   }
 
   // ---------- danger zone ----------
