@@ -252,7 +252,9 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
             <button class="btn" data-wz="remove">➖ Remove player</button>
             <a class="btn" href="plan.html">📅 Plan a week</a>
             <a class="btn" href="draftroom.html">🏈 Draft room</a>
+            <button class="btn blue" id="syncall" title="Re-check everything against Discord: team FOs, stale portal passwords and logins, player counts, the live owner list">🔄 Update everything</button>
           </div>
+          <span class="msg" id="syncmsg"></span>
           <h3 style="margin-top:6px">Latest transactions</h3><div class="attn" id="dashtx"></div>
         </section>
       </div>
@@ -633,6 +635,19 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       }catch(err){ msg($("#famsg"), err.message, false); b.disabled = false; delete b.dataset.busy; }
     };
   };
+  $("#syncall").onclick = async () => {
+    const b = $("#syncall"); b.disabled = true; msg($("#syncmsg"), "Checking everything…");
+    try{
+      const j = await bot("/api/admin/syncall", {});
+      await loadLive();   // pulls fresh players/FOs and saves counts to the site
+      const bits = [`${j.teamsWithFO} team(s) with an FO`];
+      bits.push(j.passwords.length ? `deleted ${j.passwords.length} password(s) for teams with no FO (${j.passwords.join(", ")})` : "passwords OK");
+      bits.push(j.sessions ? `logged out ${j.sessions} stale portal login(s)` : "logins OK");
+      if (j.board) bits.push("owner list refreshed");
+      msg($("#syncmsg"), "Done — " + bits.join(" · ") + "."); renderDash();
+    }catch(e){ msg($("#syncmsg"), e.message, false); }
+    b.disabled = false;
+  };
   async function renderDash(){
     faPanel();
     const act = D.teams.filter(t => t.active).length, ms = members();
@@ -706,8 +721,10 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
           + (old && old.id === p.id ? `<div class="warnbox">They're already the FO.</div>` : ""); },
       run: s => bot("/api/admin/appoint", {team: s.team, uid: s.uid}), ok:"Yes, assign FO"},
     unfo: {title:"Remove an FO", steps:["team","confirm"], teams: t => !!foOf(t.abbr), emptyTeams:"No team has an FO right now.",
-      confirm: s => `Remove <b>${esc(foOf(s.team)?.name)}</b> as franchise owner of the <b>${esc(T(s.team).name)}</b>? They stay on the roster as a player.`,
-      run: s => bot("/api/admin/unappoint", {team: s.team}), ok:"Yes, remove FO"},
+      confirm: s => `Remove <b>${esc(foOf(s.team)?.name)}</b> as franchise owner of the <b>${esc(T(s.team).name)}</b>?
+        <label class="c" style="margin-top:10px;display:flex"><input type="checkbox" id="unfoteam"> Also remove them from the team (they become a free agent)</label>
+        <div class="note" style="margin-top:8px">The team's FO-portal password is deleted and anyone logged in with it is logged out. Make a new one for the next FO.</div>`,
+      run: s => bot("/api/admin/unappoint", {team: s.team, removeFromTeam: !!$("#unfoteam")?.checked}), ok:"Yes, remove FO"},
     add: {title:"Add / move player", steps:["person","team","confirm"], hint:"Who are you adding or moving? (FOs are changed with Assign new FO.)", person: (m, s) => m.rank !== "fo" && m.team !== s.team,
       teams: (t, s) => byId(s.uid)?.team !== t.abbr,
       confirm: s => { const p = byId(s.uid), t = T(s.team); return p.team ? `Move <b>${esc(p.name)}</b> from the <b>${esc(T(p.team).name)}</b> to the <b>${esc(t.name)}</b>?${p.rank !== "player" ? `<div class="warnbox">They'll lose their ${RANK[p.rank]} title.</div>` : ""}` : `Add <b>${esc(p.name)}</b> to the <b>${esc(t.name)}</b>? They'll be ${(t.players||0)+1}/${D.settings.rosterCap}.`; },
