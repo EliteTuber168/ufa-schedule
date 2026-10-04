@@ -32,7 +32,7 @@ export default {
     ctx.waitUntil(autoPick(env).catch((e) => console.log("autopick:", e.message)));
     // every 10 minutes, catch roster changes made by hand in Discord (role edits, draft roles) for the live owner list
     if (new Date().getUTCMinutes() % 2 === 0) ctx.waitUntil(refreshOwnersBoard(env).catch((e) => console.log("owners board:", e.message)));
-    ctx.waitUntil(tickCounter(env).catch((e) => console.log("counter:", e.message)));
+    ctx.waitUntil(tickCounter(env).catch((e) => console.log("counters:", e.message)));
   },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
@@ -813,7 +813,7 @@ async function automodList(env, L) {
     defaults: { alert: L.C.staffChat || "", exempt: L.R.staff ? [L.R.staff] : [] } };
 }
 async function automodSave(env, L, b, by) {
-  const type = +b.trigger_type || 1, actions = [{ type: 1, metadata: b.message ? { custom_message: String(b.message).slice(0, 150) } : {} }];
+  const type = +b.trigger_type || 1, actions = b.flagOnly ? [] : [{ type: 1, metadata: b.message ? { custom_message: String(b.message).slice(0, 150) } : {} }];
   if (b.alert) actions.push({ type: 2, metadata: { channel_id: String(b.alert) } });
   if (b.timeout) actions.push({ type: 3, metadata: { duration_seconds: Math.min(2419200, Math.max(60, +b.timeout)) } });
   const clean = (a, n, len) => [...new Set((a || []).map((x) => String(x).trim()).filter(Boolean))].slice(0, n).map((x) => x.slice(0, len));
@@ -832,53 +832,106 @@ async function automodSave(env, L, b, by) {
   }
 }
 
-// ---------- "when is the draft" counter: counts AutoMod blocks of a rule (from the audit log) and keeps a message updated ----------
-function counterEmbed(c) {
-  const top = Object.entries(c.users || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const medal = ["🥇", "🥈", "🥉", "4.", "5."];
-  return { title: c.title || "🏈 \"When is the draft?\" counter", color: 0xffc62f,
-    description: `# ${c.count || 0}\ntimes someone has asked${c.last ? `\n\nLast asked by <@${c.last.uid}> <t:${Math.floor(c.last.ts / 1000)}:R>` : ""}`,
-    fields: top.length ? [{ name: "Biggest offenders", value: top.map(([u, n], k) => `${medal[k]} <@${u}> — **${n}**`).join("\n") }] : [],
-    footer: { text: "Updates automatically · asking again just makes this number go up" } };
+// ---------- fun counters: count AutoMod hits of a rule (audit log) and keep a live message updated ----------
+// "draft": blocked "when is the draft" messages (audit action 143). "excuse": flagged-only excuses (144) — never deleted.
+const EXCUSE_CATS = [
+  ["📶 Lag / WiFi", ["lag", "laggy", "lagging", "lagged", "wifi", "internet", "ping", "connection", "delay", "input delay", "desync", "fps", "frame", "frames", "disconnected", "dc"]],
+  ["🎲 Rigged / refs", ["rigged", "refs", "ref", "scripted", "cheating", "cheater", "hacker", "hacking", "unfair", "glitch", "glitched", "bugged", "bug"]],
+  ["🎮 Controller / device", ["controller", "drift", "stick drift", "keyboard", "mouse", "battery", "headset", "phone", "crashed", "crash"]],
+  ["😴 Wasn't trying", ["wasnt trying", "wasn't trying", "not trying", "didnt try", "didn't try", "afk", "was afk", "tired", "lagging behind", "warming up"]],
+];
+const EXCUSE_WORDS = ["lag", "laggy", "lagging", "lagged", "my wifi", "wifi died", "bad wifi", "my internet", "high ping", "my ping", "input delay", "desync", "low fps", "frame drops", "i dced", "disconnected",
+  "rigged", "the refs", "scripted", "game is rigged", "glitched", "bugged", "glitch", "its bugged",
+  "my controller", "stick drift", "controller died", "my keyboard", "my mouse", "battery died", "game crashed", "i crashed",
+  "wasnt trying", "wasn't trying", "not even trying", "didnt try", "didn't try", "i was afk", "was afk", "i was tired", "warming up"];
+const COUNTERS = { draft: { action: 143, title: "🏈 \"When is the draft?\" counter", noun: "times someone has asked", foot: "asking again just makes this number go up" },
+  excuse: { action: 144, title: "😤 Excuse Counter", noun: "excuses made", foot: "skill issue? nah, must be the wifi" } };
+function counterEmbed(key, c) {
+  const C = COUNTERS[key], top = Object.entries(c.users || {}).sort((a, b) => b[1] - a[1]).slice(0, 5), medal = ["🥇", "🥈", "🥉", "4.", "5."];
+  const fields = [];
+  if (key === "excuse" && c.cats && Object.values(c.cats).some(Boolean)) fields.push({ name: "What got blamed", value: EXCUSE_CATS.map(([n]) => `${n} — **${c.cats[n] || 0}**`).join("\n") });
+  if (top.length) fields.push({ name: key === "excuse" ? "Biggest excuse makers" : "Biggest offenders", value: top.map(([u, n], k) => `${medal[k]} <@${u}> — **${n}**`).join("\n") });
+  return { title: c.title || C.title, color: key === "excuse" ? 0xe8424a : 0xffc62f,
+    description: `# ${c.count || 0}\n${C.noun}${c.last ? `\n\nLast one: <@${c.last.uid}> <t:${Math.floor(c.last.ts / 1000)}:R>` : ""}`,
+    fields, footer: { text: `Updates automatically · ${C.foot}` } };
 }
-async function tickCounter(env, force = false) {
-  const c = env.VOTES ? await kget(env, "counter:draft") : null; if (!c) return null;
+const snowTs = (id) => Number((BigInt(id) >> 22n) + 1420070400000n), tsSnow = (t) => String(BigInt(t - 1420070400000) << 22n);
+function excuseCat(text) {
+  const t = String(text || "").toLowerCase();
+  for (const [n, words] of EXCUSE_CATS) if (words.some((w) => new RegExp(`(^|[^a-z])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`).test(t))) return n;
+  return null;
+}
+async function tickCounter(env, key = null, force = false) {
+  if (!env.VOTES) return null;
+  if (!key) { for (const k of Object.keys(COUNTERS)) await tickCounter(env, k).catch((e) => console.log("counter", k, e.message)); return null; }
+  const c = await kget(env, `counter:${key}`); if (!c) return null;
   const L = await league(env);
-  const r = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?action_type=143&limit=100${c.lastAudit ? `&after=${c.lastAudit}` : ""}`).catch((e) => { if (e.status === 403) c.err = "The bot needs the View Audit Log permission."; return null; });
+  const r = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?action_type=${COUNTERS[key].action}&limit=100${c.lastAudit ? `&after=${c.lastAudit}` : ""}`).catch((e) => { if (e.status === 403) c.err = "The bot needs the View Audit Log permission."; return null; });
   let changed = force;
   if (r) {
     delete c.err;
-    const entries = (r.audit_log_entries || []).sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
-    for (const e of entries) {
+    for (const e of (r.audit_log_entries || []).sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1))) {
       c.lastAudit = e.id;
       if (c.rule && e.options?.auto_moderation_rule_name !== c.rule) continue;
       c.count = (c.count || 0) + 1; c.users = c.users || {}; c.users[e.target_id] = (c.users[e.target_id] || 0) + 1;
-      c.last = { uid: e.target_id, ts: Number((BigInt(e.id) >> 22n) + 1420070400000n) }; changed = true;
+      c.last = { uid: e.target_id, ts: snowTs(e.id) }; changed = true;
     }
-    if (!c.lastAudit) c.lastAudit = String((BigInt(Date.now() - 1420070400000) << 22n));   // first run: only count from now on
+    if (!c.lastAudit) c.lastAudit = tsSnow(Date.now());   // first run: only count from now on
   }
-  if (changed && c.ch && c.msg) await discord(env, "PATCH", `/channels/${c.ch}/messages/${c.msg}`, { embeds: [counterEmbed(c)], allowed_mentions: { parse: [] } })
+  // excuses: read the alert channel to see WHAT got blamed (needs Message Content intent; skipped quietly if not available)
+  if (key === "excuse" && c.alertCh) {
+    const ms = await discord(env, "GET", `/channels/${c.alertCh}/messages?limit=100${c.lastMsg ? `&after=${c.lastMsg}` : ""}`).catch(() => null);
+    if (ms) {
+      c.cats = c.cats || {};
+      for (const m of ms.sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1))) {
+        c.lastMsg = m.id;
+        if (m.type !== 24) continue;
+        const f = Object.fromEntries((m.embeds?.[0]?.fields || []).map((x) => [x.name, x.value]));
+        if (c.rule && f.rule_name && f.rule_name !== c.rule) continue;
+        const cat = excuseCat(f.keyword || f.keyword_matched_content || m.content || m.embeds?.[0]?.description);
+        if (cat) { c.cats[cat] = (c.cats[cat] || 0) + 1; changed = true; }
+      }
+      if (!c.lastMsg) c.lastMsg = tsSnow(Date.now());
+    }
+  }
+  if (changed && c.ch && c.msg) await discord(env, "PATCH", `/channels/${c.ch}/messages/${c.msg}`, { embeds: [counterEmbed(key, c)], allowed_mentions: { parse: [] } })
     .catch(async (e) => { if (e.status === 404) delete c.msg; });
-  await kput(env, "counter:draft", c, 3650 * 86400);
+  await kput(env, `counter:${key}`, c, 3650 * 86400);
   return c;
 }
 async function counterAdmin(env, L, b) {
-  let c = await kget(env, "counter:draft");
-  if (b.remove) { if (c?.ch && c.msg) await discord(env, "DELETE", `/channels/${c.ch}/messages/${c.msg}`).catch(() => {}); await KV(env).delete("counter:draft"); return { counter: null }; }
+  const key = COUNTERS[b.key] ? b.key : "draft", K = `counter:${key}`;
+  let c = await kget(env, K);
+  if (b.remove) { if (c?.ch && c.msg) await discord(env, "DELETE", `/channels/${c.ch}/messages/${c.msg}`).catch(() => {}); await KV(env).delete(K); return { counter: null }; }
   if (b.setup) {
     c = c || { count: 0, users: {} };
     c.rule = String(b.setup.rule || ""); c.title = String(b.setup.title || "").slice(0, 200) || undefined;
+    if (b.setup.alertCh) c.alertCh = String(b.setup.alertCh);
     if (b.setup.channel && (b.setup.channel !== c.ch || !c.msg)) {
       if (c.ch && c.msg) await discord(env, "DELETE", `/channels/${c.ch}/messages/${c.msg}`).catch(() => {});
-      const m = await discord(env, "POST", `/channels/${b.setup.channel}/messages`, { embeds: [counterEmbed(c)], allowed_mentions: { parse: [] } }).catch(() => { throw UE("The bot can't post in that channel."); });
+      const m = await discord(env, "POST", `/channels/${b.setup.channel}/messages`, { embeds: [counterEmbed(key, c)], allowed_mentions: { parse: [] } }).catch(() => { throw UE("The bot can't post in that channel."); });
       c.ch = b.setup.channel; c.msg = m.id;
     }
-    await kput(env, "counter:draft", c, 3650 * 86400);
+    await kput(env, K, c, 3650 * 86400);
   }
-  if (b.reset && c) { c.count = 0; c.users = {}; delete c.last; await kput(env, "counter:draft", c, 3650 * 86400); }
-  if (b.add && c) { c.count = Math.max(0, (c.count || 0) + Math.round(+b.add)); await kput(env, "counter:draft", c, 3650 * 86400); }
-  if (c && (b.setup || b.reset || b.add || b.refresh)) c = await tickCounter(env, true);
+  if (b.reset && c) { c.count = 0; c.users = {}; c.cats = {}; delete c.last; await kput(env, K, c, 3650 * 86400); }
+  if (b.add && c) { c.count = Math.max(0, (c.count || 0) + Math.round(+b.add)); await kput(env, K, c, 3650 * 86400); }
+  if (c && (b.setup || b.reset || b.add || b.refresh)) c = await tickCounter(env, key, true);
   return { counter: c };
+}
+// one click: hidden #excuse-log channel + a flag-only AutoMod rule (messages stay up, they just get counted)
+async function excuseSetup(env, L, b, by) {
+  let alertCh = b.alertCh;
+  if (!alertCh) {
+    const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "excuse-log", type: 0, topic: "AutoMod log for the excuse counter — muted is fine.",
+      ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
+      permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])] }, `Excuse counter set up by ${by}`)
+      .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels to create #excuse-log — or pick an existing channel.") : e; });
+    alertCh = ch.id;
+  }
+  const words = (b.words && b.words.length ? b.words : EXCUSE_WORDS);
+  const rule = await automodSave(env, L, { name: "UFA: Excuses", trigger_type: 1, keywords: words, alert: alertCh, exemptRoles: [], enabled: true, flagOnly: true }, by);
+  return { rule, alertCh };
 }
 
 // ---------- open free agency (skip the draft) ----------
@@ -1509,6 +1562,7 @@ async function web(req, url, env, ctx) {
         : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
         : await automodList(env, L));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
+      if (p === "/api/admin/excuse/setup") return out({ ok: true, ...(await excuseSetup(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L, !!body.rolesOnly)) });
       if (p === "/api/admin/password") {
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
