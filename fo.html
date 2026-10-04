@@ -42,6 +42,8 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing
 .teamhead{flex-direction:row;gap:14px;align-items:center;flex-wrap:wrap;border-left:6px solid var(--team)}
 .teamhead .tn{font-family:var(--num);font-size:38px;letter-spacing:.04em;line-height:1}
 .meter{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;flex:1 1 140px;min-width:120px}.meter i{display:block;height:100%;background:var(--team)}
+.inherit{background:rgba(61,123,255,.12);border:1px solid var(--blue,#3d7bff);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.inherit b{color:#fff}
 .banner{background:rgba(255,162,74,.12);border:1px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 14px;font-weight:700}
 .list{display:flex;flex-direction:column;gap:6px}
 .p{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
@@ -79,6 +81,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div id="app" class="hide" style="display:flex;flex-direction:column;gap:18px">
     <div class="row" style="justify-content:space-between"><span class="note" id="who"></span><button class="btn ghost" id="logout">Log out</button></div>
     <div class="banner hide" id="frozen"></div>
+    <div class="inherit hide" id="inherit"></div>
     <section class="panel teamhead" id="thead"></section>
     <div class="tabs" role="tablist" id="tabs"></div>
 
@@ -204,7 +207,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     $("#tabs").innerHTML = list.map(([k,l]) => `<button role="tab" data-t="${k}" aria-selected="${k===TAB}">${l}</button>`).join("");
     document.querySelectorAll("section[data-tab]").forEach(s => s.classList.toggle("hide", s.dataset.tab !== TAB));
   }
-  $("#tabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (!b) return; TAB = b.dataset.t; tabs(); if (TAB === "tx") loadTx(); if (TAB === "trade") loadTrade(); if (TAB === "draft") loadQueue(); };
+  $("#tabs").onclick = e => { const b = e.target.closest("button[data-t]"); if (!b) return; TAB = b.dataset.t; tabs(); if (TAB === "tx") loadTx(); if (TAB === "trade") loadTrade(); if (TAB === "draft") loadQueue(); else if (DQ) inheritBanner(); };
 
   const card = (p, acts="") => `<div class="p"><img src="${esc(p.avatar)}" alt="" loading="lazy"><span class="nm">${esc(p.name)}</span>${p.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}<span class="acts">${acts}</span></div>`;
   function render(){
@@ -286,9 +289,30 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   // ---------- draft queue ----------
   let DQ = null, QUEUE = [], qDirty = false;
   async function loadQueue(){
-    try{ DQ = await call("/api/queue"); QUEUE = DQ.queue.filter(id => DQ.available.some(p => p.id === id)); qDirty = false; renderQueue(); }
+    try{ DQ = await call("/api/queue"); QUEUE = DQ.queue.filter(id => DQ.available.some(p => p.id === id)); qDirty = false; renderQueue(); inheritBanner(); }
     catch(e){ $("#dq").innerHTML = `<div class="note">${esc(e.message)}</div>`; }
   }
+  // the previous FO left a queue behind → let the new FO review it, keep it or start fresh
+  function inheritBanner(){
+    const h = DQ?.inherited, el = $("#inherit");
+    if (!h){ el.classList.add("hide"); return; }
+    el.classList.remove("hide");
+    el.innerHTML = `<div>📋 <b>Looks like the previous front office of this team set up a draft queue</b> — ${h.n} player${h.n === 1 ? "" : "s"}${h.available !== h.n ? ` (${h.available} still available)` : ""}${h.by ? `, made by ${esc(h.by)}` : ""}${h.ts ? ` on ${new Date(h.ts).toLocaleDateString([], {month: "short", day: "numeric"})}` : ""}. Keep it or start your own.</div>
+      <div class="row">${TAB !== "draft" ? `<button class="btn" data-inh="review">Review it</button>` : ""}<button class="btn red" data-inh="keep">Keep it</button><button class="btn" data-inh="fresh">Start fresh</button></div>`;
+  }
+  document.addEventListener("click", async e => {
+    const b = e.target.closest("[data-inh]"); if (!b || !DQ) return;
+    const a = b.dataset.inh;
+    if (a === "review"){ TAB = "draft"; tabs(); renderQueue(); inheritBanner(); document.querySelector('section[data-tab="draft"]').scrollIntoView({behavior: "smooth"}); return; }
+    if (a === "fresh" && !confirm("Clear this queue and build your own? The old list will be deleted.")) return;
+    b.disabled = true;
+    try{
+      const j = await call("/api/queue", {ids: a === "keep" ? DQ.queue : []});
+      QUEUE = j.queue.filter(id => DQ.available.some(p => p.id === id)); DQ.queue = j.queue; DQ.inherited = null; qDirty = false;
+      renderQueue(); inheritBanner(); toast(a === "keep" ? "Kept — the queue is yours now. Edit it any time in Draft queue." : "Cleared — add players in the Draft queue tab.");
+      if (a === "fresh"){ TAB = "draft"; tabs(); }
+    }catch(err){ toast(err.message); b.disabled = false; }
+  });
   const pname = id => DQ.available.find(p => p.id === id) || {name: "?"};
   const ppos = p => (p.pos || []).join("/");
   function renderQueue(){
@@ -317,7 +341,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     qDirty = true; renderQueue();
   });
   $("#dqsave").onclick = async () => {
-    try{ msg($("#dqmsg"), "Saving…"); const j = await call("/api/queue", {ids: QUEUE}); QUEUE = j.queue; qDirty = false; renderQueue(); msg($("#dqmsg"), "Saved."); }
+    try{ msg($("#dqmsg"), "Saving…"); const j = await call("/api/queue", {ids: QUEUE}); QUEUE = j.queue; qDirty = false; DQ.inherited = null; renderQueue(); inheritBanner(); msg($("#dqmsg"), "Saved."); }
     catch(e){ msg($("#dqmsg"), e.message, false); }
   };
 
@@ -331,6 +355,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       $("#frozen").textContent = plain(FROZEN || ""); $("#frozen").classList.toggle("hide", !FROZEN);
       if (!ME.team){ $("#thead").innerHTML = `<div><div class="tn">No team</div><div class="note">You're not on a team right now. Franchise owners can send you offers — you'll get a DM, or use <b>/offers</b> in the server.</div></div>`; TAB = "tx"; $("#tabs").innerHTML = ""; document.querySelectorAll("section[data-tab]").forEach(s => s.classList.toggle("hide", s.dataset.tab !== "tx")); loadTx(); return; }
       await refresh();
+      if (["fo","gm"].includes(ME.rank)) loadQueue().catch(() => {});   // shows the "previous FO's queue" notice if there is one
     }catch(e){ if (SESSION) msg($("#gmsg"), e.message, false); showGate(); }
   }
   boot();
