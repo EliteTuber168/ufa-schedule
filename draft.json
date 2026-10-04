@@ -2031,6 +2031,16 @@
    "pos": [],
    "discord": "296046630619054090",
    "avatar": "https://cdn.discordapp.com/avatars/296046630619054090/118405449643495349408d6221d14c8d.png?size=96"
+  },
+  {
+   "id": 249,
+   "name": "Georgerussel",
+   "pos": [
+    "QB"
+   ],
+   "discord": "1280377167565422604",
+   "avatar": "https://cdn.discordapp.com/avatars/1280377167565422604/d2e4a7f7e18c46ed8e80dd87a3423f01.png?size=96",
+   "locked": true
   }
  ],
  "picks": [],
