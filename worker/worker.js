@@ -907,6 +907,7 @@ async function counterAdmin(env, L, b) {
     c = c || { count: 0, users: {} };
     c.rule = String(b.setup.rule || ""); c.title = String(b.setup.title || "").slice(0, 200) || undefined;
     if (b.setup.alertCh) c.alertCh = String(b.setup.alertCh);
+    if (key === "excuse" && b.setup.channel && b.setup.channel === c.alertCh) throw UE("That's the hidden log channel — pick a public channel for the board.");
     if (b.setup.channel && (b.setup.channel !== c.ch || !c.msg)) {
       if (c.ch && c.msg) await discord(env, "DELETE", `/channels/${c.ch}/messages/${c.msg}`).catch(() => {});
       const m = await discord(env, "POST", `/channels/${b.setup.channel}/messages`, { embeds: [counterEmbed(key, c)], allowed_mentions: { parse: [] } }).catch(() => { throw UE("The bot can't post in that channel."); });
@@ -919,16 +920,37 @@ async function counterAdmin(env, L, b) {
   if (c && (b.setup || b.reset || b.add || b.refresh)) c = await tickCounter(env, key, true);
   return { counter: c };
 }
+// hidden staff-only log channel for flag-only rules (AutoMod has to post its alerts somewhere)
+async function hiddenLogChannel(env, L, by) {
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
+  const ex = chans.find((c) => c.type === 0 && c.name === "excuse-log"); if (ex) return ex.id;
+  const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "excuse-log", type: 0, topic: "AutoMod log for the excuse counter — staff only, mute it.",
+    ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
+    permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])] }, `Excuse counter log by ${by}`)
+    .catch((e) => { throw e.status === 403 ? UE("The bot needs the Manage Channels permission to create the hidden #excuse-log channel.") : e; });
+  return ch.id;
+}
+// move the excuse filter's alerts into the hidden channel and clean the alerts out of the old (public) channel
+async function excuseMoveLog(env, L, by) {
+  const rules = await discord(env, "GET", `/guilds/${L.guild}/auto-moderation/rules`).catch((e) => { throw AM_ERR(e); });
+  const rule = rules.find((r) => r.name === "UFA: Excuses"); if (!rule) throw UE("There's no excuse filter yet.");
+  const old = rule.actions.find((a) => a.type === 2)?.metadata?.channel_id, alertCh = await hiddenLogChannel(env, L, by);
+  if (old !== alertCh) await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${rule.id}`, { actions: [{ type: 2, metadata: { channel_id: alertCh } }] }, `Log moved by ${by}`).catch((e) => { throw AM_ERR(e); });
+  const c = await kget(env, "counter:excuse");
+  if (c) { c.alertCh = alertCh; c.lastMsg = tsSnow(Date.now()); await kput(env, "counter:excuse", c, 3650 * 86400); }
+  let cleaned = 0;
+  if (old && old !== alertCh) {   // delete AutoMod alert messages (type 24) from the old channel, keep everything else
+    const ms = await discord(env, "GET", `/channels/${old}/messages?limit=100`).catch(() => []);
+    const ids = ms.filter((m) => m.type === 24 && m.id !== c?.msg).map((m) => m.id);
+    var intent = ms.filter((m) => m.type === 24).some((m) => (m.embeds?.[0]?.fields || []).length || m.content);
+    if (ids.length > 1) { await discord(env, "POST", `/channels/${old}/messages/bulk-delete`, { messages: ids }).then(() => { cleaned = ids.length; }).catch(() => {}); }
+    if (!cleaned) for (const id of ids) { await discord(env, "DELETE", `/channels/${old}/messages/${id}`).then(() => cleaned++).catch(() => {}); }
+  }
+  return { alertCh, cleaned, old, contentIntent: typeof intent === "undefined" ? null : intent };
+}
 // one click: hidden #excuse-log channel + a flag-only AutoMod rule (messages stay up, they just get counted)
 async function excuseSetup(env, L, b, by) {
-  let alertCh = b.alertCh;
-  if (!alertCh) {
-    const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "excuse-log", type: 0, topic: "AutoMod log for the excuse counter — muted is fine.",
-      ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
-      permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])] }, `Excuse counter set up by ${by}`)
-      .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels to create #excuse-log — or pick an existing channel.") : e; });
-    alertCh = ch.id;
-  }
+  const alertCh = await hiddenLogChannel(env, L, by);
   const words = (b.words && b.words.length ? b.words : EXCUSE_WORDS);
   const rule = await automodSave(env, L, { name: "UFA: Excuses", trigger_type: 1, keywords: words, alert: alertCh, exemptRoles: [], enabled: true, flagOnly: true }, by);
   return { rule, alertCh };
@@ -1562,6 +1584,7 @@ async function web(req, url, env, ctx) {
         : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
         : await automodList(env, L));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
+      if (p === "/api/admin/excuse/movelog") return out({ ok: true, ...(await excuseMoveLog(env, L, staffSig(admin))) });
       if (p === "/api/admin/excuse/setup") return out({ ok: true, ...(await excuseSetup(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L, !!body.rolesOnly)) });
       if (p === "/api/admin/password") {
