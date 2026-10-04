@@ -759,7 +759,7 @@ async function scanDMs(env, L, page = 0) {
     if (old && old.updated >= newest) continue;
     const mm = M.find((x) => x.user.id === c.uid), t = await ensureTicket(env, c.uid, mm ? display(mm) : mine[0].author.global_name || mine[0].author.username);
     const last = mine.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0];
-    Object.assign(t, { updated: newest, lastFrom: "them", preview: last.content.slice(0, 140), status: "open" });
+    Object.assign(t, { updated: newest, lastThem: newest, lastFrom: "them", preview: last.content.slice(0, 140), status: "open" });
     await saveTicket(env, t); found++;
   }
   return { found, more: (page + 1) * 20 < chans.length };
@@ -798,6 +798,38 @@ const queuePopularity = (env) => cached("qpop", 60000, async () => {
   }
   return pop;
 });
+
+// ---------- moderation: Discord AutoMod rules (blocks messages before anyone sees them) ----------
+const AM_ERR = (e) => e.status === 403 ? UE("The bot needs the **Manage Server** permission to set up auto-delete rules (Server Settings → Roles → the bot's role → Manage Server).") : e;
+async function automodList(env, L) {
+  const [rules, chans, roles] = await Promise.all([
+    discord(env, "GET", `/guilds/${L.guild}/auto-moderation/rules`).catch((e) => { throw AM_ERR(e); }),
+    discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []),
+    discord(env, "GET", `/guilds/${L.guild}/roles`).catch(() => []),
+  ]);
+  return { rules, channels: chans.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    roles: roles.filter((r) => r.name !== "@everyone" && !r.managed).map((r) => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    defaults: { alert: L.C.staffChat || "", exempt: L.R.staff ? [L.R.staff] : [] } };
+}
+async function automodSave(env, L, b, by) {
+  const type = +b.trigger_type || 1, actions = [{ type: 1, metadata: b.message ? { custom_message: String(b.message).slice(0, 150) } : {} }];
+  if (b.alert) actions.push({ type: 2, metadata: { channel_id: String(b.alert) } });
+  if (b.timeout) actions.push({ type: 3, metadata: { duration_seconds: Math.min(2419200, Math.max(60, +b.timeout)) } });
+  const clean = (a, n, len) => [...new Set((a || []).map((x) => String(x).trim()).filter(Boolean))].slice(0, n).map((x) => x.slice(0, len));
+  const tm = type === 1 ? { keyword_filter: clean(b.keywords, 1000, 60), regex_patterns: clean(b.regex, 10, 260), allow_list: clean(b.allow, 100, 60) }
+    : type === 4 ? { presets: (b.presets || [1, 2, 3]).map(Number), allow_list: clean(b.allow, 1000, 60) }
+    : type === 5 ? { mention_total_limit: Math.min(50, Math.max(1, +b.mentions || 5)), mention_raid_protection_enabled: true } : {};
+  if (type === 1 && !tm.keyword_filter.length && !tm.regex_patterns.length) throw UE("Add at least one word/phrase or pattern.");
+  const body = { name: String(b.name || "UFA filter").slice(0, 100), event_type: 1, actions, enabled: b.enabled !== false,
+    exempt_roles: clean(b.exemptRoles, 20, 30), exempt_channels: clean(b.exemptChannels, 50, 30), trigger_metadata: tm };
+  try {
+    if (b.id) return await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${b.id}`, body, `Edited by ${by}`);
+    return await discord(env, "POST", `/guilds/${L.guild}/auto-moderation/rules`, { ...body, trigger_type: type }, `Created by ${by}`);
+  } catch (e) {
+    if (e.status === 400) throw UE("Discord rejected that rule — check for a bad pattern, or you've hit Discord's limit (6 word filters, 1 built-in list, 1 mention-spam rule).");
+    throw AM_ERR(e);
+  }
+}
 
 // ---------- open free agency (skip the draft) ----------
 // Runs in small steps (Workers can only make so many calls per request): the page keeps calling until done.
@@ -1056,7 +1088,7 @@ async function modalSubmit(i, env, ctx) {
     const log = id ? await kget(env, `dmlog:${id}`) : null;
     const tk = await ensureTicket(env, uid, name);
     tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about: log?.title || "" }].slice(-100);
-    Object.assign(tk, { updated: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
+    Object.assign(tk, { updated: Date.now(), lastThem: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
     await saveTicket(env, tk);
     if (L.C.staffChat) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { allowed_mentions: { parse: [] },
       embeds: [{ author: { name: `${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Tickets" }, timestamp: new Date().toISOString() }] }).catch(() => {});
@@ -1422,6 +1454,10 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/decide") { const r = await decide(env, body.id, !!body.approve, body.reason, admin); return out({ ok: true, status: r.status, note: r.decisionReason }); }
       if (p === "/api/admin/appoint") return out({ ok: true, text: await appoint(env, L, body.team, body.uid, admin.name) });
       if (p === "/api/admin/unappoint") return out({ ok: true, text: await unappoint(env, L, body.team, admin.name, !!body.removeFromTeam) });
+      if (p === "/api/admin/automod") return out(body.save ? { ok: true, rule: await automodSave(env, L, body.save, staffSig(admin)) }
+        : body.delete ? (await discord(env, "DELETE", `/guilds/${L.guild}/auto-moderation/rules/${body.delete}`).catch((e) => { throw AM_ERR(e); }), { ok: true })
+        : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
+        : await automodList(env, L));
       if (p === "/api/admin/syncall") return out({ ok: true, ...(await syncAll(env, L, !!body.rolesOnly)) });
       if (p === "/api/admin/password") {
         const abbr = String(body.team || "").toUpperCase(); if (!teamOf(L, abbr)) return out({ error: "Unknown team." }, 400);
