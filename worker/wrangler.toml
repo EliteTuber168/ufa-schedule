@@ -13,6 +13,9 @@ id = "c9b7d8c749364764805b70b652d95956"
 [observability]
 enabled = true
 
-# every minute: auto-pick when a team's draft clock runs out
+# scheduled jobs (each cron = its own run):
+#   every minute     → auto-pick when a team's draft clock runs out
+#   every 2 minutes  → "when is the draft" / excuse counters
+#   every 5 minutes  → live franchise owner list
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "*/2 * * * *", "*/5 * * * *"]

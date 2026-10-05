@@ -28,11 +28,12 @@ const RANK = { fo: "Franchise Owner", gm: "General Manager", hc: "Head Coach", p
 
 export default {
   // runs every minute (wrangler.toml [triggers]) — auto-picks when the clock runs out
+  // Each job has its own cron (separate runs = separate time budgets); see wrangler.toml.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(autoPick(env).catch((e) => console.log("autopick:", e.message)));
-    // every 10 minutes, catch roster changes made by hand in Discord (role edits, draft roles) for the live owner list
-    if (new Date().getUTCMinutes() % 2 === 0) ctx.waitUntil(refreshOwnersBoard(env).catch((e) => console.log("owners board:", e.message)));
-    ctx.waitUntil(tickCounter(env).catch((e) => console.log("counters:", e.message)));
+    const job = event.cron === "*/2 * * * *" ? "counters" : event.cron === "*/5 * * * *" ? "board" : "autopick";
+    const t0 = Date.now();
+    const run = job === "counters" ? tickCounter(env) : job === "board" ? refreshOwnersBoard(env) : autoPick(env);
+    ctx.waitUntil(run.then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
   },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
@@ -832,6 +833,15 @@ async function automodSave(env, L, b, by) {
   }
 }
 
+// remember when each scheduled job last ran (written at most every 10 min per job, to spare KV writes)
+async function cronDiag(env, job, ms, err) {
+  if (!env.VOTES) return;
+  const d = (await kget(env, "cron:diag")) || {}, prev = d[job];
+  if (!err && prev && !prev.err && Date.now() - prev.at < 10 * 60e3) return;
+  d[job] = { at: Date.now(), ms, err: err ? String(err).slice(0, 200) : null };
+  await kput(env, "cron:diag", d, 30 * 86400).catch(() => {});
+}
+
 // ---------- fun counters: count AutoMod hits of a rule (audit log) and keep a live message updated ----------
 // "draft": blocked "when is the draft" messages (audit action 143). "excuse": flagged-only excuses (144) — never deleted.
 const EXCUSE_CATS = [
@@ -865,8 +875,9 @@ async function tickCounter(env, key = null, force = false) {
   if (!env.VOTES) return null;
   if (!key) { for (const k of Object.keys(COUNTERS)) await tickCounter(env, k).catch((e) => console.log("counter", k, e.message)); return null; }
   const c = await kget(env, `counter:${key}`); if (!c) return null;
-  const L = await league(env);
-  const r = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?action_type=${COUNTERS[key].action}&limit=100${c.lastAudit ? `&after=${c.lastAudit}` : ""}`).catch((e) => { if (e.status === 403) c.err = "The bot needs the View Audit Log permission."; return null; });
+  const before = JSON.stringify(c);
+  const guild = c.guild || (await league(env)).guild; c.guild = guild;
+  const r = await discord(env, "GET", `/guilds/${guild}/audit-logs?action_type=${COUNTERS[key].action}&limit=100${c.lastAudit ? `&after=${c.lastAudit}` : ""}`).catch((e) => { if (e.status === 403) c.err = "The bot needs the View Audit Log permission."; return null; });
   let changed = force;
   if (r) {
     delete c.err;
@@ -896,7 +907,7 @@ async function tickCounter(env, key = null, force = false) {
   }
   if (changed && c.ch && c.msg) await discord(env, "PATCH", `/channels/${c.ch}/messages/${c.msg}`, { embeds: [counterEmbed(key, c)], allowed_mentions: { parse: [] } })
     .catch(async (e) => { if (e.status === 404) delete c.msg; });
-  await kput(env, `counter:${key}`, c, 3650 * 86400);
+  if (JSON.stringify(c) !== before) await kput(env, `counter:${key}`, c, 3650 * 86400);   // KV writes are limited — only save real changes
   return c;
 }
 async function counterAdmin(env, L, b) {
@@ -1920,6 +1931,7 @@ async function web(req, url, env, ctx) {
         : body.delete ? (await discord(env, "DELETE", `/guilds/${L.guild}/auto-moderation/rules/${body.delete}`).catch((e) => { throw AM_ERR(e); }), { ok: true })
         : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
         : await automodList(env, L));
+      if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
       if (p === "/api/admin/automod/hiddenlog") return out({ ok: true, ...(await ruleToHiddenLog(env, L, String(body.id || ""), staffSig(admin))) });
