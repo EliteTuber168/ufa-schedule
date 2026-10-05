@@ -244,6 +244,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
       <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
+      <button role="tab" data-tab="act" aria-selected="false">Activity check</button>
       <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
       <button role="tab" data-tab="mod" aria-selected="false">Moderation</button>
       <button role="tab" data-tab="econ" aria-selected="false">🪙 Coins</button>
@@ -412,6 +413,17 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="row" style="align-items:flex-end"><label class="f">Give / take coins<select id="ecuser"></select></label><label class="f" style="flex:0 1 140px">Amount (− to take)<input type="number" id="ecamt" value="500"></label><button class="btn gold" id="ecadj">Apply</button><span class="msg" id="ecmsg"></span></div>
         <div class="tscroll"><table><thead><tr><th>#</th><th>Player</th><th style="text-align:right">Coins</th></tr></thead><tbody id="ectop"></tbody></table></div></section>
       <section class="panel" style="border-color:var(--red)"><h2 style="font-size:20px;color:var(--red)">Reset economy</h2><div class="note">Deletes every wallet — everyone starts over. Can't be undone.</div><div class="row"><button class="btn x" id="ecreset">Reset all coins…</button></div></section>
+    </div>
+
+    <div id="tab-act" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <section class="panel"><h2>Activity check</h2>
+        <div class="note">Post a message like "react if you're active" in Discord, then check here who <b>didn't</b> react and DM them all at once. Pick the message from a channel or paste its link (right-click → Copy Message Link).</div>
+        <div class="row" style="align-items:flex-end"><label class="f">Channel<select id="acch"><option value="">Loading…</option></select></label>
+          <label class="f" style="flex:2 1 300px">…or paste a message link<input type="text" id="aclink" placeholder="https://discord.com/channels/…"></label><button class="btn gold" id="acgo">Check</button></div>
+        <div class="row"><label class="c"><input type="checkbox" id="acfo" checked> Franchise owners</label><label class="c"><input type="checkbox" id="acgm"> GMs</label><label class="c"><input type="checkbox" id="achc"> Head coaches</label>
+          <label class="f" style="flex:0 1 220px">Only count this emoji<select id="acemo"><option value="">Any reaction</option></select></label></div>
+        <div id="acmsgs" style="display:flex;flex-direction:column;gap:6px"></div></section>
+      <div id="acres"></div>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -629,8 +641,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -1948,6 +1960,81 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
       if (b.id === "ecreset"){ const c = prompt("This deletes EVERY wallet. Type RESET COINS to confirm."); if (!c) return; b.disabled = true; const j = await bot("/api/admin/econ", {reset: true, confirm: c}); toast(`Reset — ${j.deleted} wallets deleted.`); return loadEcon(); }
     }catch(err){ toast(err.message, false); b.disabled = false; }
   });
+
+  // ---------- activity check (who didn't react) ----------
+  let ACT = null, ACTCH = null;
+  const ACT_DM = "Hey {name}, you haven't reacted to the FO activity check yet. Please react to the message so we know you're still active as FO of the {team}: {link}";
+  async function loadAct(){
+    if (!ACTCH){ try{ ACTCH = (await bot("/api/admin/channels", {})).channels; }catch(e){ $("#acch").innerHTML = `<option value="">${esc(e.message)}</option>`; return; }
+      const guess = ACTCH.find(c => /fo.?info/i.test(c.name)) || ACTCH.find(c => /fo|franchise|owner/i.test(c.name));
+      $("#acch").innerHTML = `<option value="">Pick a channel…</option>` + ACTCH.map(c => `<option value="${c.id}" ${c.id === guess?.id ? "selected" : ""}>#${esc(c.name)}</option>`).join("");
+      if (guess) actMsgs(); }
+  }
+  async function actMsgs(){
+    const ch = $("#acch").value; if (!ch) return; $("#acmsgs").innerHTML = `<div class="note">Loading recent messages…</div>`;
+    try{ const j = await bot("/api/admin/reactcheck", {channel: ch});
+      $("#acmsgs").innerHTML = `<div class="note">Recent messages in this channel — click the one to check:</div>` + (j.messages.map(m => `<button class="opt" data-acmsg="${m.ch}|${m.id}" style="text-align:left"><span style="min-width:0;flex:1"><b>${esc(m.author || "?")}</b> <span class="note">${new Date(m.ts).toLocaleString([], {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"})}</span><div class="note" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.text || "(no text visible — embed or the bot can't read message content)")}</div></span><span>${m.reactions.map(r => `<span class="kw">${esc(r.e.startsWith("<") ? r.e.replace(/<:(\w+):\d+>/, ":$1:") : r.e)} ${r.n}</span>`).join("") || `<span class="note">no reactions</span>`}</span></button>`).join("") || `<div class="note">No messages.</div>`);
+    }catch(e){ $("#acmsgs").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; }
+  }
+  $("#acch").onchange = actMsgs;
+  async function actRun(target){
+    $("#acres").innerHTML = `<div class="note">Checking reactions…</div>`;
+    try{ ACT = await bot("/api/admin/reactcheck", {...target, fo: $("#acfo").checked, gm: $("#acgm").checked, hc: $("#achc").checked, emoji: $("#acemo").value}); ACT.target = target; }
+    catch(e){ $("#acres").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+    const keep = $("#acemo").value;
+    $("#acemo").innerHTML = `<option value="">Any reaction</option>` + ACT.emojis.map(x => `<option ${x.label === keep ? "selected" : ""}>${esc(x.label)}</option>`).join("");
+    renderAct();
+  }
+  function renderAct(){
+    const A = ACT, tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    const person = (p, missing) => `<div class="pl">${p.avatar ? `<img src="${esc(p.avatar)}" alt="">` : ""}<span class="pn"><b>${esc(p.name)}</b> ${p.team ? `<span class="badge" style="background:${esc(T(p.team).color)};min-width:34px;height:22px;font-size:13px">${esc(p.team)}</span>` : `<span class="note">no team</span>`} ${p.rank && p.rank !== "player" ? `<span class="tag ${p.rank}">${RANK[p.rank]}</span>` : ""}</span>${missing ? `<button class="btn sm" data-acdm="${p.id}">DM</button>` : `<span class="note">${p.emojis.map(esc).join(" ")}</span>`}</div>`;
+    $("#acres").innerHTML = `<div class="stats">${tile(A.missing.length, "Didn't react", A.missing.length ? "var(--red)" : "var(--good)")}${tile(A.reacted.length, "Reacted", "var(--good)")}${tile(A.totalReactors, "Total reactions (everyone)")}</div>
+      <section class="panel"><div class="note">Message by <b>${esc(A.message.author || "?")}</b> · ${new Date(A.message.ts).toLocaleString()} · <a href="${esc(A.message.link)}" target="_blank" rel="noopener">open in Discord</a>${A.emojis.length ? ` · reactions: ${A.emojis.map(e => `${esc(e.label)} ${e.n}`).join(", ")}` : ""}</div>${A.message.text ? `<div class="note" style="margin-top:4px">“${esc(A.message.text)}”</div>` : ""}
+        <div class="row"><button class="btn sm" id="acre">↻ Re-check</button></div></section>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+        <section class="panel" style="border-color:var(--red)"><div class="row between"><h2 style="font-size:22px;color:var(--red)">❌ Didn't react (${A.missing.length})</h2>${A.missing.length ? `<button class="btn red" id="acdmall">DM all ${A.missing.length}</button>` : ""}</div>
+          <div class="roster">${A.missing.map(p => person(p, true)).join("") || `<div class="note">Everyone reacted 🎉</div>`}</div></section>
+        <section class="panel" style="border-color:var(--good)"><h2 style="font-size:22px;color:var(--good)">✅ Reacted (${A.reacted.length})</h2>
+          <div class="roster">${A.reacted.map(p => person(p, false)).join("") || `<div class="note">Nobody yet.</div>`}</div></section></div>`;
+  }
+  function actDM(ids){
+    const names = ids.map(id => ACT.missing.find(p => p.id === id)?.name || id);
+    wz.innerHTML = `<div class="row between"><h2>DM ${ids.length === 1 ? esc(names[0]) : `${ids.length} people`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      ${ids.length > 1 ? `<div class="note" style="max-height:72px;overflow:auto">${names.map(esc).join(", ")}</div>` : ""}
+      <label class="f" style="flex:none">Title<input type="text" id="acdt" value="FO activity check"></label>
+      <label class="f" style="flex:none">Message — {name}, {team} and {link} fill in for each person<textarea id="acdx" rows="6" style="width:100%;font-family:inherit;font-size:15px;font-weight:600;text-transform:none;letter-spacing:0">${esc(ACT_DM)}</textarea></label>
+      <label class="c"><input type="checkbox" id="acde" checked> Send as an embed with a "Reply to staff" button</label>
+      <div class="bar hide" id="acdbar"><i style="width:0"></i></div><span class="msg" id="acdmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="acdgo">Send</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "acdgo") return;
+      const text = $("#acdx").value.trim().replace(/\{link\}/gi, ACT.message.link), title = $("#acdt").value.trim(); if (!text) return;
+      b.disabled = true; $("#acdbar").classList.remove("hide");
+      try{
+        const {id: logId} = await bot("/api/admin/dm/log", {start: true, title: title || "Activity check"}).catch(() => ({}));
+        let sent = 0, failed = [];
+        for (let i = 0; i < ids.length; i += 12){
+          const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title, embed: $("#acde").checked, logId});
+          j.results.forEach(r => r.ok ? sent++ : failed.push(r.name || r.id));
+          $("#acdbar i").style.width = Math.min(100, (i + 12) / ids.length * 100) + "%";
+        }
+        await bot("/api/admin/dm/log", {id: logId, title: title || "Activity check", text, audience: `Didn't react to activity check (${ids.length})`, sent, failed}).catch(() => {});
+        msg($("#acdmsg"), `Sent ${sent}${failed.length ? ` — couldn't DM (DMs closed?): ${failed.join(", ")}` : ""}.`, !failed.length);
+        if (!failed.length) setTimeout(() => dlg.close(), 1500);
+      }catch(err){ msg($("#acdmsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  $("#tab-act").addEventListener("click", e => {
+    const m = e.target.closest("[data-acmsg]"); if (m){ const [channel, message] = m.dataset.acmsg.split("|"); $("#aclink").value = ""; $("#acemo").value = ""; return actRun({channel, message}); }
+    if (e.target.closest("#acgo")){ const link = $("#aclink").value.trim(); if (!link) return toast("Paste a message link or click a message below.", false); return actRun({link}); }
+    if (e.target.closest("#acre")) return actRun(ACT.target);
+    if (e.target.closest("#acdmall")) return actDM(ACT.missing.map(p => p.id));
+    const d = e.target.closest("[data-acdm]"); if (d) return actDM([d.dataset.acdm]);
+  });
+  ["#acfo", "#acgm", "#achc", "#acemo"].forEach(id => $(id).addEventListener("change", () => { if (ACT) actRun(ACT.target); }));
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
