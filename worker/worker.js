@@ -871,9 +871,48 @@ async function reactCheck(env, L, b) {
   const M = await members(env, L, true), roles = new Set([b.fo !== false && L.R.fo, b.gm && L.R.gm, b.hc && L.R.hc].filter(Boolean));
   const who = M.filter((m) => (m.roles || []).some((r) => roles.has(r))).map((m) => info(L, m));
   const pack = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, team: p.team, rank: p.rank, emojis: reacted.get(p.id) || [] });
+  const prev = await kget(env, "activity:msg");
+  if (!prev || prev.id !== id || prev.emoji !== (b.emoji || "")) await kput(env, "activity:msg", { ch, id, emoji: b.emoji || "", ts: Date.now() }, 365 * 86400).catch(() => {});
   return { message: { ch, id, author: msg.author?.global_name || msg.author?.username, ts: Date.parse(msg.timestamp), text: (msg.content || msg.embeds?.[0]?.title || msg.embeds?.[0]?.description || "").slice(0, 300),
       link: `https://discord.com/channels/${L.guild}/${ch}/${id}` }, emojis,
     reacted: who.filter((p) => reacted.has(p.id)).map(pack), missing: who.filter((p) => !reacted.has(p.id)).map(pack), totalReactors: reacted.size };
+}
+
+// ---------- FO readiness board + replace an inactive FO ----------
+async function readiness(env, L) {
+  const [M, act, qs, sessKeys, pws] = await Promise.all([members(env, L, true), kget(env, "activity:msg"), klist(env, "queue:"), klist(env, "sess:"), klist(env, "pw:")]);
+  const fos = M.filter((m) => L.R.fo && (m.roles || []).includes(L.R.fo)).map((m) => info(L, m));
+  let reacted = null, actInfo = null;
+  if (act) {
+    try { const r = await reactCheck(env, L, { channel: act.ch, message: act.id, emoji: act.emoji, fo: true }); reacted = new Set(r.reacted.map((p) => p.id)); actInfo = { ...r.message, emoji: act.emoji }; }
+    catch (e) { actInfo = { err: e.message }; }
+  }
+  const qmeta = Object.fromEntries(qs.map((k) => [k.name.slice(6), k.metadata || {}]));
+  const sess = (await Promise.all(sessKeys.map((k) => kget(env, k.name)))).filter(Boolean);
+  const pwTeams = new Set(pws.map((k) => k.name.slice(3)));
+  const rows = fos.map((p) => {
+    const mine = sess.filter((x) => x.uid === p.id || (x.pw && x.team === p.team)), last = Math.max(0, ...mine.map((x) => x.ts || 0));
+    const q = p.team ? qmeta[p.team] : null;
+    return { id: p.id, name: p.name, avatar: p.avatar, team: p.team, reacted: reacted ? reacted.has(p.id) : null, queue: q ? q.n || 0 : 0, queueAt: q?.ts || null,
+      portal: last ? { at: last, how: mine.some((x) => x.uid === p.id) ? "discord" : "password" } : null, password: !!(p.team && pwTeams.has(p.team)) };
+  });
+  const openTeams = L.teams.filter((t) => !fos.some((f) => f.team === t.abbr)).map((t) => t.abbr);
+  return { rows, activity: actInfo, openTeams, cfg: (await kget(env, "replace:cfg")) || {} };
+}
+async function replaceFO(env, L, b, by) {
+  const abbr = String(b.team || "").toUpperCase(), t = teamOf(L, abbr); if (!t) throw UE("Unknown team.");
+  const M = await members(env, L, true), fo = foOf(L, M, abbr); if (!fo) throw UE(`The ${t.name} don't have an FO.`);
+  if (b.dm && b.dmText) await staffSend(env, fo.id, String(b.dmText).replace(/\{name\}/gi, fo.name).replace(/\{team\}/gi, t.name).slice(0, 1800), by).catch(() => {});
+  const text = await unappoint(env, L, abbr, by, b.removeFromTeam !== false);   // also deletes the team password + its portal logins and logs the transaction
+  let posted = false;
+  if (b.announce && b.channel) {
+    const E = await guildEmojis(env, L), em = teamEmoji(E, t);
+    const msg = String(b.annText || "").replace(/\{team\}/gi, t.roleId ? `<@&${t.roleId}>` : `**${t.name}**`).slice(0, 1800);
+    await discord(env, "POST", `/channels/${b.channel}/messages`, { embeds: [{ title: `${em ? emojiTag(em) + " " : ""}${t.name} — franchise owner wanted`, description: msg, color: colorInt(t.color) }], allowed_mentions: { parse: [] } })
+      .then(() => { posted = true; }).catch(() => {});
+  }
+  await kput(env, "replace:cfg", { channel: b.channel || "", annText: b.annText || "", dmText: b.dmText || "" }, 3650 * 86400).catch(() => {});
+  return { text: `${text}${posted ? " Posted the opening." : ""}`, posted };
 }
 
 // ---------- fun counters: count AutoMod hits of a rule (audit log) and keep a live message updated ----------
@@ -1971,6 +2010,8 @@ async function web(req, url, env, ctx) {
         return out(r);
       }
       if (p === "/api/admin/channels") { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); return out({ channels: ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) }); }
+      if (p === "/api/admin/readiness") return out(await readiness(env, L));
+      if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
