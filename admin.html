@@ -215,6 +215,9 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 .tester .hit{font-weight:800}
 .chk{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:4px;max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px}
 .chk label{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600}
+.rdy td{padding:8px 10px}
+.rdy .ok{color:var(--good);font-weight:800}.rdy .no{color:var(--red);font-weight:800}.rdy .unk{color:var(--mute)}
+.score{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:28px;border-radius:8px;font-weight:800;font-size:14px}
 .bulkbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel3);border:1px solid var(--blue);border-radius:12px;padding:8px 12px}
 </style></head><body>
 <div class="wrap">
@@ -244,6 +247,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="teams" aria-selected="false">Teams</button>
       <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
+      <button role="tab" data-tab="ready" aria-selected="false">FO readiness</button>
       <button role="tab" data-tab="act" aria-selected="false">Activity check</button>
       <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
       <button role="tab" data-tab="mod" aria-selected="false">Moderation</button>
@@ -424,6 +428,15 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
           <label class="f" style="flex:0 1 220px">Only count this emoji<select id="acemo"><option value="">Any reaction</option></select></label></div>
         <div id="acmsgs" style="display:flex;flex-direction:column;gap:6px"></div></section>
       <div id="acres"></div>
+    </div>
+
+    <div id="tab-ready" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="stats" id="rdstats"></div>
+      <section class="panel"><div class="row between"><h2>FO readiness</h2><div class="row"><button class="btn sm" id="rdload">↻ Refresh</button><button class="btn sm red" id="rddm">DM everyone not ready</button></div></div>
+        <div class="note" id="rdnote"></div>
+        <div class="filters"><select id="rdf"><option value="all">All FOs</option><option value="notready">Not fully ready</option><option value="noreact">Didn't react to the activity check</option><option value="noqueue">No draft queue</option><option value="noportal">Never logged into the portal</option></select></div>
+        <div class="tscroll"><table class="rdy" style="min-width:760px"><thead><tr><th>Team</th><th>FO</th><th>Activity check</th><th>Draft queue</th><th>FO portal</th><th>Ready</th><th></th></tr></thead><tbody id="rdbody"></tbody></table></div>
+        <div class="note" id="rdopen"></div></section>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -641,8 +654,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","ready","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, ready: loadReady, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -2035,6 +2048,92 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     const d = e.target.closest("[data-acdm]"); if (d) return actDM([d.dataset.acdm]);
   });
   ["#acfo", "#acgm", "#achc", "#acemo"].forEach(id => $(id).addEventListener("change", () => { if (ACT) actRun(ACT.target); }));
+
+  // ---------- FO readiness + replace inactive FO ----------
+  let RD = null;
+  const RD_DM = "Hey {name}, quick check before the draft — you're the FO of the {team}. Please make sure you: react to the activity check in #fo-info, set your draft queue, and log into the FO portal: https://elitetuber168.github.io/ufa-schedule/fo.html";
+  const RD_REMOVE = "Hey {name}, you've been removed as franchise owner of the {team} because you didn't respond to the activity check in time. If you think this is a mistake, reply here.";
+  const RD_ANN = "{team} are looking for a new franchise owner! 🏈\nWant the team? DM staff or open a ticket with the bot.";
+  async function loadReady(){
+    $("#rdbody").innerHTML = `<tr><td colspan="7" class="note">Loading… (checking reactions, queues and logins)</td></tr>`;
+    try{ RD = await bot("/api/admin/readiness", {}); }catch(e){ $("#rdbody").innerHTML = `<tr><td colspan="7" class="msg err">${esc(e.message)}</td></tr>`; return; }
+    if (!ACTCH){ try{ ACTCH = (await bot("/api/admin/channels", {})).channels; }catch{ ACTCH = []; } }
+    renderReady();
+  }
+  const rdScore = r => [r.reacted, r.queue > 0, !!r.portal].filter(Boolean).length;
+  function renderReady(){
+    const R = RD.rows, tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    const full = R.filter(r => rdScore(r) === 3).length;
+    $("#rdstats").innerHTML = tile(`${full}<span style="font-size:24px;color:var(--mute)">/${R.length}</span>`, "Fully ready", "var(--good)")
+      + tile(RD.activity && !RD.activity.err ? R.filter(r => !r.reacted).length : "—", "Didn't react", "var(--red)") + tile(R.filter(r => !r.queue).length, "No draft queue", "var(--warn)")
+      + tile(R.filter(r => !r.portal).length, "Never logged in", "var(--warn)") + tile(RD.openTeams.length, "Teams without an FO");
+    const A = RD.activity;
+    $("#rdnote").innerHTML = A ? (A.err ? `<span class="msg err">Activity check: ${esc(A.err)}</span>` : `Activity check = <a href="${esc(A.link)}" target="_blank" rel="noopener">${esc((A.text || "this message").slice(0, 60))}</a> by ${esc(A.author || "?")}${A.emoji ? ` (only ${esc(A.emoji)})` : ""} — change it by checking a different message on the <a href="#" data-go="act">Activity check</a> tab.`)
+      : `No activity check picked yet — check a message on the <a href="#" data-go="act">Activity check</a> tab and it shows up here.`;
+    const f = $("#rdf").value, keep = {all: () => true, notready: r => rdScore(r) < 3, noreact: r => r.reacted === false, noqueue: r => !r.queue, noportal: r => !r.portal}[f];
+    const rows = R.filter(keep).sort((a, b) => rdScore(a) - rdScore(b) || (a.team || "").localeCompare(b.team || ""));
+    const yes = (t, sub) => `<span class="ok">✅ ${t}</span>${sub ? `<div class="note">${sub}</div>` : ""}`, no = t => `<span class="no">❌ ${t}</span>`;
+    $("#rdbody").innerHTML = rows.map(r => { const sc = rdScore(r), col = sc === 3 ? "var(--good)" : sc === 2 ? "var(--warn)" : "var(--red)";
+      return `<tr><td>${r.team ? `<span class="badge" style="background:${esc(T(r.team).color)};min-width:40px;height:28px;font-size:15px">${esc(r.team)}</span>` : `<span class="note">no team</span>`}</td>
+        <td><div class="who" style="display:flex;align-items:center;gap:8px">${r.avatar ? `<img src="${esc(r.avatar)}" alt="" style="width:28px;height:28px;border-radius:50%">` : ""}<b>${esc(r.name)}</b></div></td>
+        <td>${r.reacted === null ? `<span class="unk">— no check picked</span>` : r.reacted ? yes("Reacted") : no("No reaction")}</td>
+        <td>${r.queue ? yes(`${r.queue} players`, r.queueAt ? `updated ${ago(r.queueAt)}` : "") : no("None")}</td>
+        <td>${r.portal ? yes(r.portal.how === "discord" ? "Logged in" : "Via password", `last login ${ago(r.portal.at)}`) : no("Never")}</td>
+        <td><span class="score" style="color:${col};border:1px solid ${col}">${sc}/3</span></td>
+        <td style="white-space:nowrap;text-align:right"><button class="btn sm" data-rddm="${r.id}">DM</button> ${r.team ? `<button class="btn sm x" data-rdrep="${esc(r.team)}">Replace…</button>` : ""}</td></tr>`; }).join("") || `<tr><td colspan="7" class="note">Nobody matches.</td></tr>`;
+    $("#rdopen").innerHTML = RD.openTeams.length ? `Teams without an FO: ${RD.openTeams.map(a => `<span class="badge" style="background:${esc(T(a).color)};min-width:34px;height:22px;font-size:13px">${esc(a)}</span>`).join(" ")} — spin one on the <a href="#" data-go="spin">Randomizer</a>.` : "";
+  }
+  function rdDM(ids, preset, title){
+    const names = ids.map(id => RD.rows.find(r => r.id === id)?.name || id);
+    wz.innerHTML = `<div class="row between"><h2>DM ${ids.length === 1 ? esc(names[0]) : `${ids.length} FOs`}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      ${ids.length > 1 ? `<div class="note" style="max-height:72px;overflow:auto">${names.map(esc).join(", ")}</div>` : ""}
+      <label class="f" style="flex:none">Title<input type="text" id="rdt" value="${esc(title)}"></label>
+      <label class="f" style="flex:none">Message — {name} and {team} fill in<textarea id="rdx" rows="6" style="width:100%;font-family:inherit;font-size:15px;font-weight:600;text-transform:none;letter-spacing:0">${esc(preset)}</textarea></label>
+      <div class="bar hide" id="rdbar"><i style="width:0"></i></div><span class="msg" id="rdmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="rdgo">Send</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "rdgo") return;
+      const text = $("#rdx").value.trim(), t = $("#rdt").value.trim(); if (!text) return; b.disabled = true; $("#rdbar").classList.remove("hide");
+      try{ const {id: logId} = await bot("/api/admin/dm/log", {start: true, title: t || "FO readiness"}).catch(() => ({})); let sent = 0, failed = [];
+        for (let i = 0; i < ids.length; i += 12){ const j = await bot("/api/admin/dm", {uids: ids.slice(i, i + 12), text, title: t, embed: true, logId}); j.results.forEach(r => r.ok ? sent++ : failed.push(r.name || r.id)); $("#rdbar i").style.width = Math.min(100, (i + 12) / ids.length * 100) + "%"; }
+        await bot("/api/admin/dm/log", {id: logId, title: t || "FO readiness", text, audience: `FO readiness (${ids.length})`, sent, failed}).catch(() => {});
+        msg($("#rdmsg"), `Sent ${sent}${failed.length ? ` — couldn't DM: ${failed.join(", ")}` : ""}.`, !failed.length); if (!failed.length) setTimeout(() => dlg.close(), 1500);
+      }catch(err){ msg($("#rdmsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  function rdReplace(abbr){
+    const r = RD.rows.find(x => x.team === abbr), t = T(abbr), c = RD.cfg || {};
+    const defCh = c.channel || (ACTCH || []).find(x => /fo.?info/i.test(x.name))?.id || "";
+    wz.innerHTML = `<div class="row between"><h2 style="color:var(--red)">Replace FO of the ${esc(t.name)}</h2><button class="btn sm" data-close aria-label="Close">✕</button></div>
+      <div class="confirm"><b>${esc(r.name)}</b> loses the Franchise owner role${r.password ? ", the team password is deleted and anyone logged in with it is logged out" : ""}. The team's draft queue stays — the next FO gets asked whether to keep it. Readiness: ${rdScore(r)}/3.</div>
+      <label class="c"><input type="checkbox" id="rprm" checked> Also take them off the team</label>
+      <label class="c"><input type="checkbox" id="rpdm" checked> DM them why</label>
+      <textarea id="rpdmx" rows="3" style="width:100%;font:inherit;font-size:14px;font-weight:600">${esc(c.dmText || RD_REMOVE)}</textarea>
+      <label class="c"><input type="checkbox" id="rpann" checked> Post "team available" in</label>
+      <select id="rpch">${(ACTCH || []).map(x => `<option value="${x.id}" ${x.id === defCh ? "selected" : ""}>#${esc(x.name)}</option>`).join("")}</select>
+      <textarea id="rpannx" rows="3" style="width:100%;font:inherit;font-size:14px;font-weight:600">${esc(c.annText || RD_ANN)}</textarea>
+      <span class="msg" id="rpmsg"></span>
+      <div class="row between"><button class="btn" data-close>Cancel</button><button class="btn red" id="rpgo">Remove FO</button></div>`;
+    wz.onclick = async e => {
+      const b = e.target.closest("button"); if (!b || b.disabled) return;
+      if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.id !== "rpgo") return;
+      b.disabled = true; msg($("#rpmsg"), "Working…");
+      try{ const j = await bot("/api/admin/replacefo", {team: abbr, removeFromTeam: $("#rprm").checked, dm: $("#rpdm").checked, dmText: $("#rpdmx").value, announce: $("#rpann").checked, channel: $("#rpch").value, annText: $("#rpannx").value});
+        dlg.close(); toast(j.text); await loadLive(); loadReady(); }
+      catch(err){ msg($("#rpmsg"), err.message, false); b.disabled = false; }
+    };
+    dlg.showModal();
+  }
+  $("#rdload").onclick = loadReady; $("#rdf").onchange = () => RD && renderReady();
+  $("#rddm").onclick = () => { if (!RD) return; const ids = RD.rows.filter(r => rdScore(r) < 3).map(r => r.id); if (!ids.length) return toast("Every FO is ready 🎉"); rdDM(ids, RD_DM, "Draft readiness check"); };
+  $("#tab-ready").addEventListener("click", e => {
+    const d = e.target.closest("[data-rddm]"); if (d) return rdDM([d.dataset.rddm], RD_DM, "Draft readiness check");
+    const rp = e.target.closest("[data-rdrep]"); if (rp) return rdReplace(rp.dataset.rdrep);
+  });
 
   // ---------- danger zone ----------
   let DZ = null, SUB = "general";
