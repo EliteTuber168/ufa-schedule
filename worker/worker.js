@@ -1081,6 +1081,73 @@ async function ticketsBackfillRun(env, L) {
 }
 const firstCommish = (env) => String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)[0] || null;
 
+// ---------- staff cleanup: audit staff roles, DM a check-in, strip roles from no-shows ----------
+const STAFFY = /owner|commish|commissioner|admin|mod\b|moderator|staff|manager|director|helper|support|referee|\bref\b|stat|media|head of|executive|exec|board|council|trial/i;
+const ELEV = 0x8n | 0x20n | 0x10n | 0x2n | 0x4n | 0x2000n | 0x10000000n | (1n << 40n);
+async function staffAudit(env, L) {
+  const [roles, g, M, me] = await Promise.all([discord(env, "GET", `/guilds/${L.guild}/roles`), discord(env, "GET", `/guilds/${L.guild}`), members(env, L, true), discord(env, "GET", "/users/@me")]);
+  const teamRoles = new Set(L.teams.map((t) => t.roleId).filter(Boolean)), skipIds = new Set([L.R.fo, L.R.gm, L.R.hc, L.R.draftable, L.R.fa, L.guild].filter(Boolean));
+  const botM = M.find((m) => m.user.id === me.id), pos = (id) => roles.find((r) => r.id === id)?.position || 0;
+  const botTop = Math.max(0, ...(botM?.roles || []).map(pos));
+  const staffRoles = roles.filter((r) => !r.managed && !skipIds.has(r.id) && !teamRoles.has(r.id) && (STAFFY.test(r.name) || (BigInt(r.permissions) & ELEV) !== 0n))
+    .sort((a, b) => b.position - a.position)
+    .map((r) => ({ id: r.id, name: r.name, color: r.color ? "#" + r.color.toString(16).padStart(6, "0") : null, position: r.position, admin: (BigInt(r.permissions) & 0x8n) !== 0n,
+      perms: ["Administrator:8", "Manage Server:32", "Manage Roles:268435456", "Manage Channels:16", "Ban:4", "Kick:2", "Manage Messages:8192"].filter((x) => (BigInt(r.permissions) & BigInt(x.split(":")[1])) !== 0n).map((x) => x.split(":")[0]),
+      manageable: r.position < botTop, members: M.filter((m) => (m.roles || []).includes(r.id)).map((m) => m.user.id) }));
+  const ids = new Set(staffRoles.flatMap((r) => r.members));
+  // last message each staff member sent in the staff channels (no message text needed — just the author)
+  const chans = (await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => [])).filter((c) => c.type === 0 && (c.parent_id === L.C.staffCategory || c.id === L.C.staffChat)).slice(0, 8);
+  const last = {};
+  for (const c of chans) {
+    let before = "";
+    for (let pg = 0; pg < 3; pg++) {
+      const msgs = await discord(env, "GET", `/channels/${c.id}/messages?limit=100${before}`).catch(() => []);
+      for (const m of msgs || []) { const t = Date.parse(m.timestamp); if (ids.has(m.author?.id) && !(last[m.author.id] > t)) last[m.author.id] = t; }
+      if (!msgs || msgs.length < 100) break; before = `&before=${msgs[msgs.length - 1].id}`;
+    }
+  }
+  const people = [...ids].map((uid) => { const m = M.find((x) => x.user.id === uid), pi = info(L, m);
+    return { id: uid, name: pi.name, avatar: pi.avatar, team: pi.team, rank: pi.rank, roles: staffRoles.filter((r) => r.members.includes(uid)).map((r) => r.id), owner: uid === g.owner_id, joined: Date.parse(m.joined_at) || 0, lastStaffMsg: last[uid] || 0 }; });
+  return { owner: g.owner_id, botTop, staffChannels: chans.map((c) => c.name), roles: staffRoles, people, check: await kget(env, "staffcheck") };
+}
+const scText = (name, roleNames, hours, extra) => `Hey **${name}** 👋\n\nWe're cleaning up the UFA staff team — there are way too many people with staff roles right now.\n\n**If you want to stay on staff** (${roleNames.join(", ")}), press **✅ I'm still active** below within **${hours} hours**.\n**No response = your staff roles get removed.** No hard feelings — you can always reapply later.${extra ? "\n\n" + extra : ""}`;
+async function staffCheckStart(env, L, b, by) {
+  const A = await staffAudit(env, L), pick = new Set(b.uids || []), roleIds = new Set(b.roles || []);
+  if (!pick.size) throw UE("Pick at least one person.");
+  const hours = Math.max(1, Math.min(168, Number(b.hours) || 48)), id = rid();
+  const people = {};
+  for (const p of A.people) if (pick.has(p.id) && !p.owner) {
+    const rs = p.roles.filter((r) => roleIds.has(r)); if (!rs.length) continue;
+    people[p.id] = { name: p.name, roles: rs, roleNames: rs.map((r) => A.roles.find((x) => x.id === r)?.name || r), dm: null, ok: 0, down: 0, removed: 0 };
+  }
+  const c = { id, created: Date.now(), deadline: Date.now() + hours * 3600000, hours, by, extra: String(b.extra || "").slice(0, 500), people };
+  await kput(env, "staffcheck", c, 30 * 86400);
+  return { id, count: Object.keys(people).length };
+}
+async function staffCheckSend(env) {   // a few DMs per call
+  const c = await kget(env, "staffcheck"); if (!c) throw UE("No staff check running.");
+  const todo = Object.entries(c.people).filter(([, p]) => p.dm === null).slice(0, 12);
+  for (const [uid, p] of todo) {
+    p.dm = !!(await dm(env, uid, { embeds: [{ author: { name: "UFA Staff check" }, description: scText(p.name, p.roleNames, c.hours, c.extra), color: 0xe8424a,
+      footer: { text: `Deadline` }, timestamp: new Date(c.deadline).toISOString() }], components: [row(btn("✅ I'm still active", 3, `sc:${c.id}`), btn("👋 Step down", 2, `sd:${c.id}`))] }).catch(() => false));
+  }
+  await kput(env, "staffcheck", c, 30 * 86400);
+  return { sent: todo.filter(([, p]) => p.dm).length, failed: todo.filter(([, p]) => !p.dm).length, left: Object.values(c.people).filter((p) => p.dm === null).length };
+}
+async function staffCheckEnforce(env, L, by, uids) {   // remove the checked roles from people who didn't confirm (or stepped down)
+  const c = await kget(env, "staffcheck"); if (!c) throw UE("No staff check running.");
+  const only = uids?.length ? new Set(uids) : null;
+  const todo = Object.entries(c.people).filter(([uid, p]) => !p.ok && !p.removed && (!only || only.has(uid))).slice(0, 10);
+  const errs = [];
+  for (const [uid, p] of todo) {
+    for (const r of p.roles) await discord(env, "DELETE", `/guilds/${L.guild}/members/${uid}/roles/${r}`, null, `Staff check: no response (by ${by})`).catch((e) => errs.push(`${p.name}: ${e.message}`));
+    p.removed = Date.now();
+    await dm(env, uid, { embeds: [{ author: { name: "UFA Staff" }, description: p.down ? `Thanks for your time on staff, **${p.name}** — your staff roles have been removed. 🫡` : `Your UFA staff roles (${p.roleNames.join(", ")}) were removed since we didn't hear back from the staff check. If that's a mistake, DM me and we'll sort it out.`, color: 0x8a8f98 }] }).catch(() => {});
+  }
+  await kput(env, "staffcheck", c, 30 * 86400);
+  return { removed: todo.length, errors: errs, left: Object.entries(c.people).filter(([uid, p]) => !p.ok && !p.removed && (!only || only.has(uid))).length };
+}
+
 // ---------- FO readiness board + replace an inactive FO ----------
 async function readiness(env, L) {
   const [M, act, qs, sessKeys, pws] = await Promise.all([members(env, L, true), kget(env, "activity:msg"), klist(env, "queue:"), klist(env, "sess:"), klist(env, "pw:")]);
@@ -1810,6 +1877,16 @@ async function component(i, env, ctx) {
   const [kind, id, k] = String(i.data.custom_id || "").split(":");
   if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
   if (kind === "bj" || kind === "dr") return econComponent(i, env, kind, id, k || "");
+  if (kind === "sc" || kind === "sd") {
+    const c = await kget(env, "staffcheck"), uid = uidOf(i), p = c?.id === id ? c.people[uid] : null;
+    if (!p) return json({ type: 7, data: { components: [], embeds: i.message?.embeds || [], content: "This staff check is over." } });
+    if (p.removed) return reply("Your staff roles were already removed. DM me if that's a mistake.", true);
+    if (kind === "sc") { p.ok = Date.now(); p.down = 0; } else { p.down = Date.now(); p.ok = 0; }
+    await kput(env, "staffcheck", c, 30 * 86400);
+    if (kind === "sd") ctx.waitUntil(league(env).then((L) => staffCheckEnforce(env, L, "stepped down", [uid])).catch(() => {}));
+    return json({ type: 7, data: { components: [], embeds: [{ ...(i.message?.embeds?.[0] || {}), color: kind === "sc" ? 0x2ecc71 : 0x8a8f98,
+      fields: [{ name: kind === "sc" ? "✅ You're staying on staff" : "👋 You stepped down", value: kind === "sc" ? "Thanks! Nothing else to do." : "Your staff roles are being removed. Thanks for your time!" }] }] } });
+  }
   if (kind === "tcl" || kind === "tcx") {
     const L = await league(env);
     if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
@@ -2216,6 +2293,11 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/staff/audit") return out(await staffAudit(env, L));
+      if (p === "/api/admin/staff/check") return out({ ok: true, ...(await staffCheckStart(env, L, body, staffSig(admin))) });
+      if (p === "/api/admin/staff/send") return out({ ok: true, ...(await staffCheckSend(env)) });
+      if (p === "/api/admin/staff/enforce") return out({ ok: true, ...(await staffCheckEnforce(env, L, staffSig(admin), body.uids)) });
+      if (p === "/api/admin/staff/cancel") { await KV(env).delete("staffcheck"); return out({ ok: true }); }
       if (p === "/api/admin/tickets/dedupe") return out({ ok: true, ...(await ticketsDedupe(env, L)) });
       if (p === "/api/admin/tickets/forum") return out({ ok: true, ...(await ticketsForum(env, L)) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
