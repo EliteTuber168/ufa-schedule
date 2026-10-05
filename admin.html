@@ -296,7 +296,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
 
     <div id="tab-dm" class="hide" style="display:flex;flex-direction:column;gap:16px">
       <section class="panel">
-        <div class="row between"><h2>Tickets</h2><div class="row"><button class="btn sm" id="tkscan">↻ Check for new messages</button><button class="btn sm red" id="tknew">+ New ticket</button></div></div>
+        <div class="row between"><h2>Tickets</h2><div class="row"><button class="btn sm blue" id="tkpost" title="Make one post per open ticket in the #tickets forum (catch-up). Tickets that already have a post are skipped.">📋 Post open tickets to #tickets</button><button class="btn sm" id="tkscan">↻ Check for new messages</button><button class="btn sm red" id="tknew">+ New ticket</button></div></div>
         <div class="note">Every person who talks to the bot gets a ticket. Click one to open the chat — you see what they sent <b>and</b> what you sent. Your messages go to them as a DM from the bot.</div>
         <div class="filters"><input type="search" id="tkq" placeholder="Search tickets…" aria-label="Search tickets" style="flex:1 1 200px">
           <select id="tkf" aria-label="Filter tickets"><option value="open">Open</option><option value="unread">New messages only</option><option value="waiting">Waiting on you (they spoke last)</option><option value="closed">Closed</option><option value="all">All</option></select>
@@ -1153,6 +1153,14 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   }
   $("#tkq").oninput = renderTickets; $("#tkf").onchange = renderTickets; $("#tks").onchange = renderTickets;
   $("#tklist").onclick = e => { const b = e.target.closest("[data-tk]"); if (b) openTicket(b.dataset.tk); };
+  $("#tkpost").onclick = async () => {
+    const b = $("#tkpost"); b.disabled = true; let total = 0;
+    try{
+      for (let k = 0; k < 40; k++){ b.textContent = `Posting… ${total}`; const j = await bot("/api/admin/tickets/backfill", {}); total += j.done; if (!j.left || !j.done) { if (j.left && !j.done) throw new Error(`${j.left} ticket(s) couldn't be posted — check the bot can post in #tickets.`); break; } }
+      toast(total ? `Posted ${total} open ticket${total === 1 ? "" : "s"} to #tickets.` : "Every open ticket already has a post in #tickets.");
+    }catch(err){ toast(err.message, false); }
+    b.disabled = false; b.textContent = "📋 Post open tickets to #tickets";
+  };
   $("#tkscan").onclick = async () => { $("#tkscan").disabled = true; SCANP = 0; const j = await loadTickets(0); toast(j?.scan ? (j.scan.found ? `${j.scan.found} conversation(s) with new messages.` : "No new messages.") : "Checked."); $("#tkscan").disabled = false; };
   $("#tkmore").onclick = async () => { SCANP++; await loadTickets(SCANP); };
   $("#tknew").onclick = () => {
