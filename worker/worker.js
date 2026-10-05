@@ -2129,7 +2129,7 @@ async function web(req, url, env, ctx) {
         const rec = await kget(env, `pw:${abbr}`), pw = String(body.password || "");
         if (!rec || rec.hash !== await sha256(rec.salt + pw)) return out({ error: "That isn't the team's current password." }, 400);
         const fo = foOf(L, await members(env, L, true), abbr); if (!fo) return out({ error: `The ${t.name} don't have an FO right now.` }, 400);
-        const ok = await staffSend(env, fo.id, `Here's the FO portal password for the **${t.name}**:\n\n**\`${pw}\`**\n\nLog in at ${SITE}fo.html — pick your team and type this in (or just log in with Discord). Don't share it; staff can change it any time.`, staffSig(admin));
+        const ok = await staffSend(env, fo.id, `${body.reminder ? "👋 **Reminder:** you're the FO of the **" + t.name + "**. Use the FO portal to manage your team (roster, offers, draft queue). Here's your team login so you can get in:\n\n" : ""}Here's the FO portal password for the **${t.name}**:\n\n**\`${pw}\`**\n\nLog in at ${SITE}fo.html — pick your team and type this in (or just log in with Discord). Don't share it; staff can change it any time.`, staffSig(admin));
         if (!ok) return out({ error: `Couldn't DM ${fo.name} — their DMs might be closed.` }, 400);
         return out({ ok: true, text: `Sent to ${fo.name}.` });
       }
