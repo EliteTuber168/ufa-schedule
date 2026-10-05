@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-05T07:09:41+00:00",
+ "updated": "2026-10-05T21:28:09+00:00",
  "teams": {
   "ARI": [
    {
@@ -44,6 +44,11 @@
     "name": "KA1",
     "avatar": "https://cdn.discordapp.com/avatars/1552716188461834264/3f58b1d726037d278ac8c55ce25b60e2.png?size=96",
     "fo": true
+   },
+   {
+    "id": "1302825050780598316",
+    "name": "S1arzz",
+    "avatar": "https://cdn.discordapp.com/avatars/1302825050780598316/5e7784bf528b6842d1a16332a2d9f2e0.png?size=96"
    }
   ],
   "LAC": [],
