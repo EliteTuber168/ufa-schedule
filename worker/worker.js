@@ -1087,7 +1087,7 @@ const ELEV = 0x8n | 0x20n | 0x10n | 0x2n | 0x4n | 0x2000n | 0x10000000n | (1n <<
 async function staffAudit(env, L) {
   const [roles, g, M, me] = await Promise.all([discord(env, "GET", `/guilds/${L.guild}/roles`), discord(env, "GET", `/guilds/${L.guild}`), members(env, L, true), discord(env, "GET", "/users/@me")]);
   const teamRoles = new Set(L.teams.map((t) => t.roleId).filter(Boolean)), skipIds = new Set([L.R.fo, L.R.gm, L.R.hc, L.R.draftable, L.R.fa, L.guild].filter(Boolean));
-  const botM = M.find((m) => m.user.id === me.id), pos = (id) => roles.find((r) => r.id === id)?.position || 0;
+  const botM = M.find((m) => m.user.id === me.id) || await discord(env, "GET", `/guilds/${L.guild}/members/${me.id}`).catch(() => null), pos = (id) => roles.find((r) => r.id === id)?.position || 0;
   const botTop = Math.max(0, ...(botM?.roles || []).map(pos));
   const staffRoles = roles.filter((r) => !r.managed && !skipIds.has(r.id) && !teamRoles.has(r.id) && (STAFFY.test(r.name) || (BigInt(r.permissions) & ELEV) !== 0n))
     .sort((a, b) => b.position - a.position)
