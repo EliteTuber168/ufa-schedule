@@ -603,9 +603,13 @@
   {
    "id": 48,
    "name": "greem",
-   "pos": [],
+   "pos": [
+    "WR",
+    "CB"
+   ],
    "discord": "1524230783903203459",
-   "avatar": "https://cdn.discordapp.com/avatars/1524230783903203459/f21de7c49fc71d4666f50561a75b47b2.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1524230783903203459/f21de7c49fc71d4666f50561a75b47b2.png?size=96",
+   "locked": true
   },
   {
    "id": 49,
