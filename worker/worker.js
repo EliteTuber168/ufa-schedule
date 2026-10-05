@@ -138,7 +138,9 @@ async function discord(env, method, path, body, reason) {
   const r = await fetch(`https://discord.com/api/v10${path}`, { method,
     headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, ...(body ? { "Content-Type": "application/json" } : {}), ...(reason ? { "X-Audit-Log-Reason": encodeURIComponent(reason).slice(0, 500) } : {}) },
     body: body ? JSON.stringify(body) : undefined });
-  if (r.status === 429) { const w = (await r.json().catch(() => ({}))).retry_after || 1; await new Promise((s) => setTimeout(s, w * 1000 + 200)); return discord(env, method, path, body, reason); }
+  if (r.status === 429) { const w = (await r.json().catch(() => ({}))).retry_after || 1;
+    if (w > 15) { const e = new Error(`Discord is rate-limiting this — try again in ${Math.ceil(w)}s.`); e.status = 429; e.user = true; e.retry = w; throw e; }
+    await new Promise((s) => setTimeout(s, w * 1000 + 200)); return discord(env, method, path, body, reason); }
   if (!r.ok) {
     const e = new Error(`Discord ${r.status}${r.status === 403 ? " (the bot needs Manage Roles and its role above the team/staff roles)" : ""}`); e.status = r.status; throw e;
   }
@@ -1024,8 +1026,9 @@ async function ticketPost(env, L, tk, msg, tag) {
     const r = await discord(env, "PATCH", `/channels/${tk.thread}`, { archived: false, ...(tagId ? { applied_tags: [tagId] } : {}) }).then(() => 1, (e) => (e.status === 404 ? 0 : 1));
     if (!r) tk.thread = null;
   }
+  delete tk.rateLimited;
   if (!tk.thread) {
-    const th = await discord(env, "POST", `/channels/${F.ch}/threads`, { name: `${tno(tk.no)} · ${tk.name || tk.uid}`.slice(0, 100), applied_tags: tagId ? [tagId] : [], message: await ticketCard(env, L, tk) }).catch((e) => { console.log("ticket post:", e.message); return null; });
+    const th = await discord(env, "POST", `/channels/${F.ch}/threads`, { name: `${tno(tk.no)} · ${tk.name || tk.uid}`.slice(0, 100), applied_tags: tagId ? [tagId] : [], message: await ticketCard(env, L, tk) }).catch((e) => { console.log("ticket post:", e.message); if (e.status === 429) tk.rateLimited = e.retry; return null; });
     if (!th) return false;
     tk.thread = th.id;
   }
@@ -1049,14 +1052,29 @@ async function autoCloseTickets(env) {
 }
 /** one post per open ticket in the forum (catch-up), a few per call */
 async function ticketsBackfill(env, L) {
+  if (await kget(env, "tickets:backfill:lock")) throw UE("Already posting tickets — give it a minute.");
+  await kput(env, "tickets:backfill:lock", 1, 60);
+  try { return await ticketsBackfillRun(env, L); } finally { await KV(env).delete("tickets:backfill:lock").catch(() => {}); }
+}
+/** delete forum posts no ticket points at (duplicates) */
+async function ticketsDedupe(env, L) {
+  const F = await ticketsForum(env, L), keep = new Set();
+  for (const k of await klist(env, "ticket:")) if (k.name !== "ticket:counter") { const t = await kget(env, k.name); if (t?.thread) keep.add(t.thread); }
+  const act = (await discord(env, "GET", `/guilds/${L.guild}/threads/active`)).threads || [];
+  const arch = ((await discord(env, "GET", `/channels/${F.ch}/threads/archived/public?limit=100`).catch(() => ({}))).threads) || [];
+  const extra = [...act, ...arch].filter((t) => t.parent_id === F.ch && !keep.has(t.id));
+  let n = 0; for (const t of extra.slice(0, 40)) { await discord(env, "DELETE", `/channels/${t.id}`, null, "Duplicate ticket post").then(() => n++, () => {}); }
+  return { deleted: n, left: Math.max(0, extra.length - 40) };
+}
+async function ticketsBackfillRun(env, L) {
   const ks = (await klist(env, "ticket:")).filter((k) => k.name !== "ticket:counter" && (k.metadata?.status || "open") === "open");
   const list = (await Promise.all(ks.map((k) => kget(env, k.name)))).filter((t) => t && t.status !== "closed" && !t.thread).sort((a, b) => a.updated - b.updated);
   let done = 0;
-  for (const tk of list.slice(0, 8)) {
+  for (const tk of list.slice(0, 5)) {
     const them = tk.lastFrom !== "staff";
     const ok = await ticketPost(env, L, tk, tk.preview ? { allowed_mentions: { parse: [] }, embeds: [{ author: { name: them ? `Last message from ${tk.name || "them"}` : "Last message was from staff" }, description: tk.preview, color: them ? 0xffc62f : 0x3d7bff,
       timestamp: new Date(tk.updated || Date.now()).toISOString() }] } : null, them ? "need" : "wait");
-    if (!ok) break;
+    if (!ok) { if (tk.rateLimited) return { done, left: list.length - done, wait: Math.ceil(tk.rateLimited) }; break; }
     await saveTicket(env, tk); done++;
   }
   return { done, left: list.length - done };
@@ -2198,6 +2216,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/tickets/dedupe") return out({ ok: true, ...(await ticketsDedupe(env, L)) });
       if (p === "/api/admin/tickets/forum") return out({ ok: true, ...(await ticketsForum(env, L)) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
       if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
