@@ -17,3 +17,12 @@ enabled = true
 # and the live franchise owner list (every 5 min) from this same trigger
 [triggers]
 crons = ["* * * * *"]
+
+# always-on Discord gateway connection (bot status + DMs → tickets)
+[[durable_objects.bindings]]
+name = "GATEWAY"
+class_name = "Gateway"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Gateway"]

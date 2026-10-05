@@ -32,6 +32,7 @@ export default {
   async scheduled(event, env, ctx) {
     const m = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
     const jobs = [["autopick", () => autoPick(env)]];
+    if (env.GATEWAY) ctx.waitUntil(env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch("https://gw/ping").catch((e) => console.log("gateway:", e.message)));
     if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
     if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
     for (const [job, fn] of jobs) {
@@ -769,6 +770,94 @@ async function scanDMs(env, L, page = 0) {
     await saveTicket(env, t); found++;
   }
   return { found, more: (page + 1) * 20 < chans.length };
+}
+
+/** someone wrote to staff (Reply button or a plain DM to the bot): file it into their ticket, post in #tickets, forward to the commissioner */
+async function fileTicket(env, uid, text, { about = "", user = null, viaButton = false, image = null } = {}) {
+  const L = await league(env);
+  const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === uid), name = m ? display(m) : (user?.global_name || user?.username || uid);
+  const tk = await ensureTicket(env, uid, name), isNew = !tk.updated || tk.created > Date.now() - 5000 || tk.status === "closed";
+  if (viaButton) tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about }].slice(-100);
+  Object.assign(tk, { updated: Date.now(), lastThem: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
+  await saveTicket(env, tk);
+  const head = viaButton ? "Reply from" : isNew ? "New ticket from" : "DM from";
+  const team = m && info(L, m).team ? teamOf(L, info(L, m).team)?.name : "";
+  const tch = await ticketsChannel(env, L);
+  if (tch) await discord(env, "POST", `/channels/${tch}/messages`, { content: tk.lastStaffId ? `<@${tk.lastStaffId}> they replied 👇` : undefined, allowed_mentions: { users: tk.lastStaffId ? [tk.lastStaffId] : [] },
+    embeds: [{ author: { name: `${tno(tk.no)} · ${head} ${name}`, icon_url: m ? avatarUrl(L.guild, m) : undefined }, title: about ? `Re: ${about}` : undefined, description: text.slice(0, 3900) || "*(attachment)*", color: 0xffc62f,
+      ...(image ? { image: { url: image } } : {}), footer: { text: `${team ? team + " · " : ""}${uid}` }, timestamp: new Date().toISOString() }],
+    components: [row(btn(`Reply to ${name}`.slice(0, 80), 1, `ans:${uid}`))] }).catch(() => {});
+  for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
+    await dm(env, cid, { embeds: [{ author: { name: `📬 ${tno(tk.no)} · ${head} ${name}` }, title: about ? `Re: ${about}` : undefined, description: text.slice(0, 3900) || "*(attachment)*",
+      color: 0xffc62f, ...(image ? { image: { url: image } } : {}), footer: { text: team ? `${team} · ${uid}` : uid }, timestamp: new Date().toISOString() }],
+      components: [row(btn(`Answer ${name}`.slice(0, 80), 1, `ans:${uid}`))] });
+  }
+  return { tk, isNew };
+}
+
+/** a plain DM to the bot (from the gateway) → ticket */
+async function handleDM(env, msg) {
+  const uid = msg.author?.id, staff = new Set(String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean));
+  if (!uid || msg.author.bot || staff.has(uid)) return;
+  const files = (msg.attachments || []).map((a) => a.url), img = (msg.attachments || []).find((a) => /^image\//.test(a.content_type || ""))?.url || null;
+  const text = [msg.content || "", ...files.filter((u) => u !== img)].filter(Boolean).join("\n");
+  if (!text && !img) return;
+  await kput(env, `dmch:${uid}`, { ch: msg.channel_id, ts: Date.now() }, 120 * 86400).catch(() => {});
+  const prev = await kget(env, `ticket:${uid}`), quiet = prev && prev.status !== "closed" && prev.lastThem > Date.now() - 30 * 60000;
+  const { tk } = await fileTicket(env, uid, text, { user: msg.author, image: img });
+  await discord(env, "PUT", `/channels/${msg.channel_id}/messages/${msg.id}/reactions/${encodeURIComponent("✅")}/@me`).catch(() => {});
+  if (!quiet) await discord(env, "POST", `/channels/${msg.channel_id}/messages`, { embeds: [{ author: { name: "UFA Staff" }, title: tno(tk.no),
+    description: "📨 Got it — your message was sent to UFA Staff. Keep typing here if you have more to add; we'll reply in this DM.", color: 0x3d7bff }] }).catch(() => {});
+}
+
+const GW_STATUS = "📩 DM me for help";
+/** one always-on Discord gateway connection: gives the bot its status and hears DMs (Workers can't do this on their own) */
+export class Gateway {
+  constructor(state, env) { this.state = state; this.env = env; this.ws = null; this.hb = null; this.seq = null; this.ack = 0; this.events = 0; this.err = ""; }
+  async fetch(req) {
+    const u = new URL(req.url);
+    if (u.pathname === "/restart") { this.close(); await this.state.storage.delete(["sid", "resume"]); }
+    await this.ensure().catch((e) => { this.err = e.message; });
+    return new Response(JSON.stringify({ connected: !!this.ws, lastAck: this.ack, events: this.events, error: this.err, status: GW_STATUS }), { headers: { "Content-Type": "application/json" } });
+  }
+  async alarm() { await this.ensure().catch((e) => { this.err = e.message; }); }
+  close() { try { this.ws?.close(1000); } catch {} this.ws = null; clearInterval(this.hb); this.hb = null; }
+  async ensure() {
+    await this.state.storage.setAlarm(Date.now() + 60000);
+    if (this.ws && Date.now() - this.ack < 100000) return;
+    this.close();
+    const resumeUrl = await this.state.storage.get("resume");
+    const r = await fetch((resumeUrl || "https://gateway.discord.gg").replace(/^wss:/, "https:") + "/?v=10&encoding=json", { headers: { Upgrade: "websocket" } });
+    const ws = r.webSocket; if (!ws) throw new Error("gateway connect failed: " + r.status);
+    ws.accept(); this.ws = ws; this.ack = Date.now(); this.err = "";
+    ws.addEventListener("message", (e) => this.onMsg(ws, e.data).catch((x) => { this.err = x.message; }));
+    ws.addEventListener("close", (e) => { if (this.ws === ws) { this.ws = null; clearInterval(this.hb); this.err = `closed ${e.code} ${e.reason || ""}`;
+      if ([4004, 4010, 4011, 4012, 4013, 4014].includes(e.code)) return; if (e.code === 4007 || e.code === 4009) this.state.storage.delete(["sid", "resume"]); } });
+  }
+  send(ws, op, d) { try { ws.send(JSON.stringify({ op, d })); } catch {} }
+  async onMsg(ws, raw) {
+    const p = JSON.parse(raw); if (p.s) { this.seq = p.s; }
+    if (p.op === 10) {
+      clearInterval(this.hb); this.hb = setInterval(() => this.send(ws, 1, this.seq), p.d.heartbeat_interval);
+      const sid = await this.state.storage.get("sid"), seq = this.seq ?? await this.state.storage.get("seq");
+      const presence = { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] };
+      if (sid && seq) this.send(ws, 6, { token: this.env.DISCORD_BOT_TOKEN, session_id: sid, seq });
+      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: 1 << 12, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
+    } else if (p.op === 11) this.ack = Date.now();
+    else if (p.op === 1) this.send(ws, 1, this.seq);
+    else if (p.op === 7) { this.close(); }
+    else if (p.op === 9) { await this.state.storage.delete(["sid", "resume", "seq"]); this.seq = null; this.close(); }
+    else if (p.op === 0) {
+      this.ack = Date.now(); this.events++;
+      if (p.t === "READY") await this.state.storage.put({ sid: p.d.session_id, resume: p.d.resume_gateway_url });
+      if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
+      if (p.t === "MESSAGE_CREATE" && !p.d.guild_id && !p.d.author?.bot) {
+        const seen = (await this.state.storage.get("seen")) || [];
+        if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200)); await handleDM(this.env, p.d).catch((e) => { this.err = "dm: " + e.message; }); }
+      }
+      if (this.seq) await this.state.storage.put("seq", this.seq);
+    }
+  }
 }
 
 // ---------- admin: players directory ----------
@@ -1646,24 +1735,8 @@ async function component(i, env, ctx) {
 async function modalSubmit(i, env, ctx) {
   const [kind, id, ad] = String(i.data.custom_id || "").split(":");
   if (kind === "rpm") return later(i, ctx, async () => {
-    const text = i.data.components?.[0]?.components?.[0]?.value || "", uid = uidOf(i), L = await league(env);
-    const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === uid), name = m ? display(m) : (i.user?.global_name || i.user?.username || uid);
-    const log = id ? await kget(env, `dmlog:${id}`) : null;
-    const tk = await ensureTicket(env, uid, name);
-    tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about: log?.title || "" }].slice(-100);
-    Object.assign(tk, { updated: Date.now(), lastThem: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
-    await saveTicket(env, tk);
-    const tch = await ticketsChannel(env, L);
-    if (tch) await discord(env, "POST", `/channels/${tch}/messages`, { content: tk.lastStaffId ? `<@${tk.lastStaffId}> they replied 👇` : undefined, allowed_mentions: { users: tk.lastStaffId ? [tk.lastStaffId] : [] },
-      embeds: [{ author: { name: `${tno(tk.no)} · Reply from ${name}`, icon_url: m ? avatarUrl(L.guild, m) : undefined }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f,
-        footer: { text: `${m && info(L, m).team ? teamOf(L, info(L, m).team).name + " · " : ""}${uid}` }, timestamp: new Date().toISOString() }],
-      components: [row(btn(`Reply to ${name}`.slice(0, 80), 1, `ans:${uid}`))] }).catch(() => {});
-    // forward to the commissioner(s) by DM, with a button to answer straight from Discord
-    for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
-      await dm(env, cid, { embeds: [{ author: { name: `📬 ${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900),
-        color: 0xffc62f, footer: { text: m && info(L, m).team ? `${teamOf(L, info(L, m).team).name} · ${uid}` : uid }, timestamp: new Date().toISOString() }],
-        components: [row(btn(`Answer ${name}`.slice(0, 80), 1, `ans:${uid}`))] });
-    }
+    const text = i.data.components?.[0]?.components?.[0]?.value || "", log = id ? await kget(env, `dmlog:${id}`) : null;
+    await fileTicket(env, uidOf(i), text, { about: log?.title || "", user: i.user || i.member?.user, viaButton: true });
     return { content: "✅ Thanks — your reply was sent to UFA Staff.", components: [] };
   }, false);
   if (kind === "ansm") return later(i, ctx, async () => {
@@ -2001,7 +2074,8 @@ async function web(req, url, env, ctx) {
       const rec = await kget(env, `pw:${String(team || "").toUpperCase()}`);
       if (!rec || rec.hash !== await sha256(rec.salt + String(password || ""))) return out({ error: "Wrong team or password." }, 401);
       const abbr = String(team).toUpperCase();
-      if (L && !foOf(L, await members(env, L), abbr)) return out({ error: "That team doesn't have a franchise owner right now." }, 401);
+      const LL = await league(env);
+      if (LL && !foOf(LL, await members(env, LL), abbr)) return out({ error: "That team doesn't have a franchise owner right now." }, 401);
       const s = randToken(); await kput(env, `sess:${s}`, { team: abbr, pw: true, pwTs: rec.ts, ts: Date.now() }, 30 * 86400);
       return out({ session: s });
     }
@@ -2035,6 +2109,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
+      if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
