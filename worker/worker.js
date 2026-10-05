@@ -878,6 +878,23 @@ async function reactCheck(env, L, b) {
     reacted: who.filter((p) => reacted.has(p.id)).map(pack), missing: who.filter((p) => !reacted.has(p.id)).map(pack), totalReactors: reacted.size };
 }
 
+// ---------- staff #tickets channel: player replies land here with a Reply button ----------
+async function ticketsChannel(env, L) {
+  const cfg = (await kget(env, "tickets:cfg")) || {};
+  if (cfg.ch) return cfg.ch;
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
+  let ch = chans.find((c) => c.type === 0 && c.name === "tickets" && (!L.C.staffCategory || c.parent_id === L.C.staffCategory))?.id;
+  if (!ch) {
+    const c = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "tickets", type: 0, topic: "Replies people send to UFA Staff. Hit Reply to answer them (it DMs them from the bot).",
+      ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
+      permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])] }, "Staff tickets channel").catch(() => null);
+    ch = c?.id;
+  }
+  if (ch) await kput(env, "tickets:cfg", { ch }, 3650 * 86400).catch(() => {});
+  return ch || L.C.staffChat || null;
+}
+const firstCommish = (env) => String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)[0] || null;
+
 // ---------- FO readiness board + replace an inactive FO ----------
 async function readiness(env, L) {
   const [M, act, qs, sessKeys, pws] = await Promise.all([members(env, L, true), kget(env, "activity:msg"), klist(env, "queue:"), klist(env, "sess:"), klist(env, "pw:")]);
@@ -1636,8 +1653,11 @@ async function modalSubmit(i, env, ctx) {
     tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about: log?.title || "" }].slice(-100);
     Object.assign(tk, { updated: Date.now(), lastThem: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
     await saveTicket(env, tk);
-    if (L.C.staffChat) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { allowed_mentions: { parse: [] },
-      embeds: [{ author: { name: `${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f, footer: { text: "Answer it from the admin page → Messages → Tickets" }, timestamp: new Date().toISOString() }] }).catch(() => {});
+    const tch = await ticketsChannel(env, L);
+    if (tch) await discord(env, "POST", `/channels/${tch}/messages`, { content: tk.lastStaffId ? `<@${tk.lastStaffId}> they replied 👇` : undefined, allowed_mentions: { users: tk.lastStaffId ? [tk.lastStaffId] : [] },
+      embeds: [{ author: { name: `${tno(tk.no)} · Reply from ${name}`, icon_url: m ? avatarUrl(L.guild, m) : undefined }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900), color: 0xffc62f,
+        footer: { text: `${m && info(L, m).team ? teamOf(L, info(L, m).team).name + " · " : ""}${uid}` }, timestamp: new Date().toISOString() }],
+      components: [row(btn(`Reply to ${name}`.slice(0, 80), 1, `ans:${uid}`))] }).catch(() => {});
     // forward to the commissioner(s) by DM, with a button to answer straight from Discord
     for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
       await dm(env, cid, { embeds: [{ author: { name: `📬 ${tno(tk.no)} · Reply from ${name}` }, title: log?.title ? `Re: ${log.title}` : undefined, description: text.slice(0, 3900),
@@ -1652,7 +1672,9 @@ async function modalSubmit(i, env, ctx) {
     const text = i.data.components?.[0]?.components?.[0]?.value || "";
     const tk = await ensureTicket(env, id);
     const ok = await staffSend(env, id, text, me.name && me.name !== "Unknown" ? me.name : "UFA Staff", tk);
-    if (ok) { Object.assign(tk, { updated: Date.now(), lastFrom: "staff", preview: text.slice(0, 140) }); await saveTicket(env, tk); }
+    if (ok) { Object.assign(tk, { updated: Date.now(), lastFrom: "staff", lastStaffId: uidOf(i), preview: text.slice(0, 140) }); await saveTicket(env, tk);
+      if (i.channel_id && i.guild_id) await discord(env, "POST", `/channels/${i.channel_id}/messages`, { allowed_mentions: { parse: [] },
+        embeds: [{ author: { name: `↪️ ${me.name || "Staff"} replied to ${tk.name || "them"} · ${tno(tk.no)}` }, description: text.slice(0, 1500), color: 0x3d7bff, timestamp: new Date().toISOString() }] }).catch(() => {}); }
     return ok ? `✅ Sent to them:\n> ${text.slice(0, 300).replace(/\n/g, "\n> ")}` : "⚠️ Couldn't DM them (DMs closed?).";
   }, false);
   if (kind !== "rm") return reply("Unknown form.", true);
@@ -2012,6 +2034,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/channels") { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); return out({ channels: ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) }); }
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
+      if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
@@ -2082,7 +2105,7 @@ async function web(req, url, env, ctx) {
         if (!m) return out({ error: "That person isn't in the server." }, 400);
         const t = await ensureTicket(env, body.uid, display(m));
         if (!(await staffSend(env, body.uid, text, staffSig(admin), t))) return out({ error: "Couldn't DM them (DMs closed?)." }, 400);
-        Object.assign(t, { updated: Date.now(), lastFrom: "staff", preview: text.slice(0, 140), status: "open" }); await saveTicket(env, t);
+        Object.assign(t, { updated: Date.now(), lastFrom: "staff", lastStaffId: firstCommish(env) || t.lastStaffId, preview: text.slice(0, 140), status: "open" }); await saveTicket(env, t);
         return out({ ok: true, ticket: tno(t.no) });
       }
       if (p === "/api/admin/ticket/status") {
