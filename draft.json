@@ -1350,9 +1350,17 @@
   {
    "id": 155,
    "name": "Cool_Gamerz8564",
-   "pos": [],
+   "pos": [
+    "QB",
+    "S",
+    "Deep",
+    "LB"
+   ],
    "discord": "1359258249773449486",
-   "avatar": "https://cdn.discordapp.com/avatars/1359258249773449486/d8078e51395674431f6cc4694caad140.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1359258249773449486/d8078e51395674431f6cc4694caad140.png?size=96",
+   "locked": true,
+   "posAt": 1791165638533,
+   "posNotified": 1791165638533
   },
   {
    "id": 156,
