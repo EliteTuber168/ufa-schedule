@@ -35,6 +35,7 @@ export default {
     if (env.GATEWAY) ctx.waitUntil(env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch("https://gw/ping").catch((e) => console.log("gateway:", e.message)));
     if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
     if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
+    if (m === 17) jobs.push(["autoclose", () => autoCloseTickets(env)]);
     for (const [job, fn] of jobs) {
       const t0 = Date.now();
       ctx.waitUntil(Promise.resolve().then(fn).then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
@@ -779,14 +780,15 @@ async function fileTicket(env, uid, text, { about = "", user = null, viaButton =
   const tk = await ensureTicket(env, uid, name), isNew = !tk.updated || tk.created > Date.now() - 5000 || tk.status === "closed";
   if (viaButton) tk.replies = [...(tk.replies || []), { text, ts: Date.now(), about }].slice(-100);
   Object.assign(tk, { updated: Date.now(), lastThem: Date.now(), lastFrom: "them", preview: text.slice(0, 140), status: "open" });
-  await saveTicket(env, tk);
-  const head = viaButton ? "Reply from" : isNew ? "New ticket from" : "DM from";
+  const head = viaButton ? "Reply from" : isNew ? (tk.created < Date.now() - 5000 ? "Reopened by" : "New ticket from") : "DM from";
   const team = m && info(L, m).team ? teamOf(L, info(L, m).team)?.name : "";
-  const tch = await ticketsChannel(env, L);
-  if (tch) await discord(env, "POST", `/channels/${tch}/messages`, { content: tk.lastStaffId ? `<@${tk.lastStaffId}> they replied 👇` : undefined, allowed_mentions: { users: tk.lastStaffId ? [tk.lastStaffId] : [] },
+  const ping = tk.claimedBy || tk.lastStaffId;
+  const post = { content: ping ? `<@${ping}> they replied 👇` : undefined, allowed_mentions: { users: ping ? [ping] : [] },
     embeds: [{ author: { name: `${tno(tk.no)} · ${head} ${name}`, icon_url: m ? avatarUrl(L.guild, m) : undefined }, title: about ? `Re: ${about}` : undefined, description: text.slice(0, 3900) || "*(attachment)*", color: 0xffc62f,
       ...(image ? { image: { url: image } } : {}), footer: { text: `${team ? team + " · " : ""}${uid}` }, timestamp: new Date().toISOString() }],
-    components: [row(btn(`Reply to ${name}`.slice(0, 80), 1, `ans:${uid}`))] }).catch(() => {});
+    components: [row(btn(`Reply to ${name}`.slice(0, 80), 1, `ans:${uid}`))] };
+  if (!(await ticketPost(env, L, tk, post, "need"))) { const tch = await ticketsChannel(env, L); if (tch) await discord(env, "POST", `/channels/${tch}/messages`, post).catch(() => {}); }
+  await saveTicket(env, tk);
   for (const cid of String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)) {
     await dm(env, cid, { embeds: [{ author: { name: `📬 ${tno(tk.no)} · ${head} ${name}` }, title: about ? `Re: ${about}` : undefined, description: text.slice(0, 3900) || "*(attachment)*",
       color: 0xffc62f, ...(image ? { image: { url: image } } : {}), footer: { text: team ? `${team} · ${uid}` : uid }, timestamp: new Date().toISOString() }],
@@ -981,6 +983,83 @@ async function ticketsChannel(env, L) {
   }
   if (ch) await kput(env, "tickets:cfg", { ch }, 3650 * 86400).catch(() => {});
   return ch || L.C.staffChat || null;
+}
+// ---------- tickets forum: one post per ticket, tagged by status ----------
+const TK_TAGS = [["need", "Needs reply", "🟡"], ["wait", "Waiting on them", "🔵"], ["closed", "Closed", "✅"]];
+async function ticketsForum(env, L) {
+  const cfg = await kget(env, "tickets:forum");
+  if (cfg?.ch && cfg.tags?.need && cfg.tags?.wait && cfg.tags?.closed) return cfg;
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
+  let f = chans.find((c) => c.type === 15 && c.name === "tickets");
+  if (!f) {
+    const old = chans.find((c) => c.type === 0 && c.name === "tickets");
+    if (old) await discord(env, "PATCH", `/channels/${old.id}`, { name: "tickets-old" }, "Tickets moved to a forum").catch(() => {});
+    f = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "tickets", type: 15, default_sort_order: 0,
+      topic: "One post per ticket. 🟡 Needs reply · 🔵 Waiting on them · ✅ Closed. Use the buttons on each post: Reply (DMs them from the bot), Claim, Close.",
+      ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
+      permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])],
+      available_tags: TK_TAGS.map(([, name, emoji_name]) => ({ name, emoji_name, moderated: false })) }, "Staff tickets forum")
+      .catch((e) => { throw e.status === 403 ? UE("The bot needs the Manage Channels permission to create the #tickets forum.") : e; });
+  }
+  let tags = f.available_tags || [];
+  const missing = TK_TAGS.filter(([, n]) => !tags.find((t) => t.name === n));
+  if (missing.length) { f = await discord(env, "PATCH", `/channels/${f.id}`, { available_tags: [...tags, ...missing.map(([, name, emoji_name]) => ({ name, emoji_name, moderated: false }))] }); tags = f.available_tags || []; }
+  const out = { ch: f.id, tags: Object.fromEntries(TK_TAGS.map(([k, n]) => [k, tags.find((t) => t.name === n)?.id])) };
+  await kput(env, "tickets:forum", out, 3650 * 86400);
+  return out;
+}
+async function ticketCard(env, L, tk) {
+  const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === tk.uid), pi = m ? info(L, m) : null;
+  const team = pi?.team ? teamOf(L, pi.team)?.name : "";
+  return { allowed_mentions: { parse: [] }, embeds: [{ author: { name: `${tno(tk.no)} · ${tk.name || tk.uid}`, icon_url: m ? avatarUrl(L.guild, m) : undefined }, color: 0x3d7bff,
+    description: `<@${tk.uid}>${team ? ` · **${team}**` : ""}${pi?.rank && pi.rank !== "player" ? ` · ${RANK[pi.rank] || pi.rank}` : ""}\nEverything they DM the bot lands in this post. **Reply** sends them a DM from the bot.`,
+    footer: { text: tk.uid }, timestamp: new Date(tk.created || Date.now()).toISOString() }],
+    components: [row(btn(`Reply to ${tk.name || "them"}`.slice(0, 80), 1, `ans:${tk.uid}`), btn("🙋 Claim", 2, `tcl:${tk.uid}`), btn("🔒 Close", 4, `tcx:${tk.uid}`))] };
+}
+/** post into the ticket's forum post (creating / reopening it), and set its status tag. Caller saves tk (thread id). */
+async function ticketPost(env, L, tk, msg, tag) {
+  const F = await ticketsForum(env, L).catch((e) => { console.log("forum:", e.message); return null; }); if (!F) return false;
+  const tagId = F.tags[tag];
+  if (tk.thread) {
+    const r = await discord(env, "PATCH", `/channels/${tk.thread}`, { archived: false, ...(tagId ? { applied_tags: [tagId] } : {}) }).then(() => 1, (e) => (e.status === 404 ? 0 : 1));
+    if (!r) tk.thread = null;
+  }
+  if (!tk.thread) {
+    const th = await discord(env, "POST", `/channels/${F.ch}/threads`, { name: `${tno(tk.no)} · ${tk.name || tk.uid}`.slice(0, 100), applied_tags: tagId ? [tagId] : [], message: await ticketCard(env, L, tk) }).catch((e) => { console.log("ticket post:", e.message); return null; });
+    if (!th) return false;
+    tk.thread = th.id;
+  }
+  if (msg) await discord(env, "POST", `/channels/${tk.thread}/messages`, msg).catch(() => {});
+  return true;
+}
+async function closeTicket(env, L, tk, by, notify = true, why = "") {
+  tk.status = "closed";
+  if (notify) await dm(env, tk.uid, `✅ Your ticket **${tno(tk.no)}** with UFA Staff has been closed${why}. DM me any time to open it again.`).catch(() => {});
+  if (tk.thread) { await ticketPost(env, L, tk, { embeds: [{ description: `🔒 Closed by ${by}${why}${notify ? " — they were told by DM" : ""}`, color: 0x8a8f98 }] }, "closed");
+    await discord(env, "PATCH", `/channels/${tk.thread}`, { archived: true }).catch(() => {}); }
+  await saveTicket(env, tk);
+}
+/** tickets where staff answered last and nobody's said anything for 3 days get closed (never ones waiting on staff) */
+async function autoCloseTickets(env) {
+  const old = (await klist(env, "ticket:")).filter((k) => k.name !== "ticket:counter" && k.metadata?.status === "open" && k.metadata?.lastFrom === "staff" && k.metadata?.updated < Date.now() - 3 * 86400000);
+  if (!old.length) return 0;
+  const L = await league(env); let n = 0;
+  for (const k of old.slice(0, 10)) { const tk = await kget(env, k.name); if (tk && tk.status === "open" && tk.lastFrom === "staff") { await closeTicket(env, L, tk, "the bot", true, " (no reply in 3 days)"); n++; } }
+  return n;
+}
+/** one post per open ticket in the forum (catch-up), a few per call */
+async function ticketsBackfill(env, L) {
+  const ks = (await klist(env, "ticket:")).filter((k) => k.name !== "ticket:counter" && (k.metadata?.status || "open") === "open");
+  const list = (await Promise.all(ks.map((k) => kget(env, k.name)))).filter((t) => t && t.status !== "closed" && !t.thread).sort((a, b) => a.updated - b.updated);
+  let done = 0;
+  for (const tk of list.slice(0, 8)) {
+    const them = tk.lastFrom !== "staff";
+    const ok = await ticketPost(env, L, tk, tk.preview ? { allowed_mentions: { parse: [] }, embeds: [{ author: { name: them ? `Last message from ${tk.name || "them"}` : "Last message was from staff" }, description: tk.preview, color: them ? 0xffc62f : 0x3d7bff,
+      timestamp: new Date(tk.updated || Date.now()).toISOString() }] } : null, them ? "need" : "wait");
+    if (!ok) break;
+    await saveTicket(env, tk); done++;
+  }
+  return { done, left: list.length - done };
 }
 const firstCommish = (env) => String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)[0] || null;
 
@@ -1713,6 +1792,16 @@ async function component(i, env, ctx) {
   const [kind, id, k] = String(i.data.custom_id || "").split(":");
   if (["v", "vs", "vr", "vc"].includes(kind)) return voteComponent(i, env, kind, id, k);
   if (kind === "bj" || kind === "dr") return econComponent(i, env, kind, id, k || "");
+  if (kind === "tcl" || kind === "tcx") {
+    const L = await league(env);
+    if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
+    const tk = await kget(env, `ticket:${id}`); if (!tk) return reply("That ticket doesn't exist anymore.", true);
+    const me = i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || "Staff";
+    if (kind === "tcl") { tk.claimedBy = uidOf(i); await saveTicket(env, tk);
+      return json({ type: 4, data: { content: `🙋 <@${uidOf(i)}> claimed this ticket — they'll get pinged when ${tk.name || "the player"} replies.`, allowed_mentions: { parse: [] } } }); }
+    ctx.waitUntil(closeTicket(env, L, tk, me, true));
+    return reply(`🔒 Closing ${tno(tk.no)} and letting ${tk.name || "them"} know…`, true);
+  }
   if (kind === "ans") return json({ type: 9, data: { custom_id: `ansm:${id}`, title: "Answer",
     components: [row({ type: 4, custom_id: "text", style: 2, label: "Your answer (sent as a DM from the bot)", min_length: 1, max_length: 1500, required: true })] } });
   if (kind === "rp") return json({ type: 9, data: { custom_id: `rpm:${id || ""}`, title: "Reply to UFA Staff",
@@ -1745,11 +1834,11 @@ async function modalSubmit(i, env, ctx) {
     const text = i.data.components?.[0]?.components?.[0]?.value || "";
     const tk = await ensureTicket(env, id);
     const ok = await staffSend(env, id, text, me.name && me.name !== "Unknown" ? me.name : "UFA Staff", tk);
-    if (ok) { Object.assign(tk, { updated: Date.now(), lastFrom: "staff", lastStaffId: uidOf(i), preview: text.slice(0, 140) }); await saveTicket(env, tk);
-      if (i.channel_id && i.guild_id) await discord(env, "POST", `/channels/${i.channel_id}/messages`, { allowed_mentions: { parse: [] },
-        embeds: [{ author: { name: `↪️ ${me.name || "Staff"} replied to ${tk.name || "them"} · ${tno(tk.no)}` }, description: text.slice(0, 1500), color: 0x3d7bff, timestamp: new Date().toISOString() }] }).catch(() => {}); }
+    if (ok) { Object.assign(tk, { updated: Date.now(), lastFrom: "staff", lastStaffId: uidOf(i), preview: text.slice(0, 140), status: "open" });
+      await ticketPost(env, L, tk, { allowed_mentions: { parse: [] }, embeds: [{ author: { name: `↪️ ${me.name && me.name !== "Unknown" ? me.name : (i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || "Staff")} replied` }, description: text.slice(0, 3900), color: 0x3d7bff, timestamp: new Date().toISOString() }] }, "wait");
+      await saveTicket(env, tk); }
     return ok ? `✅ Sent to them:\n> ${text.slice(0, 300).replace(/\n/g, "\n> ")}` : "⚠️ Couldn't DM them (DMs closed?).";
-  }, false);
+  }, !!i.guild_id);
   if (kind !== "rm") return reply("Unknown form.", true);
   const reason = i.data.components?.[0]?.components?.[0]?.value || "";
   return later(i, ctx, async () => {
@@ -2108,6 +2197,8 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/channels") { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); return out({ channels: ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) }); }
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
+      if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/tickets/forum") return out({ ok: true, ...(await ticketsForum(env, L)) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
       if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
@@ -2180,13 +2271,15 @@ async function web(req, url, env, ctx) {
         if (!m) return out({ error: "That person isn't in the server." }, 400);
         const t = await ensureTicket(env, body.uid, display(m));
         if (!(await staffSend(env, body.uid, text, staffSig(admin), t))) return out({ error: "Couldn't DM them (DMs closed?)." }, 400);
-        Object.assign(t, { updated: Date.now(), lastFrom: "staff", lastStaffId: firstCommish(env) || t.lastStaffId, preview: text.slice(0, 140), status: "open" }); await saveTicket(env, t);
+        Object.assign(t, { updated: Date.now(), lastFrom: "staff", lastStaffId: firstCommish(env) || t.lastStaffId, preview: text.slice(0, 140), status: "open" });
+        await ticketPost(env, L, t, { allowed_mentions: { parse: [] }, embeds: [{ author: { name: `↪️ ${staffSig(admin)} replied (website)` }, description: text.slice(0, 3900), color: 0x3d7bff, timestamp: new Date().toISOString() }] }, "wait").catch(() => {});
+        await saveTicket(env, t);
         return out({ ok: true, ticket: tno(t.no) });
       }
       if (p === "/api/admin/ticket/status") {
         const t = await kget(env, `ticket:${body.uid}`); if (!t) return out({ error: "No ticket." }, 404);
-        t.status = body.status === "closed" ? "closed" : "open"; await saveTicket(env, t);
-        if (t.status === "closed" && body.notify) await dm(env, t.uid, `✅ Your ticket **${tno(t.no)}** with UFA Staff has been closed. Reply any time to open it again.`);
+        if (body.status === "closed") await closeTicket(env, L, t, staffSig(admin), !!body.notify);
+        else { t.status = "open"; if (t.thread) await ticketPost(env, L, t, { embeds: [{ description: `🔓 Reopened by ${staffSig(admin)}`, color: 0x3d7bff }] }, t.lastFrom === "staff" ? "wait" : "need").catch(() => {}); await saveTicket(env, t); }
         return out({ ok: true });
       }
       if (p === "/api/admin/inbox") {
