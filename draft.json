@@ -702,9 +702,16 @@
   {
    "id": 63,
    "name": "MG_Monk2",
-   "pos": [],
+   "pos": [
+    "WR",
+    "CB",
+    "KR"
+   ],
    "discord": "1552128744020246640",
-   "avatar": "https://cdn.discordapp.com/avatars/1552128744020246640/4d8ad6998426cfa0480b36ba3c99a4d5.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1552128744020246640/4d8ad6998426cfa0480b36ba3c99a4d5.png?size=96",
+   "locked": true,
+   "posAt": 1791168115714,
+   "posNotified": 1791168115714
   },
   {
    "id": 65,
