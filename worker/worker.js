@@ -848,7 +848,7 @@ async function cronDiag(env, job, ms, err) {
 
 // ---------- activity check: who (FOs / GMs / HCs) did NOT react to a message ----------
 async function reactCheck(env, L, b) {
-  if (b.channel && !b.link) {   // list recent messages in a channel so staff can pick one
+  if (b.channel && !b.link && !b.message) {   // list recent messages in a channel so staff can pick one
     const ms = await discord(env, "GET", `/channels/${b.channel}/messages?limit=20`).catch((e) => { throw e.status === 403 ? UE("The bot can't read that channel (needs View Channel + Read Message History).") : e; });
     return { messages: ms.filter((m) => [0, 19, 20].includes(m.type)).map((m) => ({ id: m.id, ch: b.channel, author: m.author?.global_name || m.author?.username, ts: Date.parse(m.timestamp),
       text: (m.content || m.embeds?.[0]?.title || m.embeds?.[0]?.description || "").slice(0, 140), reactions: (m.reactions || []).map((r) => ({ e: r.emoji.id ? `<:${r.emoji.name}:${r.emoji.id}>` : r.emoji.name, n: r.count })) })) };
@@ -1967,7 +1967,7 @@ async function web(req, url, env, ctx) {
         : await automodList(env, L));
       if (p === "/api/admin/reactcheck") {
         const r = await reactCheck(env, L, body);
-        if (body.channel && !body.link) { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); r.channels = ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)); }
+        if (body.channel && !body.link && !body.message) { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); r.channels = ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)); }
         return out(r);
       }
       if (p === "/api/admin/channels") { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); return out({ channels: ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) }); }
