@@ -846,6 +846,36 @@ async function cronDiag(env, job, ms, err) {
   await kput(env, "cron:diag", d, 30 * 86400).catch(() => {});
 }
 
+// ---------- activity check: who (FOs / GMs / HCs) did NOT react to a message ----------
+async function reactCheck(env, L, b) {
+  if (b.channel && !b.link) {   // list recent messages in a channel so staff can pick one
+    const ms = await discord(env, "GET", `/channels/${b.channel}/messages?limit=20`).catch((e) => { throw e.status === 403 ? UE("The bot can't read that channel (needs View Channel + Read Message History).") : e; });
+    return { messages: ms.filter((m) => [0, 19, 20].includes(m.type)).map((m) => ({ id: m.id, ch: b.channel, author: m.author?.global_name || m.author?.username, ts: Date.parse(m.timestamp),
+      text: (m.content || m.embeds?.[0]?.title || m.embeds?.[0]?.description || "").slice(0, 140), reactions: (m.reactions || []).map((r) => ({ e: r.emoji.id ? `<:${r.emoji.name}:${r.emoji.id}>` : r.emoji.name, n: r.count })) })) };
+  }
+  const mm = /channels\/(\d+)\/(\d+)\/(\d+)/.exec(String(b.link || "")) || [null, null, b.channel, b.message];
+  const ch = mm[2], id = mm[3]; if (!ch || !id) throw UE("Paste a message link (right-click the message → Copy Message Link).");
+  const msg = await discord(env, "GET", `/channels/${ch}/messages/${id}`).catch((e) => { throw e.status === 404 ? UE("Couldn't find that message.") : e.status === 403 ? UE("The bot can't read that channel.") : e; });
+  const reacted = new Map(), emojis = [];
+  for (const r of msg.reactions || []) {
+    const code = r.emoji.id ? `${r.emoji.name}:${r.emoji.id}` : r.emoji.name, label = r.emoji.id ? `:${r.emoji.name}:` : r.emoji.name;
+    if (b.emoji && b.emoji !== label) continue;
+    emojis.push({ label, n: r.count });
+    let after = "0";
+    for (let page = 0; page < 10; page++) {
+      const us = await discord(env, "GET", `/channels/${ch}/messages/${id}/reactions/${encodeURIComponent(code)}?limit=100&after=${after}`).catch(() => []);
+      for (const u of us) { if (!reacted.has(u.id)) reacted.set(u.id, []); reacted.get(u.id).push(label); }
+      if (us.length < 100) break; after = us[us.length - 1].id;
+    }
+  }
+  const M = await members(env, L, true), roles = new Set([b.fo !== false && L.R.fo, b.gm && L.R.gm, b.hc && L.R.hc].filter(Boolean));
+  const who = M.filter((m) => (m.roles || []).some((r) => roles.has(r))).map((m) => info(L, m));
+  const pack = (p) => ({ id: p.id, name: p.name, avatar: p.avatar, team: p.team, rank: p.rank, emojis: reacted.get(p.id) || [] });
+  return { message: { ch, id, author: msg.author?.global_name || msg.author?.username, ts: Date.parse(msg.timestamp), text: (msg.content || msg.embeds?.[0]?.title || msg.embeds?.[0]?.description || "").slice(0, 300),
+      link: `https://discord.com/channels/${L.guild}/${ch}/${id}` }, emojis,
+    reacted: who.filter((p) => reacted.has(p.id)).map(pack), missing: who.filter((p) => !reacted.has(p.id)).map(pack), totalReactors: reacted.size };
+}
+
 // ---------- fun counters: count AutoMod hits of a rule (audit log) and keep a live message updated ----------
 // "draft": blocked "when is the draft" messages (audit action 143). "excuse": flagged-only excuses (144) — never deleted.
 const EXCUSE_CATS = [
@@ -1935,6 +1965,12 @@ async function web(req, url, env, ctx) {
         : body.delete ? (await discord(env, "DELETE", `/guilds/${L.guild}/auto-moderation/rules/${body.delete}`).catch((e) => { throw AM_ERR(e); }), { ok: true })
         : body.toggle ? { ok: true, rule: await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${body.toggle}`, { enabled: !!body.enabled }).catch((e) => { throw AM_ERR(e); }) }
         : await automodList(env, L));
+      if (p === "/api/admin/reactcheck") {
+        const r = await reactCheck(env, L, body);
+        if (body.channel && !body.link) { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); r.channels = ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)); }
+        return out(r);
+      }
+      if (p === "/api/admin/channels") { const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []); return out({ channels: ch.filter((c) => [0, 5].includes(c.type)).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)) }); }
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
