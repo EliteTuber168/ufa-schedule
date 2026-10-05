@@ -1,5 +1,5 @@
 {
- "status": "setup",
+ "status": "skipped",
  "rounds": 7,
  "snake": true,
  "pickMinutes": 7,
