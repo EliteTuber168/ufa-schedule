@@ -305,6 +305,6 @@
   "pingEveryone": true,
   "announcement": "",
   "rosterCap": 12,
-  "signingFreeze": true
+  "signingFreeze": false
  }
 }
