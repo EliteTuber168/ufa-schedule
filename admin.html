@@ -1156,7 +1156,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   $("#tkpost").onclick = async () => {
     const b = $("#tkpost"); b.disabled = true; let total = 0;
     try{
-      for (let k = 0; k < 40; k++){ b.textContent = `Posting… ${total}`; const j = await bot("/api/admin/tickets/backfill", {}); total += j.done; if (!j.left || !j.done) { if (j.left && !j.done) throw new Error(`${j.left} ticket(s) couldn't be posted — check the bot can post in #tickets.`); break; } }
+      for (let k = 0; k < 40; k++){ b.textContent = `Posting… ${total}`; const j = await bot("/api/admin/tickets/backfill", {}); total += j.done; if (j.wait) throw new Error(`Posted ${total}. Discord limits how fast new posts can be made — wait ${j.wait}s and click again for the other ${j.left}.`); if (!j.left || !j.done) { if (j.left && !j.done) throw new Error(`${j.left} ticket(s) couldn't be posted — check the bot can post in #tickets.`); break; } }
       toast(total ? `Posted ${total} open ticket${total === 1 ? "" : "s"} to #tickets.` : "Every open ticket already has a post in #tickets.");
     }catch(err){ toast(err.message, false); }
     b.disabled = false; b.textContent = "📋 Post open tickets to #tickets";
