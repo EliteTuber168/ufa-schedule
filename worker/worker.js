@@ -28,12 +28,16 @@ const RANK = { fo: "Franchise Owner", gm: "General Manager", hc: "Head Coach", p
 
 export default {
   // runs every minute (wrangler.toml [triggers]) — auto-picks when the clock runs out
-  // Each job has its own cron (separate runs = separate time budgets); see wrangler.toml.
+  // every minute: auto-pick; every 2 min: fun counters; every 5 min: live owner list
   async scheduled(event, env, ctx) {
-    const job = event.cron === "*/2 * * * *" ? "counters" : event.cron === "*/5 * * * *" ? "board" : "autopick";
-    const t0 = Date.now();
-    const run = job === "counters" ? tickCounter(env) : job === "board" ? refreshOwnersBoard(env) : autoPick(env);
-    ctx.waitUntil(run.then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
+    const m = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
+    const jobs = [["autopick", () => autoPick(env)]];
+    if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
+    if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
+    for (const [job, fn] of jobs) {
+      const t0 = Date.now();
+      ctx.waitUntil(Promise.resolve().then(fn).then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
+    }
   },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
