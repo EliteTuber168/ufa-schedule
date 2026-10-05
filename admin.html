@@ -289,6 +289,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <button class="act" data-wz="title"><span class="ic">🎖️</span><b>Set GM / Head Coach</b><span>Give or remove a title directly — no approval step.</span></button>
         <button class="act" data-wz="staff"><span class="ic">🛡️</span><b>UFA Staff</b><span>Add or remove staff. Staff see the staff channels and approve requests.</span></button>
         <button class="act" data-wz="pw"><span class="ic">🔑</span><b>FO portal password</b><span>Make a password a team can use to log in to the FO portal.</span></button>
+        <button class="act" id="pwall"><span class="ic">📨</span><b>DM FOs missing a password</b><span>Makes a portal password for every FO whose team doesn't have one and DMs it to them as a reminder.</span></button>
       </div>
       <section class="panel"><h2>Current staff</h2><div class="roster" id="stafflist" style="max-height:none"></div></section>
     </div>
@@ -852,6 +853,37 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     };
     show(); if (!dlg.open) dlg.showModal();
   }
+  // ---- DM every FO whose team has no portal password ----
+  $("#pwall").onclick = async () => {
+    const dlg = $("#dlg"), wz = $("#wz");
+    wz.innerHTML = `<h2>DM FOs missing a password</h2><div class="note">Checking…</div>`; if (!dlg.open) dlg.showModal();
+    wz.onclick = async e => { const b = e.target.closest("button"); if (!b) return; if (b.hasAttribute("data-close")) return dlg.close();
+      if (b.dataset.copy){ try{ await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; }catch{ toast("Select the password and copy it.", false); } } };
+    try{
+      if (!LIVE) await loadLive();
+      const have = new Set((await bot("/api/admin/passwords")).teams);
+      const list = D.teams.filter(t => foOf(t.abbr) && !have.has(t.abbr));
+      if (!list.length){ wz.innerHTML = `<h2>All set</h2><div class="note">Every team with an FO already has a portal password.</div><div class="row" style="justify-content:flex-end"><button class="btn" data-close>Close</button></div>`; return; }
+      wz.innerHTML = `<h2>DM FOs missing a password</h2><div class="note">These FOs' teams have no portal password. Each one gets a new password and a reminder DM with the login link. Untick anyone to skip.</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0">${list.map(t => `<label class="c"><input type="checkbox" value="${t.abbr}" checked> <b>${esc(foOf(t.abbr).name)}</b> <span class="note">· ${esc(t.name)}</span></label>`).join("")}</div>
+        <span class="msg" id="pwallmsg"></span><div class="row" style="justify-content:flex-end"><button class="btn" data-close>Cancel</button><button class="btn blue" id="pwallgo">📨 Make passwords & DM (${list.length})</button></div>`;
+      $("#pwallgo").onclick = async () => {
+        const teams = $$("#wz input:checked").map(x => x.value); if (!teams.length) return msg($("#pwallmsg"), "Tick at least one.", false);
+        $("#pwallgo").disabled = true; const res = [];
+        for (const abbr of teams){
+          msg($("#pwallmsg"), `Working… ${res.length + 1}/${teams.length}`);
+          const pw = genPw();
+          try{ await bot("/api/admin/password", {team: abbr, password: pw}); await bot("/api/admin/password/dm", {team: abbr, password: pw, reminder: true}); res.push({abbr, pw, ok: true}); }
+          catch(err){ res.push({abbr, pw, ok: false, err: err.message}); }
+        }
+        const sent = res.filter(r => r.ok).length;
+        wz.innerHTML = `<h2>Sent ${sent}/${res.length}</h2><div class="note">Passwords are listed in case someone's DMs were closed. A failed one still got a password, so copy it and send it yourself.</div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin:10px 0">${res.map(r => `<div class="row between" style="gap:8px"><span>${r.ok ? "✅" : "⚠️"} <b>${esc(foOf(r.abbr)?.name || r.abbr)}</b> <span class="note">· ${esc(T(r.abbr).name)}${r.ok ? "" : " — " + esc(r.err)}</span></span><span class="row" style="gap:6px"><code>${esc(r.pw)}</code><button class="btn sm" data-copy="${esc(r.pw)}">Copy</button></span></div>`).join("")}</div>
+          <div class="row" style="justify-content:flex-end"><button class="btn" data-close>Done</button></div>`;
+        toast(`DMed ${sent} FO${sent === 1 ? "" : "s"}.`);
+      };
+    }catch(err){ wz.innerHTML = `<h2>Couldn't check</h2><div class="note">${esc(err.message)}</div><div class="row" style="justify-content:flex-end"><button class="btn" data-close>Close</button></div>`; }
+  };
   async function afterChange(){ await loadLive(); ({dash: renderDash, assign: renderStaff, teams: renderCards})[TAB]?.(); }
   const words = ["blitz","huddle","endzone","redzone","audible","gridiron","snap","punt","sack","spiral","tackle","pylon","hailmary","shotgun","pocket","flag"];
   const genPw = () => { const r = crypto.getRandomValues(new Uint32Array(3)); return `${words[r[0]%words.length]}-${words[r[1]%words.length]}-${1000 + r[2]%9000}`; };
