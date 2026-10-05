@@ -299,7 +299,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="note">Every person who talks to the bot gets a ticket. Click one to open the chat — you see what they sent <b>and</b> what you sent. Your messages go to them as a DM from the bot.</div>
         <div class="filters"><input type="search" id="tkq" placeholder="Search tickets…" aria-label="Search tickets" style="flex:1 1 200px">
           <select id="tkf" aria-label="Filter tickets"><option value="open">Open</option><option value="unread">New messages only</option><option value="waiting">Waiting on you (they spoke last)</option><option value="closed">Closed</option><option value="all">All</option></select>
-          <select id="tks" aria-label="Sort tickets"><option value="them">Sort: they messaged most recently</option><option value="recent">Sort: any activity (newest)</option><option value="unread">Sort: new messages first</option><option value="old">Sort: oldest first</option><option value="no">Sort: ticket #</option></select></div>
+          <select id="tks" aria-label="Sort tickets"><option value="recent">Sort: latest message (yours or theirs)</option><option value="them">Sort: they messaged most recently</option><option value="unread">Sort: new messages first</option><option value="old">Sort: oldest first</option><option value="no">Sort: ticket #</option></select></div>
         <div id="tklist" style="display:flex;flex-direction:column;gap:8px"><div class="note">Loading…</div></div>
         <button class="btn sm hide" id="tkmore" style="align-self:flex-start">Check older conversations</button>
       </section>
