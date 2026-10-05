@@ -248,6 +248,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       <button role="tab" data-tab="players" aria-selected="false">Players</button>
       <button role="tab" data-tab="queues" aria-selected="false">Draft queues</button>
       <button role="tab" data-tab="ready" aria-selected="false">FO readiness</button>
+      <button role="tab" data-tab="scl" aria-selected="false">Staff cleanup</button>
       <button role="tab" data-tab="act" aria-selected="false">Activity check</button>
       <button role="tab" data-tab="spin" aria-selected="false">Randomizer</button>
       <button role="tab" data-tab="mod" aria-selected="false">Moderation</button>
@@ -438,6 +439,23 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="filters"><select id="rdf"><option value="all">All FOs</option><option value="notready">Not fully ready</option><option value="noreact">Didn't react to the activity check</option><option value="noqueue">No draft queue</option><option value="noportal">Never logged into the portal</option></select></div>
         <div class="tscroll"><table class="rdy" style="min-width:760px"><thead><tr><th>Team</th><th>FO</th><th>Activity check</th><th>Draft queue</th><th>FO portal</th><th>Ready</th><th></th></tr></thead><tbody id="rdbody"></tbody></table></div>
         <div class="note" id="rdopen"></div></section>
+    </div>
+
+    <div id="tab-scl" class="hide" style="display:flex;flex-direction:column;gap:14px">
+      <div class="stats" id="sclstats"></div>
+      <section class="panel" id="sclcheck"></section>
+      <section class="panel"><div class="row between"><h2>Staff roles</h2><button class="btn sm" id="sclload">↻ Refresh</button></div>
+        <div class="note">Every role that looks like staff (by name or permissions), highest first. Tick the roles the check should cover; whoever doesn't confirm loses <b>those</b> roles. Team, FO, GM/HC, Draftable and Free Agent roles are never touched.</div>
+        <div id="sclroles" style="display:flex;flex-direction:column;gap:8px;margin-top:10px"></div></section>
+      <section class="panel"><h2>People with staff roles</h2>
+        <div class="note" id="sclnote"></div>
+        <div class="filters"><input type="search" id="sclq" placeholder="Search…" style="flex:1 1 200px"><select id="sclsort"><option value="quiet">Quietest first (last message in staff channels)</option><option value="top">Highest role first</option><option value="name">Name</option></select>
+          <button class="btn sm" id="sclall">Tick all</button><button class="btn sm" id="sclnone">Untick all</button></div>
+        <div class="tscroll"><table class="rdy" style="min-width:720px"><thead><tr><th></th><th>Person</th><th>Staff roles</th><th>Last staff-channel message</th><th>Joined</th></tr></thead><tbody id="sclbody"></tbody></table></div>
+        <div class="row" style="justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+          <label class="f" style="flex-direction:row;align-items:center;gap:6px;margin:0">Reply within <input type="number" id="sclhours" value="48" min="1" max="168" style="width:70px"> hours</label>
+          <input type="text" id="sclextra" placeholder="Optional extra line for the DM (e.g. 'We're keeping ~10 staff')" style="flex:1 1 260px">
+          <button class="btn red" id="sclgo">📨 DM staff check…</button></div></section>
     </div>
 
     <div id="tab-approvals" class="hide" style="display:flex;flex-direction:column;gap:14px">
@@ -655,8 +673,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   function go(tab){
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
-    ["dash","assign","dm","teams","players","queues","ready","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, ready: loadReady, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ["dash","assign","dm","teams","players","queues","ready","scl","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, ready: loadReady, scl: loadScl, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -2094,6 +2112,88 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
   const RD_DM = "Hey {name}, quick check before the draft — you're the FO of the {team}. Please make sure you: react to the activity check in #fo-info, set your draft queue, and log into the FO portal: https://elitetuber168.github.io/ufa-schedule/fo.html";
   const RD_REMOVE = "Hey {name}, you've been removed as franchise owner of the {team} because you didn't respond to the activity check in time. If you think this is a mistake, reply here.";
   const RD_ANN = "{team} are looking for a new franchise owner! 🏈\nWant the team? DM staff or open a ticket with the bot.";
+
+  // ---------- staff cleanup ----------
+  let SCL = null, SCLPICK = new Set(), SCLROLES = new Set();
+  async function loadScl(){
+    $("#sclbody").innerHTML = `<tr><td colspan="5" class="note">Loading… (reading roles and recent staff-channel messages)</td></tr>`;
+    try{ SCL = await bot("/api/admin/staff/audit", {}); }catch(e){ $("#sclbody").innerHTML = `<tr><td colspan="5" class="msg err">${esc(e.message)}</td></tr>`; return; }
+    SCLROLES = new Set(SCL.roles.filter(r => r.manageable).map(r => r.id));
+    SCLPICK = new Set(SCL.people.filter(p => !p.owner && p.roles.some(r => SCLROLES.has(r))).map(p => p.id));
+    renderScl();
+  }
+  const sclRole = id => SCL.roles.find(r => r.id === id) || {name: id};
+  const sclChip = r => `<span class="tag" style="${r.color ? `color:${r.color};border-color:${r.color}` : ""}">${esc(r.name)}</span>`;
+  function renderScl(){
+    if (!SCL) return;
+    const P = SCL.people, c = SCL.check, tile = (n, l, col) => `<div class="stat"><div class="n" style="color:${col||"var(--fg)"}">${n}</div><div class="l">${l}</div></div>`;
+    const quiet = P.filter(p => !p.owner && (!p.lastStaffMsg || Date.now() - p.lastStaffMsg > 14*86400000)).length;
+    $("#sclstats").innerHTML = tile(P.length, "People with staff roles", "var(--gold)") + tile(SCL.roles.length, "Staff-type roles") + tile(quiet, "Quiet 14+ days in staff channels", "var(--warn)") + tile(SCLPICK.size, "Ticked for the check", "var(--red)");
+    // roles
+    $("#sclroles").innerHTML = SCL.roles.map(r => `<label class="row" style="gap:10px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;${r.manageable ? "" : "opacity:.6"}">
+      <input type="checkbox" data-sclrole="${r.id}" ${SCLROLES.has(r.id) ? "checked" : ""} ${r.manageable ? "" : "disabled"} style="margin-top:3px">
+      <span style="flex:1"><b style="${r.color ? `color:${r.color}` : ""}">${esc(r.name)}</b> <span class="note">· ${r.members.length} ${r.members.length === 1 ? "person" : "people"}</span>
+        ${r.perms.map(x => `<span class="tag">${esc(x)}</span>`).join(" ")} ${r.manageable ? "" : `<span class="tag" style="color:var(--warn);border-color:var(--warn)">above the bot — can't remove</span>`}
+        <div class="note" style="margin-top:3px">${r.members.map(id => esc(P.find(p => p.id === id)?.name || id)).join(", ") || "nobody"}</div></span></label>`).join("") || `<div class="note">No staff-type roles found.</div>`;
+    // people
+    const q = $("#sclq").value.trim().toLowerCase(), sort = $("#sclsort").value, top = p => Math.max(0, ...p.roles.map(r => sclRole(r).position || 0));
+    const rows = P.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "top" ? top(b) - top(a) : (a.lastStaffMsg || 0) - (b.lastStaffMsg || 0));
+    $("#sclnote").innerHTML = `Activity = the last message they sent in the staff channels (${SCL.staffChannels.map(n => "#" + esc(n)).join(", ") || "none found"}, last ~300 messages each). The server owner is always skipped. Untick anyone you know is active — they won't get the DM.`;
+    $("#sclbody").innerHTML = rows.map(p => { const rs = p.roles.filter(r => SCLROLES.has(r)), can = !p.owner && rs.length;
+      return `<tr><td>${p.owner ? "👑" : `<input type="checkbox" data-sclp="${p.id}" ${SCLPICK.has(p.id) && can ? "checked" : ""} ${can ? "" : "disabled"}>`}</td>
+      <td><span class="row" style="gap:8px"><img src="${esc(p.avatar || "")}" alt="" style="width:26px;height:26px;border-radius:50%"> <b>${esc(p.name)}</b>${p.owner ? ` <span class="tag">Owner — skipped</span>` : ""}${p.team ? ` <span class="note">${esc(p.team)}</span>` : ""}</span></td>
+      <td>${p.roles.map(r => sclChip(sclRole(r))).join(" ")}</td>
+      <td>${p.lastStaffMsg ? `<span style="color:${Date.now() - p.lastStaffMsg > 14*86400000 ? "var(--warn)" : "var(--good)"}">${ago(p.lastStaffMsg)}${Date.now() - p.lastStaffMsg > 86400000 ? " ago" : ""}</span>` : `<span style="color:var(--red)">none found</span>`}</td>
+      <td class="note">${p.joined ? new Date(p.joined).toLocaleDateString([], {month:"short", day:"numeric", year:"numeric"}) : ""}</td></tr>`; }).join("");
+    $("#sclgo").textContent = `📨 DM staff check to ${[...SCLPICK].filter(id => { const p = P.find(x => x.id === id); return p && !p.owner && p.roles.some(r => SCLROLES.has(r)); }).length}…`;
+    renderSclCheck();
+  }
+  function renderSclCheck(){
+    const c = SCL?.check, box = $("#sclcheck");
+    if (!c){ box.innerHTML = `<h2>Staff check</h2><div class="note">No check running. Pick roles and people below, then hit <b>DM staff check</b>. Everyone gets a DM with <b>✅ I'm still active</b> / <b>👋 Step down</b> buttons. After the deadline you remove the roles from everyone who didn't confirm (one button).</div>`; return; }
+    const E = Object.entries(c.people), ok = E.filter(([, p]) => p.ok), down = E.filter(([, p]) => p.down), rem = E.filter(([, p]) => p.removed && !p.down), fail = E.filter(([, p]) => p.dm === false), wait = E.filter(([, p]) => !p.ok && !p.down && !p.removed);
+    const left = c.deadline - Date.now(), st = ([uid, p]) => p.ok ? `<span style="color:var(--good)">✅ Staying</span>` : p.down ? `<span class="note">👋 Stepped down</span>` : p.removed ? `<span class="note">🗑 Roles removed</span>` : p.dm === false ? `<span style="color:var(--red)">DMs closed</span>` : p.dm === null ? `<span class="note">Not sent yet</span>` : `<span style="color:var(--warn)">No reply</span>`;
+    box.innerHTML = `<div class="row between"><h2>Staff check</h2><span class="note">${left > 0 ? `Deadline in ${Math.floor(left/3600000)}h ${Math.floor(left%3600000/60000)}m` : "⏰ Deadline passed"} · started by ${esc(c.by)}</span></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:8px 0"><span class="chip good">✅ ${ok.length} staying</span><span class="chip">👋 ${down.length} stepped down</span><span class="chip warn">⏳ ${wait.length} no reply</span><span class="chip red">${fail.length} DMs closed</span><span class="chip">🗑 ${rem.length} removed</span></div>
+      <div class="tscroll"><table class="rdy"><thead><tr><th>Person</th><th>Roles in this check</th><th>Status</th></tr></thead><tbody>${E.sort((a, b) => (!!b[1].ok - !!a[1].ok)).map(([uid, p]) => `<tr><td><b>${esc(p.name)}</b></td><td class="note">${p.roleNames.map(esc).join(", ")}</td><td>${st([uid, p])}</td></tr>`).join("")}</tbody></table></div>
+      <span class="msg" id="sclmsg"></span>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:10px">${E.some(([, p]) => p.dm === null) ? `<button class="btn blue" id="sclsend">Send the rest</button>` : ""}<button class="btn" id="sclcancel">End check</button><button class="btn red" id="sclenf" ${wait.length + fail.length ? "" : "disabled"}>🗑 Remove roles from ${wait.length + fail.length} who didn't confirm…</button></div>`;
+    $("#sclcancel").onclick = async () => { if (!confirm("End this check? Nobody's roles change. The buttons in the DMs stop working.")) return; await bot("/api/admin/staff/cancel", {}); toast("Check ended."); loadScl(); };
+    if ($("#sclsend")) $("#sclsend").onclick = () => sclSend();
+    $("#sclenf").onclick = async () => {
+      if (!confirm(`${left > 0 ? "⚠️ The deadline hasn't passed yet.\n\n" : ""}Remove the checked staff roles from ${wait.length + fail.length} people who didn't confirm (including anyone with DMs closed)? They each get a DM saying so.`)) return;
+      const b = $("#sclenf"); b.disabled = true; let n = 0, errs = [];
+      try{ for (let k = 0; k < 20; k++){ msg($("#sclmsg"), `Removing… ${n}`); const j = await bot("/api/admin/staff/enforce", {}); n += j.removed; errs.push(...j.errors); if (!j.left || !j.removed) break; }
+        toast(`Removed staff roles from ${n} ${n === 1 ? "person" : "people"}.`); if (errs.length) alert("Some roles couldn't be removed:\n" + errs.join("\n")); }
+      catch(e){ msg($("#sclmsg"), e.message, false); }
+      loadScl();
+    };
+  }
+  async function sclSend(){
+    let sent = 0, failed = 0;
+    try{ for (let k = 0; k < 20; k++){ toast(`Sending… ${sent + failed}`); const j = await bot("/api/admin/staff/send", {}); sent += j.sent; failed += j.failed; if (!j.left) break; }
+      toast(`DMed ${sent}${failed ? ` · ${failed} had DMs closed` : ""}.`); }
+    catch(e){ toast(e.message, false); }
+    loadScl();
+  }
+  $("#sclload").onclick = loadScl;
+  $("#sclq").oninput = renderScl; $("#sclsort").onchange = renderScl;
+  $("#sclall").onclick = () => { SCL.people.forEach(p => { if (!p.owner) SCLPICK.add(p.id); }); renderScl(); };
+  $("#sclnone").onclick = () => { SCLPICK.clear(); renderScl(); };
+  $("#tab-scl").addEventListener("change", e => {
+    const r = e.target.closest("[data-sclrole]"), p = e.target.closest("[data-sclp]");
+    if (r){ r.checked ? SCLROLES.add(r.dataset.sclrole) : SCLROLES.delete(r.dataset.sclrole); renderScl(); }
+    if (p){ p.checked ? SCLPICK.add(p.dataset.sclp) : SCLPICK.delete(p.dataset.sclp); renderScl(); }
+  });
+  $("#sclgo").onclick = async () => {
+    if (SCL?.check) return toast("A check is already running — end it first.", false);
+    const uids = [...SCLPICK].filter(id => { const p = SCL.people.find(x => x.id === id); return p && !p.owner && p.roles.some(r => SCLROLES.has(r)); });
+    if (!uids.length) return toast("Tick at least one person.", false);
+    const hours = Number($("#sclhours").value) || 48;
+    if (!confirm(`DM ${uids.length} staff members?\n\nThey get ${hours} hours to press "I'm still active". Roles covered: ${[...SCLROLES].map(id => sclRole(id).name).join(", ")}.\n\nNobody loses anything until you press "Remove roles" later.`)) return;
+    try{ await bot("/api/admin/staff/check", {uids, roles: [...SCLROLES], hours, extra: $("#sclextra").value.trim()}); await sclSend(); }
+    catch(e){ toast(e.message, false); }
+  };
   async function loadReady(){
     $("#rdbody").innerHTML = `<tr><td colspan="7" class="note">Loading… (checking reactions, queues and logins)</td></tr>`;
     try{ RD = await bot("/api/admin/readiness", {}); }catch(e){ $("#rdbody").innerHTML = `<tr><td colspan="7" class="msg err">${esc(e.message)}</td></tr>`; return; }
