@@ -2368,7 +2368,15 @@ async function web(req, url, env, ctx) {
           const nc = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: cat.name, type: 4, position: cat.position, permission_overwrites: (cat.overwrites || []).map((o) => ({ id: o.id, type: o.type, allow: String(o.allow), deny: String(o.deny) })) }, `Raid restore by ${by}`).catch((e) => { errs.push(cat.name + ": " + e.message); return null; });
           if (!nc) continue; done.push("recreated category " + cat.name);
           for (const id of cat.channels || []) await discord(env, "PATCH", `/channels/${id}`, { parent_id: nc.id }, `Raid restore by ${by}`).catch((e) => errs.push(id + ": " + e.message));
-          if (cat.oldId === L.C.staffCategory || /staff/i.test(cat.name)) cat.isStaff = nc.id;
+          cat.newId = nc.id;
+          if (cat.oldId === L.C.staffCategory || cat.staff) { try { const { D, sha } = await getJSON(env, "config.json"); D.channels = { ...(D.channels || {}), staffCategory: nc.id }; await putJSON(env, "config.json", D, sha, `Staff category recreated after raid (${by})`); done.push("updated staff category in config"); } catch (e) { errs.push("config: " + e.message); } }
+        }
+        if (body.catOrder) { const ids = body.catOrder.map((x) => (body.categories || []).find((c) => c.key === x)?.newId || x).filter(Boolean);
+          await discord(env, "PATCH", `/guilds/${L.guild}/channels`, ids.map((id, k) => ({ id, position: k })), `Raid restore by ${by}`).then(() => done.push("ordered categories"), (e) => errs.push("order: " + e.message)); }
+        for (const rp of body.rolePerms || []) {   // {id, remove: "bits"}
+          const r = (await discord(env, "GET", `/guilds/${L.guild}/roles`)).find((x) => x.id === rp.id); if (!r) { errs.push("no role " + rp.id); continue; }
+          const np = BigInt(r.permissions) & ~BigInt(rp.remove);
+          await discord(env, "PATCH", `/guilds/${L.guild}/roles/${r.id}`, { permissions: String(np) }, `Lockdown after raid (${by})`).then(() => done.push(`trimmed ${r.name} perms`), (e) => errs.push(r.name + ": " + e.message));
         }
         return out({ ok: true, done, errs });
       }
