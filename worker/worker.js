@@ -974,11 +974,11 @@ async function trapSetup(env, L, by) {
   return cfg;
 }
 async function trapHit(env, msg) {
-  const cfg = await kget(env, "trap:cfg"); if (!cfg?.ch || msg.channel_id !== cfg.ch || msg.author?.bot || msg.webhook_id) return;
+  const cfg = await kget(env, "trap:cfg"); if (!cfg?.ch || msg.channel_id !== cfg.ch) return "not trap channel"; if (msg.author?.bot || msg.webhook_id) return "bot/webhook";
   const L = await league(env), uid = msg.author.id;
   const g = await cached("guild:owner", 3600000, () => discord(env, "GET", `/guilds/${L.guild}`)).catch(() => ({}));
   if (uid === g.owner_id || isStaff(env, L, uid, msg.member?.roles || [])) {   // staff testing: just delete it
-    await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {}); return;
+    await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {}); return "staff — deleted only";
   }
   const name = msg.member?.nick || msg.author.global_name || msg.author.username;
   await dm(env, uid, { embeds: [{ title: "You were removed from UFA", color: 0xe8424a, description: `Your account posted in our scam-trap channel, which usually means **your account was hacked** and is spamming scams.\n\nChange your Discord password, turn on 2FA, and log out of all devices. Then message a UFA staff member to get back in.` }] }).catch(() => {});
@@ -1000,7 +1000,7 @@ export class Gateway {
     const u = new URL(req.url);
     if (u.pathname === "/restart") { this.close(); await this.state.storage.delete(["sid", "resume"]); }
     await this.ensure().catch((e) => { this.err = e.message; });
-    return new Response(JSON.stringify({ connected: !!this.ws, lastAck: this.ack, events: this.events, error: this.err, status: GW_STATUS }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ connected: !!this.ws, lastAck: this.ack, events: this.events, guildMsgs: this.gmsg || 0, trapCh: this.trapCh || null, trapSeen: this.trapSeen || null, error: this.err, status: GW_STATUS }), { headers: { "Content-Type": "application/json" } });
   }
   async alarm() { await this.ensure().catch((e) => { this.err = e.message; }); }
   close() { try { this.ws?.close(1000); } catch {} this.ws = null; clearInterval(this.hb); this.hb = null; }
@@ -1035,7 +1035,9 @@ export class Gateway {
       if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
       if (p.t === "THREAD_CREATE" && p.d.newly_created) await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; });
       if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await kget(this.env, "trap:cfg").catch(() => null))?.ch || null; this.trapAt = Date.now(); }
-        if (this.trapCh && p.d.channel_id === this.trapCh) await trapHit(this.env, p.d).catch((e) => { this.err = "trap: " + e.message; }); }
+        this.gmsg = (this.gmsg || 0) + 1;
+        if (this.trapCh && p.d.channel_id === this.trapCh) { this.trapSeen = { ts: Date.now(), author: p.d.author?.username, bot: !!p.d.author?.bot };
+          await trapHit(this.env, p.d).then((r) => { this.trapSeen.result = r || "done"; }, (e) => { this.err = "trap: " + e.message; this.trapSeen.result = "error: " + e.message; }); } }
       if (p.t === "MESSAGE_CREATE" && !p.d.guild_id && !p.d.author?.bot) {
         const seen = (await this.state.storage.get("seen")) || [];
         if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200)); await handleDM(this.env, p.d).catch((e) => { this.err = "dm: " + e.message; }); }
