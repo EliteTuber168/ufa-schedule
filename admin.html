@@ -405,6 +405,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       </section>
       <section class="panel" id="ctrpanel" style="border-color:var(--gold)"><div class="note">Loading counter…</div></section>
       <section class="panel" id="excpanel" style="border-color:var(--red)"></section>
+      <section class="panel" id="trappanel" style="border-color:var(--warn)"></section>
       <div><h2 style="font-size:22px">Quick add</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:8px" id="modpre"></div></div>
       <div><h2 style="font-size:22px">Your rules</h2><div id="modrules" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><div class="note">Loading…</div></div></div>
     </div>
@@ -1832,7 +1833,23 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
     $("#modrules").innerHTML = `<div class="note">Loading…</div>`;
     try{ MOD = await bot("/api/admin/automod"); }catch(e){ $("#modrules").innerHTML = `<div class="msg err">${esc(e.message)}</div>`; $("#modpre").innerHTML = ""; $("#ctrpanel").innerHTML = ""; $("#excpanel").innerHTML = ""; return; }
     try{ [CTR, EXC] = (await Promise.all([bot("/api/admin/counter", {key: "draft"}), bot("/api/admin/counter", {key: "excuse"})])).map(x => x.counter); }catch{ CTR = EXC = null; }
-    renderMod(); renderCtr(); renderExc();
+    renderMod(); renderCtr(); renderExc(); loadTrap();
+  }
+  // scam trap (honeypot channel)
+  async function loadTrap(){
+    const box = $("#trappanel"); let t = null;
+    try{ t = (await bot("/api/admin/trap", {})).trap; }catch(e){ box.innerHTML = `<div class="msg err">${esc(e.message)}</div>`; return; }
+    box.innerHTML = `<div class="row between"><h2>🪤 Scam trap</h2>${t ? `<span class="chip ${t.count ? "red" : ""}">${t.count || 0} caught</span>` : ""}</div>
+      <div class="note">A channel everyone can see and post in, with a big "don't type here" warning. Hacked accounts spamming fake MrBeast / crypto / Nitro giveaways post in every channel, so the moment they post here they're banned and their messages from the last 24h are deleted everywhere. Staff are never banned (their message just gets deleted). Each catch is logged in #trap-log with an <b>Unban</b> button for real people who got hacked.</div>
+      ${t ? `<div class="row" style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center"><span>Channel: <b><a href="https://discord.com/channels/@me" onclick="return false">#🚫│mrbeast</a></b></span>
+        <select id="trapmode"><option value="ban" ${t.mode !== "softban" ? "selected" : ""}>Ban (stays banned until staff unban)</option><option value="softban" ${t.mode === "softban" ? "selected" : ""}>Softban (kick + delete their messages, they can rejoin)</option></select>
+        <button class="btn sm" id="trapfix">Re-check setup</button></div>
+        <div style="margin-top:10px">${(t.hits || []).slice(0, 10).map(h => `<div class="row between" style="padding:4px 0;border-bottom:1px solid var(--line)"><span>${h.ok ? "🔨" : "⚠️"} <b>${esc(h.name)}</b> <span class="note">${h.ok ? (h.mode === "softban" ? "kicked" : "banned") : "couldn't ban"}</span></span><span class="note">${ago(h.ts)}</span></div>`).join("") || `<div class="note">Nobody caught yet.</div>`}</div>`
+      : `<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn red" id="trapgo">🪤 Create the scam trap</button></div>`}`;
+    const go = async b => { b.disabled = true; try{ await bot("/api/admin/trap", {setup: true}); toast("Scam trap is live."); }catch(e){ toast(e.message, false); } loadTrap(); };
+    if ($("#trapgo")) $("#trapgo").onclick = e => go(e.target);
+    if ($("#trapfix")) $("#trapfix").onclick = e => go(e.target);
+    if ($("#trapmode")) $("#trapmode").onchange = async e => { await bot("/api/admin/trap", {mode: e.target.value}); toast("Saved."); };
   }
   // the "when is the draft" counter
   function renderCtr(){
