@@ -2347,6 +2347,31 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/raid/scan") {
+        const al = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?limit=100${body.user ? "&user_id=" + body.user : ""}`);
+        const ent = al.audit_log_entries || [];
+        const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+        const val = (e, k) => (e.changes || []).find((c) => c.key === k)?.old_value;
+        const deletedCats = ent.filter((e) => e.action_type === 12 && val(e, "type") === 4).map((e) => ({ id: e.target_id, name: val(e, "name"), position: val(e, "position"), overwrites: val(e, "permission_overwrites") || [], by: e.user_id }));
+        const timeouts = ent.filter((e) => e.action_type === 24 && (e.changes || []).some((c) => c.key === "communication_disabled_until" && c.new_value)).map((e) => ({ id: e.target_id, by: e.user_id, until: e.changes.find((c) => c.key === "communication_disabled_until").new_value }));
+        return out({ channels: ch.map((c) => ({ id: c.id, name: c.name, type: c.type, parent: c.parent_id || null, position: c.position, synced: null })), deletedCats, timeouts });
+      }
+      if (p === "/api/admin/raid/fix") {
+        const done = [], errs = [], by = staffSig(admin);
+        const ch = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+        if (body.spamPattern) { const re = new RegExp(body.spamPattern, "i");
+          for (const c of ch.filter((c) => re.test(c.name)).slice(0, 40)) await discord(env, "DELETE", `/channels/${c.id}`, null, `Raid cleanup by ${by}`).then(() => done.push("deleted #" + c.name), (e) => errs.push(c.name + ": " + e.message)); }
+        for (const uid of body.untimeout || []) await discord(env, "PATCH", `/guilds/${L.guild}/members/${uid}`, { communication_disabled_until: null }, `Raid cleanup by ${by}`).then(() => done.push("untimed-out " + uid), (e) => errs.push(uid + ": " + e.message));
+        if (body.recruitTags) { const cfg = await kget(env, "recruit:cfg");
+          if (cfg?.ch) await discord(env, "PATCH", `/channels/${cfg.ch}`, { available_tags: RC_TAGS.map((name) => ({ name, moderated: false })) }, `Raid cleanup by ${by}`).then(() => done.push("restored recruitment tags"), (e) => errs.push("tags: " + e.message)); }
+        for (const cat of body.categories || []) {   // {name, position, overwrites, channels:[ids]}
+          const nc = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: cat.name, type: 4, position: cat.position, permission_overwrites: (cat.overwrites || []).map((o) => ({ id: o.id, type: o.type, allow: String(o.allow), deny: String(o.deny) })) }, `Raid restore by ${by}`).catch((e) => { errs.push(cat.name + ": " + e.message); return null; });
+          if (!nc) continue; done.push("recreated category " + cat.name);
+          for (const id of cat.channels || []) await discord(env, "PATCH", `/channels/${id}`, { parent_id: nc.id }, `Raid restore by ${by}`).catch((e) => errs.push(id + ": " + e.message));
+          if (cat.oldId === L.C.staffCategory || /staff/i.test(cat.name)) cat.isStaff = nc.id;
+        }
+        return out({ ok: true, done, errs });
+      }
       if (p === "/api/admin/auditlog") {
         const AN = {1:"server update",10:"channel create",11:"channel update",12:"channel delete",13:"perm overwrite create",14:"perm overwrite update",15:"perm overwrite delete",20:"kick",21:"prune",22:"ban",23:"unban",24:"member update",25:"member roles update",26:"member move",27:"member disconnect",28:"bot add",30:"role create",31:"role update",32:"role delete",40:"invite create",41:"invite update",42:"invite delete",50:"webhook create",51:"webhook update",52:"webhook delete",60:"emoji create",61:"emoji update",62:"emoji delete",72:"message delete",73:"message bulk delete",74:"message pin",75:"message unpin",80:"integration create",82:"integration delete",110:"thread create",111:"thread update",112:"thread delete",140:"automod rule create",141:"automod rule update",142:"automod rule delete",143:"automod block",144:"automod flag",145:"automod timeout"};
         const al = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?limit=100${body.before ? "&before=" + body.before : ""}`);
