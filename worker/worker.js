@@ -36,6 +36,8 @@ export default {
     if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
     if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
     if (m === 17) jobs.push(["autoclose", () => autoCloseTickets(env)]);
+    if (m % 5 === 3) jobs.push(["league", () => leagueTick(env)]);
+    if (m === 41) jobs.push(["contracts", () => contractTick(env)]);
     for (const [job, fn] of jobs) {
       const t0 = Date.now();
       ctx.waitUntil(Promise.resolve().then(fn).then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
@@ -279,9 +281,13 @@ async function logTx(env, L, { title, desc, color, teams = [], lines = [] }) {
 }
 const capLine = (L, n) => `🔋 Roster Cap · \`${n}/${cap(L)}\``;
 const cap = (L) => Number(L.settings.rosterCap) || 25;
-function frozen(L) {
+function frozen(L, kind = "sign") {
   if (L.settings.signingFreeze) return "🧊 Signings and trades are frozen right now.";
   if (["live", "paused"].includes(L.draftStatus)) return "🏈 Signings and trades are paused while the draft is running.";
+  const at = (k) => { const t = Date.parse(L.settings[k] || ""); return isNaN(t) ? 0 : t; }, ts = (t) => `<t:${Math.floor(t / 1000)}:f>`, now = Date.now();
+  if (kind === "trade" && at("tradeDeadline") && now > at("tradeDeadline")) return `⏰ The trade deadline passed (${ts(at("tradeDeadline"))}). No more trades this season.`;
+  if (kind === "sign" && at("signingOpen") && now < at("signingOpen") && !(at("signingClose") && at("signingClose") < at("signingOpen") && now < at("signingClose"))) return `🔒 The signing window opens ${ts(at("signingOpen"))}.`;
+  if (kind === "sign" && at("signingClose") && now > at("signingClose") && !(at("signingOpen") > at("signingClose") && now > at("signingOpen"))) return `🔒 The signing window closed ${ts(at("signingClose"))}.`;
   return null;
 }
 
@@ -348,7 +354,7 @@ const dayTxt = (d) => d === 1 ? "1 day" : d % 7 === 0 && d >= 7 ? (d === 7 ? "1 
 const ctLive = (c) => c && ["pending", "active", "adjusting"].includes(c.status) && c.until > Date.now();
 function ctEmbed(L, c) {
   const t = teamOf(L, c.team) || {};
-  const st = { pending: "⏳ Waiting for staff", active: "✅ Approved", declined: "❌ Declined", adjusting: "✏️ Staff proposed a new length", void: "🚫 Void" }[c.status] || c.status;
+  const st = { pending: "⏳ Waiting for staff", active: "✅ Approved", declined: "❌ Declined", adjusting: "✏️ Staff proposed a new length", void: "🚫 Void", expired: "🏁 Completed" }[c.status] || c.status;
   const fields = [{ name: "Status", value: `${st}${c.decidedByName ? ` · ${c.decidedByName}` : ""}${c.reason ? `\n${c.reason}` : ""}`.slice(0, 1000) }];
   if (c.proposed) fields.push({ name: "Proposed by staff", value: `${dayTxt(c.proposed)}${c.foOk ? " · FO accepted, waiting on player" : " · waiting on FO"}` });
   return { title: `📜 Contract — ${t.name || c.team}`, color: c.status === "active" ? 0x4fd18b : c.status === "declined" || c.status === "void" ? 0xe8424a : colorInt(t.color),
@@ -488,6 +494,7 @@ async function demote(env, L, actor, uid) {
 }
 
 async function proposeTrade(env, L, actor, toAbbr, give, get) {
+  { const f = frozen(L, "trade"); if (f) throw UE(f); }
   if (!can(actor, "trade")) throw UE("Only franchise owners and GMs can trade.");
   const f = frozen(L); if (f) throw UE(f);
   const to = teamOf(L, toAbbr), from = teamOf(L, actor.team);
@@ -1025,6 +1032,258 @@ async function suggestThread(env, t) {
   if (cfg.open && !(t.applied_tags || []).length) await discord(env, "PATCH", `/channels/${t.id}`, { applied_tags: [cfg.open] }).catch(() => {});
 }
 
+// =====================================================================================================
+// game times (#1), signing windows (#6), contract expiry (#7), warnings + mod log + anti-nuke (#8), join panel (#11)
+// =====================================================================================================
+const TZMAP = { et: "America/New_York", est: "America/New_York", edt: "America/New_York", eastern: "America/New_York", ct: "America/Chicago", cst: "America/Chicago", cdt: "America/Chicago", central: "America/Chicago",
+  mt: "America/Denver", mst: "America/Denver", mdt: "America/Denver", pt: "America/Los_Angeles", pst: "America/Los_Angeles", pdt: "America/Los_Angeles", pacific: "America/Los_Angeles", gmt: "UTC", utc: "UTC", bst: "Europe/London", uk: "Europe/London" };
+function tzParts(zone, ms) { return Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short" }).formatToParts(new Date(ms)).map((x) => [x.type, x.value])); }
+function tzOffsetMin(zone, ms) { const p = tzParts(zone, ms); return (Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(ms / 1000) * 1000) / 60000; }
+function zoned(y, mo, d, h, mi, zone) { const g = Date.UTC(y, mo, d, h, mi); let t = g - tzOffsetMin(zone, g) * 60000; const o2 = tzOffsetMin(zone, t); return g - o2 * 60000; }
+/** "sat 8pm est", "tomorrow 7:30pm", "10/12 9pm ct", "tonight 8", a <t:…> timestamp → ms (or throws) */
+function parseWhen(text, now = Date.now()) {
+  let s = String(text || "").toLowerCase().trim(); if (!s) throw UE("Say when, e.g. **sat 8pm est** or **tomorrow 7:30pm ct**.");
+  const dt = /<t:(\d+)(?::\w)?>/.exec(s); if (dt) return +dt[1] * 1000;
+  let zone = TZ; for (const [k, z] of Object.entries(TZMAP)) if (new RegExp(`\\b${k}\\b`).test(s)) { zone = z; s = s.replace(new RegExp(`\\b${k}\\b`), " "); break; }
+  const P = tzParts(zone, now); let y = +P.year, mo = +P.month - 1, d = +P.day, explicit = false;
+  const md = /\b(\d{1,2})\/(\d{1,2})\b/.exec(s); if (md) { mo = +md[1] - 1; d = +md[2]; explicit = true; s = s.replace(md[0], " "); }
+  const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const mn = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/.exec(s); if (mn) { mo = MON.indexOf(mn[1]); d = +mn[2]; explicit = true; s = s.replace(mn[0], " "); }
+  const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"], today = DAYS.indexOf(P.weekday.toLowerCase().slice(0, 3));
+  let addDays = null;
+  if (/\b(tomorrow|tmr|tmrw|tom)\b/.test(s)) addDays = 1; else if (/\b(today|tonight|tn)\b/.test(s)) addDays = 0;
+  const wd = /\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/.exec(s); if (wd && addDays === null && !explicit) addDays = (DAYS.indexOf(wd[1]) - today + 7) % 7;
+  let h, mi = 0;
+  const t1 = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|a|p)\b/.exec(s), t2 = /\b(\d{1,2}):(\d{2})\b/.exec(s), t3 = /\b(\d{1,2})\b/.exec(s);
+  if (t1) { h = +t1[1] % 12 + (t1[3][0] === "p" ? 12 : 0); mi = +(t1[2] || 0); }
+  else if (t2) { h = +t2[1]; mi = +t2[2]; if (h < 12 && h >= 1 && h <= 11) h += 12; }   // "7:30" with no am/pm → evening
+  else if (t3) { h = +t3[1]; if (h >= 1 && h <= 11) h += 12; }
+  else throw UE("Couldn't find a time — try **8pm** or **7:30pm**.");
+  if (h > 23 || mi > 59) throw UE("That time doesn't look right.");
+  let ts = zoned(y, mo, d + (addDays || 0), h, mi, zone);
+  if (!explicit && addDays === null && ts < now) ts = zoned(y, mo, d + 1, h, mi, zone);   // "8pm" already passed today → tomorrow
+  if (explicit && ts < now - 86400000) ts = zoned(y + 1, mo, d, h, mi, zone);
+  return ts;
+}
+const gtLoad = async (env) => (await kget(env, "gametimes")) || {};
+const gtSave = (env, G) => kput(env, "gametimes", G, 120 * 86400);
+const gtKey = (w, g) => `${w.week}-${g.a}-${g.b}`;
+async function gtChannel(env, L) {
+  const c = await kget(env, "gt:ch"); if (c) return c;
+  const ch = (await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => [])).find((x) => x.type === 0 && /schedule-games/.test(bare(x.name)))?.id || L.C.transactions;
+  if (ch) await kput(env, "gt:ch", ch, 30 * 86400); return ch;
+}
+async function myGame(env, team) {
+  const S = await loadSched(env), w = currentWeek(S); if (!w) return null;
+  const g = (w.games || []).find((x) => !x.result && x.a && x.b && (x.a === team || x.b === team)); if (!g) return null;
+  return { w, g, key: gtKey(w, g), opp: g.a === team ? g.b : g.a };
+}
+const gtStamp = (ts) => `<t:${Math.floor(ts / 1000)}:F> (<t:${Math.floor(ts / 1000)}:R>)`;
+function gtEmbed(L, x) {
+  const A = teamOf(L, x.a) || {}, B = teamOf(L, x.b) || {};
+  return { title: `${x.status === "confirmed" ? "✅ Game set" : "📅 Game time proposed"} — Week ${x.week}`, color: x.status === "confirmed" ? 0x4fd18b : 0xffc62f,
+    description: `**${A.name || x.a}** vs **${B.name || x.b}**\n🕒 ${gtStamp(x.ts)}\n${x.status === "confirmed" ? `Agreed by both teams.` : `Proposed by the **${teamOf(L, x.byTeam)?.name}** (${ref(x.by, x.byName)}). The ${teamOf(L, x.byTeam === x.a ? x.b : x.a)?.name} front office can accept or suggest another time.`}` };
+}
+const gtButtons = (x) => x.status === "confirmed" ? [] : [row(btn("✅ Accept", 3, `gta:${x.key}`), btn("🕒 Suggest another time", 2, `gtp:${x.key}`))];
+async function gameTimeCmd(env, L, actor, when) {
+  if (!actor.team) throw UE("You're not on a team.");
+  const mg = await myGame(env, actor.team); if (!mg) throw UE("Your team has no unplayed game this week.");
+  const G = await gtLoad(env), cur = G[mg.key];
+  if (!when) return cur ? `📅 Week ${mg.w.week} vs **${teamOf(L, mg.opp)?.name}** — ${gtStamp(cur.ts)} · ${cur.status === "confirmed" ? "✅ confirmed" : "⏳ waiting for the other team"}` : `📅 Week ${mg.w.week} vs **${teamOf(L, mg.opp)?.name}** — no time set yet. Propose one with **/gametime when:sat 8pm est**`;
+  if (!can(actor, "offer") && !actor.staff) throw UE("Only franchise owners, GMs and head coaches can set game times.");
+  const ts = parseWhen(when);
+  if (ts < Date.now() + 5 * 60000) throw UE("That time is in the past (or too soon).");
+  if (ts > Date.now() + 14 * 86400000) throw UE("Pick a time within the next 2 weeks.");
+  const x = { key: mg.key, week: mg.w.week, a: mg.g.a, b: mg.g.b, ts, status: "proposed", by: actor.id, byName: actor.name, byTeam: actor.team };
+  const ch = await gtChannel(env, L), M = await members(env, L).catch(() => []), oppFo = foOf(L, M, mg.opp);
+  if (cur?.msg) await discord(env, "PATCH", `/channels/${cur.msg.ch}/messages/${cur.msg.id}`, { components: [], content: "~~Replaced by a newer proposal~~" }).catch(() => {});
+  if (ch) { const m = await discord(env, "POST", `/channels/${ch}/messages`, { content: oppFo ? `<@${oppFo.id}> new game time proposal 👇` : undefined, allowed_mentions: { users: oppFo ? [oppFo.id] : [] }, embeds: [gtEmbed(L, x)], components: gtButtons(x) }).catch(() => null); if (m) x.msg = { ch, id: m.id }; }
+  if (oppFo) await dm(env, oppFo.id, { embeds: [gtEmbed(L, x)], components: gtButtons(x) }).catch(() => {});
+  G[mg.key] = x; await gtSave(env, G);
+  return `📅 Proposed ${gtStamp(ts)} vs the **${teamOf(L, mg.opp)?.name}**. Their front office can accept or suggest another time.`;
+}
+async function gtComponent(i, env, ctx, kind, key) {
+  const L = await league(env), G = await gtLoad(env), x = G[key];
+  if (!x) return reply("That game time isn't active anymore.", true);
+  if (x.status === "confirmed") return reply("This game is already set.", true);
+  const uid = uidOf(i), M = await members(env, L).catch(() => []), m = M.find((y) => y.user.id === uid), me = m ? info(L, m) : null;
+  const other = x.byTeam === x.a ? x.b : x.a, staff = isStaff(env, L, uid, i.member?.roles || m?.roles || [], i.member?.permissions);
+  if (!staff && !(me?.team === other && ["fo", "gm", "hc"].includes(me.rank))) return reply(`Only the ${teamOf(L, other)?.name} front office (or staff) can answer this.`, true);
+  if (kind === "gtp") return json({ type: 9, data: { custom_id: `gtpm:${key}`, title: "Suggest another time", components: [row({ type: 4, custom_id: "when", style: 1, label: "When? (e.g. sun 7pm est, tomorrow 8:30pm ct)", min_length: 2, max_length: 60, required: true })] } });
+  x.status = "confirmed"; x.rem = 0; x.confirmedBy = uid; await gtSave(env, G);
+  ctx.waitUntil((async () => {
+    if (x.msg) await discord(env, "PATCH", `/channels/${x.msg.ch}/messages/${x.msg.id}`, { content: "", embeds: [gtEmbed(L, x)], components: [] }).catch(() => {});
+    const A = teamOf(L, x.a), B = teamOf(L, x.b), ch = await gtChannel(env, L);
+    if (ch) await discord(env, "POST", `/channels/${ch}/messages`, { content: `${A?.roleId ? `<@&${A.roleId}>` : A?.name} vs ${B?.roleId ? `<@&${B.roleId}>` : B?.name} — **Week ${x.week} is set for ${gtStamp(x.ts)}** 🏈`, allowed_mentions: { roles: [A?.roleId, B?.roleId].filter(Boolean) } }).catch(() => {});
+    await notify(env, L, x.by, x.byTeam, `✅ The ${teamOf(L, other)?.name} accepted — Week ${x.week} is set for ${gtStamp(x.ts)}.`).catch(() => {});
+  })());
+  return i.guild_id ? json({ type: 7, data: { content: "", embeds: [gtEmbed(L, x)], components: [] } }) : json({ type: 7, data: { embeds: [gtEmbed(L, x)], components: [], content: "✅ Accepted." } });
+}
+async function gtModal(i, env, ctx, key) {
+  const L = await league(env), G = await gtLoad(env), x = G[key]; if (!x || x.status === "confirmed") return reply("That game time isn't active anymore.", true);
+  const uid = uidOf(i), M = await members(env, L).catch(() => []), m = M.find((y) => y.user.id === uid), me = m ? info(L, m) : { name: "Staff" };
+  let ts; try { ts = parseWhen(i.data.components[0].components[0].value); } catch (e) { return reply("⚠️ " + e.message, true); }
+  if (ts < Date.now() + 5 * 60000 || ts > Date.now() + 14 * 86400000) return reply("Pick a time in the next 2 weeks.", true);
+  const other = x.byTeam === x.a ? x.b : x.a;
+  Object.assign(x, { ts, by: uid, byName: me.name, byTeam: me.team === x.a || me.team === x.b ? me.team : other, status: "proposed" });
+  await gtSave(env, G);
+  ctx.waitUntil((async () => {
+    if (x.msg) await discord(env, "PATCH", `/channels/${x.msg.ch}/messages/${x.msg.id}`, { content: "", embeds: [gtEmbed(L, x)], components: gtButtons(x) }).catch(() => {});
+    const back = x.byTeam === x.a ? x.b : x.a, fo = foOf(L, M, back);
+    if (fo) await dm(env, fo.id, { content: `🕒 The ${teamOf(L, x.byTeam)?.name} suggested a different time:`, embeds: [gtEmbed(L, x)], components: gtButtons(x) }).catch(() => {});
+  })());
+  return reply(`🕒 Suggested ${gtStamp(ts)} — the other team can accept it.`, true);
+}
+/** every 5 min: 30-min reminders, staff flag for unscheduled games, signing-window announcements */
+async function leagueTick(env) {
+  const L = await league(env), G = await gtLoad(env), now = Date.now(); let dirty = false;
+  const ch = await gtChannel(env, L).catch(() => null);
+  for (const [k, x] of Object.entries(G)) {
+    if (k.startsWith("_")) continue;
+    if (x.ts < now - 14 * 86400000) { delete G[k]; dirty = true; continue; }
+    if (x.status === "confirmed" && !x.rem && x.ts - now <= 35 * 60000 && x.ts > now - 20 * 60000 && ch) {
+      const A = teamOf(L, x.a), B = teamOf(L, x.b);
+      await discord(env, "POST", `/channels/${ch}/messages`, { content: `⏰ ${A?.roleId ? `<@&${A.roleId}>` : A?.name} vs ${B?.roleId ? `<@&${B.roleId}>` : B?.name} — **Week ${x.week} kicks off <t:${Math.floor(x.ts / 1000)}:R>!** Get in the game 🏈`, allowed_mentions: { roles: [A?.roleId, B?.roleId].filter(Boolean) } }).catch(() => {});
+      x.rem = now; dirty = true;
+    }
+  }
+  // unscheduled games: flag to staff once a day, starting the day before the week's deadline
+  const S = await loadSched(env), w = currentWeek(S), today = todayISO();
+  if (w?.deadline && L.C.staffChat) {
+    const dayBefore = new Date(Date.parse(w.deadline + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+    G._flag = G._flag || {};
+    if (today >= dayBefore && G._flag[w.week] !== today) {
+      const open = (w.games || []).filter((g) => g.a && g.b && !g.result && G[gtKey(w, g)]?.status !== "confirmed");
+      if (open.length) await discord(env, "POST", `/channels/${L.C.staffChat}/messages`, { embeds: [{ title: `⚠️ Week ${w.week}: ${open.length} game${open.length === 1 ? "" : "s"} still not scheduled`, color: 0xffa24a,
+        description: open.map((g) => `• **${teamOf(L, g.a)?.name || g.a}** vs **${teamOf(L, g.b)?.name || g.b}**${G[gtKey(w, g)] ? " — proposed, not accepted" : " — no time proposed"}`).join("\n") + `\nDeadline: ${niceDate(w.deadline)}` }] }).catch(() => {});
+      G._flag[w.week] = today; dirty = true;
+    }
+  }
+  if (dirty) await gtSave(env, G);
+  // signing / trade windows
+  const done = (await kget(env, "windows:done")) || {}; let wd = false;
+  const at = (k) => { const t = Date.parse(L.settings[k] || ""); return isNaN(t) ? 0 : t; };
+  const EV = [["tradeDeadline", "⏰ **The trade deadline has passed.** Trades are closed for the rest of the season.", "⏳ **Trade deadline in 24 hours** — <t:%s:F>. Get your deals in!"],
+    ["signingClose", "🔒 **The signing window is now closed.** No more signings until it reopens.", "⏳ **The signing window closes in 24 hours** — <t:%s:F>."],
+    ["signingOpen", "🔓 **The signing window is open!** FOs can send offers again.", "⏳ **The signing window opens in 24 hours** — <t:%s:F>."]];
+  const annCh = L.C.transactions;
+  for (const [k, msgNow, msgSoon] of EV) {
+    const t = at(k); if (!t || !annCh) continue;
+    if (now >= t && now - t < 2 * 86400000 && done[k] !== t) { await discord(env, "POST", `/channels/${annCh}/messages`, { embeds: [{ description: msgNow, color: 0xe8424a }] }).catch(() => {}); done[k] = t; wd = true; }
+    else if (t - now <= 86400000 && t > now && done[k + ":soon"] !== t) { await discord(env, "POST", `/channels/${annCh}/messages`, { embeds: [{ description: msgSoon.replace("%s", Math.floor(t / 1000)), color: 0xffc62f }] }).catch(() => {}); done[k + ":soon"] = t; wd = true; }
+  }
+  if (wd) await kput(env, "windows:done", done, 3650 * 86400);
+}
+/** hourly: contract ending soon / finished */
+async function contractTick(env) {
+  const ks = (await klist(env, "contract:")).filter((k) => k.metadata?.status === "active" || k.metadata?.status === "pending");
+  if (!ks.length) return;
+  const L = await league(env), now = Date.now();
+  for (const k of ks) {
+    const c = await kget(env, k.name); if (!c || !["active", "pending"].includes(c.status)) continue;
+    const t = teamOf(L, c.team)?.name || c.team;
+    if (c.until <= now && c.status === "active") {
+      c.status = "expired"; await ctSave(env, c); await ctUpdateMsg(env, L, c);
+      await dm(env, c.uid, `🏁 Your contract with the **${t}** is complete. You're free to stay — or /demand if you want to move on.`).catch(() => {});
+      await notify(env, L, c.by, c.team, `🏁 **${c.name}**'s contract with the ${t} has ended. They can now demand freely.`).catch(() => {});
+    } else if (c.until - now <= 86400000 && c.until > now && !c.warned && c.status === "active") {
+      c.warned = now; await ctSave(env, c);
+      await dm(env, c.uid, `📜 Heads up: your contract with the **${t}** ends <t:${Math.floor(c.until / 1000)}:R>.`).catch(() => {});
+      await notify(env, L, c.by, c.team, `📜 **${c.name}**'s contract ends <t:${Math.floor(c.until / 1000)}:R>. Talk to them if you want them to stay.`).catch(() => {});
+    }
+  }
+}
+
+// ---------- warnings + mod log ----------
+async function modLogCh(env, L) {
+  const c = await kget(env, "modlog:cfg"); if (c?.ch) return c.ch;
+  const ch = await hiddenLogChannel(env, L, "bot", "📕│mod-log", "Bans, kicks, timeouts, warnings, staff-role and permission changes.");
+  await kput(env, "modlog:cfg", { ch }, 3650 * 86400); return ch;
+}
+async function modLog(env, L, embed, content) { const ch = await modLogCh(env, L).catch(() => null); if (ch) await discord(env, "POST", `/channels/${ch}/messages`, { ...(content ? { content } : {}), embeds: [embed], allowed_mentions: content ? { users: [...content.matchAll(/<@(\d+)>/g)].map((x) => x[1]) } : { parse: [] } }).catch(() => {}); }
+async function warnCommand(i, env, cmd) {
+  const L = await league(env), uid = uidOf(i), o = i.data.options;
+  if (!isStaff(env, L, uid, i.member?.roles || [], i.member?.permissions)) return "Only staff can use this.";
+  const target = opt(o, "user"), tu = i.data.resolved?.users?.[target], tname = i.data.resolved?.members?.[target]?.nick || tu?.global_name || tu?.username || target;
+  const by = i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || "Staff";
+  const W = (await kget(env, `warn:${target}`)) || { list: [] }, active = () => W.list.filter((w) => w.ts > Date.now() - 30 * 86400000);
+  if (cmd === "warnings") return W.list.length ? { embeds: [{ title: `⚠️ Warnings — ${tname}`, color: 0xffa24a, description: W.list.slice(-15).map((w, k) => `**#${w.n}** <t:${Math.floor(w.ts / 1000)}:d> by ${w.byName}${w.ts > Date.now() - 30 * 86400000 ? "" : " *(expired)*"}\n> ${w.reason}`).join("\n"), footer: { text: `${active().length} active (last 30 days) · 3 active = 24h timeout, 6 = 7 days` } }] } : `✅ **${tname}** has no warnings.`;
+  if (cmd === "unwarn") {
+    const n = opt(o, "number"), idx = n ? W.list.findIndex((w) => w.n === n) : W.list.length - 1;
+    if (idx < 0) return "No warning with that number.";
+    const [rm] = W.list.splice(idx, 1); await kput(env, `warn:${target}`, W, 365 * 86400);
+    await modLog(env, L, { description: `↩️ ${by} removed warning #${rm.n} from <@${target}> (${rm.reason})`, color: 0x4fd18b, timestamp: new Date().toISOString() });
+    return `↩️ Removed warning #${rm.n} from **${tname}**. They now have ${active().length} active.`;
+  }
+  const reason = String(opt(o, "reason") || "").slice(0, 400), n = (W.list.reduce((a, w) => Math.max(a, w.n), 0) || 0) + 1;
+  W.list.push({ n, ts: Date.now(), by: uid, byName: by, reason }); W.list = W.list.slice(-50); await kput(env, `warn:${target}`, W, 365 * 86400);
+  const cnt = active().length, strike = cnt % 3 === 0;
+  let extra = "";
+  if (strike) {
+    const hours = cnt >= 6 ? 168 : 24, until = new Date(Date.now() + hours * 3600000).toISOString();
+    const ok = await discord(env, "PATCH", `/guilds/${L.guild}/members/${target}`, { communication_disabled_until: until }, `${cnt} warnings (auto)`).then(() => true, () => false);
+    extra = ok ? ` They hit **${cnt} warnings** and were timed out for **${hours === 24 ? "24 hours" : "7 days"}**.` : ` They hit ${cnt} warnings but the bot couldn't time them out (role above the bot).`;
+    const sus = (await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => [])).find((c) => c.type === 0 && /^suspended/.test(bare(c.name)));
+    if (ok && sus) await discord(env, "POST", `/channels/${sus.id}/messages`, { embeds: [{ title: "⛔ Suspended", color: 0xe8424a, description: `<@${target}> — timed out for **${hours === 24 ? "24 hours" : "7 days"}** (${cnt} warnings in 30 days).\nEnds <t:${Math.floor(Date.parse(until) / 1000)}:R>.` }], allowed_mentions: { parse: [] } }).catch(() => {});
+  }
+  await dm(env, target, { embeds: [{ title: "⚠️ You received a warning in UFA", color: 0xffa24a, description: `**Reason:** ${reason}\n\nYou have **${cnt}** active warning${cnt === 1 ? "" : "s"} (they expire after 30 days). 3 active warnings = 24-hour timeout, 6 = 7 days.${strike ? `\n\n⛔ You've been timed out.` : ""}` }] }).catch(() => {});
+  await modLog(env, L, { author: { name: `⚠️ Warning #${n} · ${tname}` }, description: `<@${target}> warned by ${by}\n**Reason:** ${reason}\nActive warnings: **${cnt}**${extra ? "\n" + extra.trim() : ""}`, color: 0xffa24a, timestamp: new Date().toISOString() });
+  return `⚠️ Warned **${tname}** (${cnt} active).${extra}`;
+}
+const AUD = { 20: "👢 Kick", 22: "🔨 Ban", 23: "♻️ Unban", 12: "🗑️ Channel deleted", 32: "🗑️ Role deleted", 28: "🤖 Bot added", 50: "🪝 Webhook created", 31: "🛠️ Role permissions changed" };
+/** gateway GUILD_AUDIT_LOG_ENTRY_CREATE → mod log */
+async function modAudit(env, e) {
+  const L = await league(env), me = await cached("me", 3600000, () => discord(env, "GET", "/users/@me")).catch(() => ({}));
+  const t = e.action_type, ch = (k) => (e.changes || []).find((c) => c.key === k);
+  let title = AUD[t], desc = "";
+  if (t === 24) { const c = ch("communication_disabled_until"); if (!c) return; title = c.new_value ? "🔇 Timeout" : "🔊 Timeout removed"; desc = c.new_value ? `until <t:${Math.floor(Date.parse(c.new_value) / 1000)}:f>` : ""; }
+  else if (t === 25) {
+    if (e.user_id === me.id) return;   // the bot's own role changes (signings etc.)
+    const skip = new Set([L.R.fo, L.R.gm, L.R.hc, L.R.fa, L.R.draftable, ...L.teams.map((x) => x.roleId)].filter(Boolean));
+    const roles = await cached("roles", 600000, () => discord(env, "GET", `/guilds/${L.guild}/roles`)).catch(() => []);
+    const big = (r) => !skip.has(r.id) && (STAFFY.test(r.name) || (BigInt(roles.find((x) => x.id === r.id)?.permissions || 0) & ELEV) !== 0n);
+    const add = (ch("$add")?.new_value || []).filter(big), rem = (ch("$remove")?.new_value || []).filter(big);
+    if (!add.length && !rem.length) return;
+    title = "🛡️ Staff role change"; desc = [add.length ? `➕ ${add.map((r) => r.name).join(", ")}` : "", rem.length ? `➖ ${rem.map((r) => r.name).join(", ")}` : ""].filter(Boolean).join("\n");
+  } else if (t === 31) { if (!ch("permissions")) return; desc = `Role <@&${e.target_id}>`; }
+  else if (t === 12) desc = `#${ch("name")?.old_value || e.target_id}`;
+  else if (t === 32) desc = ch("name")?.old_value || e.target_id;
+  if (!title) return;
+  const target = [20, 22, 23, 24, 25, 28].includes(t) ? `<@${e.target_id}>` : "";
+  await modLog(env, L, { author: { name: title }, description: [`${target ? target + " · " : ""}by <@${e.user_id}>`, desc, e.reason ? `Reason: ${e.reason}` : ""].filter(Boolean).join("\n"), color: [22, 20, 12, 32].includes(t) ? 0xe8424a : 0x3d7bff, timestamp: new Date().toISOString() });
+}
+/** someone did too many destructive things too fast → strip their roles (anything the bot can) and alert */
+async function antiNuke(env, uid, what) {
+  const L = await league(env), g = await cached("guild:owner", 3600000, () => discord(env, "GET", `/guilds/${L.guild}`)).catch(() => ({}));
+  const me = await cached("me", 3600000, () => discord(env, "GET", "/users/@me")).catch(() => ({}));
+  if (uid === g.owner_id || uid === me.id) return;
+  const [roles, m, botM] = await Promise.all([discord(env, "GET", `/guilds/${L.guild}/roles`), discord(env, "GET", `/guilds/${L.guild}/members/${uid}`).catch(() => null), discord(env, "GET", `/guilds/${L.guild}/members/${me.id}`).catch(() => null)]);
+  if (!m) return;
+  const pos = (id) => roles.find((r) => r.id === id)?.position || 0, top = Math.max(0, ...(botM?.roles || []).map(pos));
+  const keep = (m.roles || []).filter((r) => pos(r) >= top), gone = (m.roles || []).filter((r) => pos(r) < top);
+  const ok = await discord(env, "PATCH", `/guilds/${L.guild}/members/${uid}`, { roles: keep }, `Anti-nuke: ${what}`).then(() => true, () => false);
+  await modLog(env, L, { title: "🚨 ANTI-NUKE TRIGGERED", color: 0xe8424a, description: `<@${uid}> did **${what}** in under a minute.\n${ok ? `Removed ${gone.length} role(s) from them: ${gone.map((r) => `<@&${r}>`).join(" ") || "none"}` : "⚠️ Couldn't remove their roles — their top role is above the bot. **Remove them manually now.**"}`, timestamp: new Date().toISOString() }, g.owner_id ? `<@${g.owner_id}>` : undefined);
+  if (g.owner_id) await dm(env, g.owner_id, `🚨 **Anti-nuke:** <@${uid}> did ${what} in under a minute. ${ok ? "Their roles were stripped." : "The bot couldn't strip their roles — remove them now!"} Check #mod-log.`).catch(() => {});
+}
+
+// ---------- join panel: pick positions → Free Agent + player pool ----------
+const POS_OPTS = ["QB", "RB", "WR", "TE", "OL", "DE", "LB", "CB", "S", "K/P"];
+const joinSelect = () => row({ type: 3, custom_id: "joinpos", placeholder: "Pick your positions (up to 4)", min_values: 1, max_values: 4, options: POS_OPTS.map((p) => ({ label: p, value: p })) });
+async function joinPanel(env, L) {
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+  const ch = chans.find((c) => c.type === 0 && /^free-agents?$/.test(bare(c.name))) || chans.find((c) => c.type === 0 && /^welcome$/.test(bare(c.name)));
+  if (!ch) throw UE("Couldn't find a #free-agents or #welcome channel.");
+  const m = await discord(env, "POST", `/channels/${ch.id}/messages`, { embeds: [{ title: "🏈 Join the league", color: 0xffc62f, description: "Want to play in UFA? **Pick your positions below** and you'll get the **Free Agent** role and show up in the player pool, where franchise owners look for players.\n\nYou can pick again any time to change your positions." }], components: [joinSelect()] });
+  await discord(env, "PUT", `/channels/${ch.id}/pins/${m.id}`).catch(() => {});
+  await kput(env, "join:cfg", { ch: ch.id, msg: m.id, on: true }, 3650 * 86400);
+  return { channel: ch.id, name: ch.name };
+}
+async function joinWelcome(env, d) {
+  const cfg = await kget(env, "join:cfg"); if (!cfg?.on || d.user?.bot) return;
+  const L = await league(env);
+  await dm(env, d.user.id, { embeds: [{ title: "👋 Welcome to UFA!", color: 0xffc62f, description: `Glad you're here, **${d.user.global_name || d.user.username}**.\n\nWant to play? **Pick your positions below** to become a free agent — franchise owners will see you in the player pool and can send you offers.\n\nQuestions? Just DM me and staff will help.` }], components: [joinSelect()] }).catch(() => {});
+}
+
 const GW_STATUS = "📩 DM me for help";
 const GW_NAME = "gw3";   // fallback when the version binding is missing
 // each deploy gets its own gateway instance (a running Durable Object keeps its old code), older ones see "gw:current" change and shut down
@@ -1072,7 +1331,7 @@ export class Gateway {
       const sid = await this.state.storage.get("sid"), seq = this.seq ?? await this.state.storage.get("seq");
       const presence = { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] };
       if (sid && seq) this.send(ws, 6, { token: this.env.DISCORD_BOT_TOKEN, session_id: sid, seq });
-      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: (1 << 12) | (1 << 9) | 1, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
+      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: (1 << 12) | (1 << 9) | (1 << 2) | (1 << 1) | 1, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
     } else if (p.op === 11) this.ack = Date.now();
     else if (p.op === 1) this.send(ws, 1, this.seq);
     else if (p.op === 7) { this.close(); }
@@ -1081,6 +1340,14 @@ export class Gateway {
       this.ack = Date.now(); this.events++;
       if (p.t === "READY") await this.state.storage.put({ sid: p.d.session_id, resume: p.d.resume_gateway_url });
       if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
+      if (p.t === "GUILD_MEMBER_ADD") await joinWelcome(this.env, p.d).catch((e) => { this.err = "join: " + e.message; });
+      if (p.t === "GUILD_AUDIT_LOG_ENTRY_CREATE") {
+        const e = p.d; await modAudit(this.env, e).catch((x) => { this.err = "audit: " + x.message; });
+        if ([12, 20, 22, 32].includes(e.action_type) && e.user_id) {   // channel delete / kick / ban / role delete
+          const n = (this.nuke = this.nuke || {}), now = Date.now(); n[e.user_id] = [...(n[e.user_id] || []).filter((t) => now - t < 60000), now];
+          if (n[e.user_id].length === 4) await antiNuke(this.env, e.user_id, "4+ channel/role deletes, kicks or bans").catch((x) => { this.err = "nuke: " + x.message; });
+        }
+      }
       if (p.t === "THREAD_CREATE" && p.d.newly_created) { await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; }); await suggestThread(this.env, p.d).catch((e) => { this.err = "suggest: " + e.message; }); }
       if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await kget(this.env, "trap:cfg").catch(() => null))?.ch || null; this.trapAt = Date.now(); }
         this.gmsg = (this.gmsg || 0) + 1;
@@ -2089,6 +2356,8 @@ async function command(i, env, ctx) {
     case "vote": if (sub?.name === "create") return await voteCreate(i, sub, env); break;
     case "offer": return later(i, ctx, async () => { const L = await league(env); return (await makeOffer(env, L, await actorFromInteraction(env, L, i), opt(o, "player"), opt(o, "contract_days"))).text; });
     case "offers": return later(i, ctx, () => myOffers(i, env));
+    case "gametime": return later(i, ctx, async () => { const L = await league(env); return gameTimeCmd(env, L, await actorFromInteraction(env, L, i), opt(o, "when")); });
+    case "warn": case "warnings": case "unwarn": return later(i, ctx, () => warnCommand(i, env, cmd));
     case "release": return later(i, ctx, async () => { const L = await league(env); return releasePlayer(env, L, await actorFromInteraction(env, L, i), opt(o, "player")); });
     case "demand": return later(i, ctx, async () => { const L = await league(env); return demand(env, L, await actorFromInteraction(env, L, i), opt(o, "reason")); });
     case "promote": return later(i, ctx, async () => { const L = await league(env); return promote(env, L, await actorFromInteraction(env, L, i), opt(o, "player"), opt(o, "role"), opt(o, "reason")); });
@@ -2129,6 +2398,13 @@ async function component(i, env, ctx) {
       fields: [{ name: kind === "sc" ? "✅ You're staying on staff" : "👋 You stepped down", value: kind === "sc" ? "Thanks! Nothing else to do." : "Your staff roles are being removed. Thanks for your time!" }] }] } });
   }
   if (["cta", "ctd", "ctj", "cfa", "cfd", "cpa", "cpd"].includes(kind)) return contractComponent(i, env, ctx, kind, id, k);
+  if (kind === "gta" || kind === "gtp") return gtComponent(i, env, ctx, kind, id);
+  if (kind === "joinpos") return later(i, ctx, async () => {
+    const L = await league(env), uid = uidOf(i);
+    const m = i.member || await discord(env, "GET", `/guilds/${L.guild}/members/${uid}`).catch(() => null);
+    if (!m) return "You need to be in the UFA server to join.";
+    return joinPool(env, m, L.guild, (i.data.values || []).filter((p) => POS_OPTS.includes(p)));
+  }, true);
   if (kind === "trapub") {
     const L = await league(env);
     if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
@@ -2167,6 +2443,7 @@ async function component(i, env, ctx) {
 async function modalSubmit(i, env, ctx) {
   const [kind, id, ad] = String(i.data.custom_id || "").split(":");
   if (kind === "ctdm" || kind === "ctjm") return contractModal(i, env, ctx, kind, id, ad);
+  if (kind === "gtpm") return gtModal(i, env, ctx, id);
   if (kind === "rpm") return later(i, ctx, async () => {
     const text = i.data.components?.[0]?.components?.[0]?.value || "", log = id ? await kget(env, `dmlog:${id}`) : null;
     await fileTicket(env, uidOf(i), text, { about: log?.title || "", user: i.user || i.member?.user, viaButton: true });
@@ -2332,7 +2609,8 @@ async function schedule(i, env) {
   }
   const w = currentWeek(S);
   if (!w) return reply(`No upcoming week is scheduled yet. ${SITE}`);
-  const line = (g) => `🏈 **${N[g.a] || g.a}** vs **${N[g.b] || g.b}**${g.result ? " — " + g.result : ""}`;
+  const G = await gtLoad(env);
+  const line = (g) => { const x = G[gtKey(w, g)]; return `🏈 **${N[g.a] || g.a}** vs **${N[g.b] || g.b}**${g.result ? " — " + g.result : x ? ` · <t:${Math.floor(x.ts / 1000)}:f>${x.status === "confirmed" ? "" : " (proposed)"}` : ""}`; };
   const reg = w.games.filter((g) => !g.catchup && g.a && g.b), cu = w.games.filter((g) => g.catchup && g.a && g.b);
   return reply([`📅 **Week ${w.week}**${w.deadline ? ` — deadline ${niceDate(w.deadline)}` : ""}`, ...reg.map(line),
     ...(cu.length ? ["**Catch-up games**", ...cu.map(line)] : []), SITE].join("\n"));
@@ -2359,9 +2637,12 @@ async function faList(sub, env) {
 }
 
 async function faJoin(i, sub, env) {
-  const m = i.member, uid = m.user.id, gid = i.guild_id;
   const raw = String(opt(sub.options, "positions") || ""), pos = parsePos(raw);
   if (!pos.length) return `Couldn't read any positions from "${raw}". Try something like **WR/CB** or **QB, LB**.`;
+  return joinPool(env, i.member, i.guild_id, pos);
+}
+async function joinPool(env, m, gid, pos) {
+  const uid = m.user.id;
   const L = await league(env);
   for (let attempt = 0; attempt < 3; attempt++) {
     const { D, sha } = await loadDraft(env), H = helpers(D);
@@ -2380,7 +2661,7 @@ async function faJoin(i, sub, env) {
     for (const x of pos) if (!D.positions.includes(x)) D.positions.push(x);
     try { await putJSON(env, "draft.json", D, sha, `Free agent sign-up: ${p.name} (${pos.join("/")})`); }
     catch (e) { if (e.status === 409 || e.status === 422) continue; throw e; }
-    return `✅ You're in the player pool as **${p.name}** (${pos.join("/")}). FOs can find you on the board: ${BOARD}#/players\nChange positions any time by running **/fa join** again.`;
+    return `✅ You're in the player pool as **${p.name}** (${pos.join("/")}). FOs can find you on the board: ${BOARD}#/players\nChange positions any time by picking again or running **/fa join**.`;
   }
   return "⚠️ Busy right now — try again.";
 }
@@ -2595,6 +2876,9 @@ async function web(req, url, env, ctx) {
         const joins = M.filter((m) => Date.parse(m.joined_at) > Date.now() - 6 * 3600000).map((m) => ({ id: m.user.id, name: display(m), joined: Date.parse(m.joined_at), created: Number((BigInt(m.user.id) >> 22n) + 1420070400000n), roles: (m.roles || []).length })).sort((a, b) => b.joined - a.joined);
         return out({ entries, joins });
       }
+      if (p === "/api/admin/join/setup") return out({ ok: true, ...(await joinPanel(env, L)) });
+      if (p === "/api/admin/modlog/setup") return out({ ok: true, channel: await modLogCh(env, L) });
+      if (p === "/api/admin/gametimes") return out({ games: await gtLoad(env) });
       if (p === "/api/admin/suggest/setup") return out({ ok: true, ...(await suggestSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/trap") {
         if (body.setup) { const c = await trapSetup(env, L, staffSig(admin)); return out({ ok: true, trap: c }); }
@@ -2786,7 +3070,9 @@ async function web(req, url, env, ctx) {
       const offers = [], reqs = [];
       for (const k of await klist(env, "offer:")) if (k.metadata?.team === abbr && k.metadata?.status === "pending" && k.metadata.exp > Date.now()) offers.push(await kget(env, k.name));
       for (const k of await klist(env, "req:")) if ((k.metadata?.team === abbr || k.metadata?.to === abbr) && ["staff", "other"].includes(k.metadata?.status)) reqs.push(await kget(env, k.name));
-      return out({ team: teamOf(L, abbr), roster: rosterOf(L, M, abbr), offers: offers.filter(Boolean), requests: reqs.filter(Boolean).map((r) => ({ ...r, text: plain(L, r) })) });
+      const R = rosterOf(L, M, abbr), contracts = {};
+      for (const k of await klist(env, "contract:")) if (k.metadata?.team === abbr && ["active", "pending", "adjusting"].includes(k.metadata?.status) && k.metadata.until > Date.now() && R.some((p) => "contract:" + p.id === k.name)) contracts[k.name.slice(9)] = { until: k.metadata.until, status: k.metadata.status };
+      return out({ team: teamOf(L, abbr), roster: R, contracts, offers: offers.filter(Boolean), requests: reqs.filter(Boolean).map((r) => ({ ...r, text: plain(L, r) })) });
     }
     if (p === "/api/players") return out({ players: M.map((m) => info(L, m)) });
     if (p === "/api/queue") {
