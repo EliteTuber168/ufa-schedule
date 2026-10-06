@@ -814,6 +814,59 @@ async function handleDM(env, msg) {
     description: "📨 Got it — your message was sent to UFA Staff. Keep typing here if you have more to add; we'll reply in this DM.", color: 0x3d7bff }] }).catch(() => {});
 }
 
+// ---------- FO recruitment forum: one post per team, links allowed ----------
+const RC_TAGS = ["QB", "RB", "WR", "TE", "OL", "DE", "LB", "CB", "S", "K/P", "Any position", "Need GM / HC"];
+async function recruitSetup(env, L, by) {
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+  let f = chans.find((c) => c.type === 15 && /recruit/i.test(c.name));
+  const P = { VIEW: 1024n, SEND: 2048n, EMBED: 16384n, ATTACH: 32768n, HISTORY: 65536n, REACT: 64n, MANAGE_MSG: 8192n, MANAGE_THREADS: 1n << 34n, THREAD_SEND: 1n << 38n };
+  const fo = String(P.SEND | P.EMBED | P.ATTACH | P.THREAD_SEND | P.HISTORY | P.REACT);
+  const overwrites = [{ id: L.guild, type: 0, allow: String(P.THREAD_SEND | P.REACT), deny: String(P.SEND) },
+    ...[L.R.fo, L.R.gm, L.R.hc].filter(Boolean).map((id) => ({ id, type: 0, allow: fo })),
+    ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: String(BigInt(fo) | P.MANAGE_MSG | P.MANAGE_THREADS) }] : [])];
+  const topic = "📣 Franchise owners: make ONE post for your team and keep adding new ads inside it (the bot removes extra posts). Links are allowed here. Players: reply in a team's post if you're interested.";
+  if (!f) {
+    const cat = chans.find((c) => c.type === 4 && /member/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
+    f = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "📣│fo-recruitment", type: 15, topic, ...(cat ? { parent_id: cat.id } : {}),
+      permission_overwrites: overwrites, available_tags: RC_TAGS.map((name) => ({ name, moderated: false })), default_reaction_emoji: { emoji_name: "🔥" },
+      default_sort_order: 0, default_forum_layout: 1, rate_limit_per_user: 21600 }, `FO recruitment forum by ${by}`)
+      .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels to create the forum.") : e; });
+    // pinned how-to post
+    const th = await discord(env, "POST", `/channels/${f.id}/threads`, { name: "📌 How recruitment works — read first", message: { embeds: [{ title: "📣 FO Recruitment", color: 0xffc62f, description: [
+      "**Franchise owners / GMs / HCs**", "• Make **one post for your team** — the bot puts your team name on it.", "• Keep posting new ads **inside your team's post** instead of making new ones (extra posts get removed and you get a link to your post).", "• Tag the positions you need. Links (Discord invites, Roblox, etc.) are allowed in here.",
+      "", "**Players**", "• Reply in a team's post if you want to play for them, or DM the FO.", "• Use the tags at the top to filter by position.", "", "Keep it clean — normal server rules still apply."].join("\n") }] } }).catch(() => null);
+    if (th) await discord(env, "PATCH", `/channels/${th.id}`, { flags: 2, locked: true }).catch(() => {});
+  } else await discord(env, "PATCH", `/channels/${f.id}`, { permission_overwrites: overwrites, topic }).catch(() => {});
+  // let links through the invite-link AutoMod rule in this forum
+  let exempted = [];
+  const rules = await discord(env, "GET", `/guilds/${L.guild}/auto-moderation/rules`).catch(() => []);
+  for (const r of rules) {
+    const kw = (r.trigger_metadata?.keyword_filter || []).join(" ") + " " + (r.trigger_metadata?.regex_patterns || []).join(" ");
+    if (r.trigger_type === 1 && /discord|https?|invite|www|\.gg|\.com/i.test(kw) && !(r.exempt_channels || []).includes(f.id)) {
+      await discord(env, "PATCH", `/guilds/${L.guild}/auto-moderation/rules/${r.id}`, { exempt_channels: [...(r.exempt_channels || []), f.id] }, `Allow links in recruitment (by ${by})`).then(() => exempted.push(r.name), () => {});
+    }
+  }
+  await kput(env, "recruit:cfg", { ch: f.id }, 3650 * 86400);
+  return { channel: f.id, name: f.name, exempted };
+}
+/** new post in the recruitment forum (from the gateway): name it after the team, remove a team's 2nd post */
+async function recruitThread(env, t) {
+  const cfg = await kget(env, "recruit:cfg"); if (!cfg?.ch || t.parent_id !== cfg.ch || !t.owner_id) return;
+  const L = await league(env), me = await discord(env, "GET", "/users/@me").catch(() => ({}));
+  if (t.owner_id === me.id) return;
+  const M = await members(env, L).catch(() => []), m = M.find((x) => x.user.id === t.owner_id), pi = m ? info(L, m) : null;
+  if (pi?.staff && !pi.team) return;
+  const key = `recruit:post:${pi?.team || t.owner_id}`, prev = await kget(env, key);
+  if (prev && prev.id !== t.id && await discord(env, "GET", `/channels/${prev.id}`).then((c) => !!c && !c.thread_metadata?.locked, () => false)) {
+    await discord(env, "DELETE", `/channels/${t.id}`, null, "Recruitment: one post per team").catch(() => {});
+    await dm(env, t.owner_id, `📣 ${pi?.team ? `The **${teamOf(L, pi.team)?.name}** already have` : "You already have"} a recruitment post — post new ads in there instead of making a new one:\nhttps://discord.com/channels/${L.guild}/${prev.id}`).catch(() => {});
+    return;
+  }
+  await kput(env, key, { id: t.id, by: t.owner_id, ts: Date.now() }, 365 * 86400);
+  const tn = pi?.team ? teamOf(L, pi.team)?.name : "";
+  if (tn && !t.name.toLowerCase().includes(tn.toLowerCase())) await discord(env, "PATCH", `/channels/${t.id}`, { name: `${tn} — ${t.name}`.slice(0, 100) }).catch(() => {});
+}
+
 const GW_STATUS = "📩 DM me for help";
 /** one always-on Discord gateway connection: gives the bot its status and hears DMs (Workers can't do this on their own) */
 export class Gateway {
@@ -846,7 +899,7 @@ export class Gateway {
       const sid = await this.state.storage.get("sid"), seq = this.seq ?? await this.state.storage.get("seq");
       const presence = { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] };
       if (sid && seq) this.send(ws, 6, { token: this.env.DISCORD_BOT_TOKEN, session_id: sid, seq });
-      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: 1 << 12, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
+      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: (1 << 12) | 1, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
     } else if (p.op === 11) this.ack = Date.now();
     else if (p.op === 1) this.send(ws, 1, this.seq);
     else if (p.op === 7) { this.close(); }
@@ -855,6 +908,7 @@ export class Gateway {
       this.ack = Date.now(); this.events++;
       if (p.t === "READY") await this.state.storage.put({ sid: p.d.session_id, resume: p.d.resume_gateway_url });
       if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
+      if (p.t === "THREAD_CREATE" && p.d.newly_created) await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; });
       if (p.t === "MESSAGE_CREATE" && !p.d.guild_id && !p.d.author?.bot) {
         const seen = (await this.state.storage.get("seen")) || [];
         if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200)); await handleDM(this.env, p.d).catch((e) => { this.err = "dm: " + e.message; }); }
@@ -2293,6 +2347,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/recruit/setup") return out({ ok: true, ...(await recruitSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/staff/audit") return out(await staffAudit(env, L));
       if (p === "/api/admin/staff/check") return out({ ok: true, ...(await staffCheckStart(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/staff/send") return out({ ok: true, ...(await staffCheckSend(env)) });
