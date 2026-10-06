@@ -961,8 +961,14 @@ async function recruitThread(env, t) {
 }
 
 // ---------- scam trap: anyone (non-staff) who posts in the honeypot channel gets banned ----------
+// settings live under "trap:cfg2" — older gateway copies still read "trap:cfg", so removing that key switches their trap off
+async function trapCfg(env) {
+  let c = await kget(env, "trap:cfg2"); if (c) return c;
+  c = await kget(env, "trap:cfg"); if (c) { await kput(env, "trap:cfg2", c, 3650 * 86400); await KV(env).delete("trap:cfg").catch(() => {}); }
+  return c;
+}
 async function trapSetup(env, L, by) {
-  const cfg = (await kget(env, "trap:cfg")) || { mode: "ban", hits: [] };
+  const cfg = (await trapCfg(env)) || { mode: "ban", hits: [] };
   const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
   let ch = cfg.ch && chans.find((c) => c.id === cfg.ch);
   if (!ch) {
@@ -977,11 +983,11 @@ async function trapSetup(env, L, by) {
   }
   const log = await hiddenLogChannel(env, L, by, "📕│trap-log", "Scam trap bans — use Unban if it was a real person who got hacked.").catch(() => null);
   Object.assign(cfg, { ch: ch.id, log });
-  await kput(env, "trap:cfg", cfg, 3650 * 86400);
+  await kput(env, "trap:cfg2", cfg, 3650 * 86400);
   return cfg;
 }
 async function trapHit(env, msg) {
-  const cfg = await kget(env, "trap:cfg"); if (!cfg?.ch || msg.channel_id !== cfg.ch) return "not trap channel"; if (msg.author?.bot || msg.webhook_id) return "bot/webhook";
+  const cfg = await trapCfg(env); if (!cfg?.ch || msg.channel_id !== cfg.ch) return "not trap channel"; if (msg.author?.bot || msg.webhook_id) return "bot/webhook";
   const L = await league(env), uid = msg.author.id;
   const g = await cached("guild:owner", 3600000, () => discord(env, "GET", `/guilds/${L.guild}`)).catch(() => ({}));
   if (uid === g.owner_id || String(env.COMMISH_IDS || "").split(/[\s,]+/).includes(uid)) return "owner — allowed";   // you can post in there freely
@@ -994,7 +1000,7 @@ async function trapHit(env, msg) {
   if (ok && cfg.mode === "softban") await discord(env, "DELETE", `/guilds/${L.guild}/bans/${uid}`, null, "Scam trap: softban (kick + clean messages)").catch(() => {});
   if (!ok) await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {});
   cfg.hits = [{ uid, name, ts: Date.now(), ok, mode: cfg.mode }, ...(cfg.hits || [])].slice(0, 50); cfg.count = (cfg.count || 0) + (ok ? 1 : 0);
-  await kput(env, "trap:cfg", cfg, 3650 * 86400);
+  await kput(env, "trap:cfg2", cfg, 3650 * 86400);
   if (cfg.log) await discord(env, "POST", `/channels/${cfg.log}/messages`, { allowed_mentions: { parse: [] }, embeds: [{ author: { name: `🪤 ${ok ? (cfg.mode === "softban" ? "Kicked (softban)" : "Banned") : "Couldn't ban"} ${name}` },
     description: `<@${uid}> (${msg.author.username}) posted in the scam trap.${ok ? " Their messages from the last 24h were deleted." : " The bot couldn't ban them (their role is probably above the bot) — the message was deleted."}`, color: ok ? 0xe8424a : 0xffa24a,
     footer: { text: uid }, timestamp: new Date().toISOString() }], components: ok && cfg.mode !== "softban" ? [row(btn("Unban (they were hacked)", 2, `trapub:${uid}`))] : [] }).catch(() => {});
@@ -1350,7 +1356,7 @@ export class Gateway {
         }
       }
       if (p.t === "THREAD_CREATE" && p.d.newly_created) { await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; }); await suggestThread(this.env, p.d).catch((e) => { this.err = "suggest: " + e.message; }); }
-      if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await kget(this.env, "trap:cfg").catch(() => null))?.ch || null; this.trapAt = Date.now(); }
+      if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await trapCfg(this.env).catch(() => null))?.ch || null; this.trapAt = Date.now(); }
         this.gmsg = (this.gmsg || 0) + 1;
         if (this.trapCh && p.d.channel_id === this.trapCh) { this.trapSeen = { ts: Date.now(), author: p.d.author?.username, bot: !!p.d.author?.bot };
           await trapHit(this.env, p.d).then((r) => { this.trapSeen.result = r || "done"; }, (e) => { this.err = "trap: " + e.message; this.trapSeen.result = "error: " + e.message; }); } }
@@ -2883,9 +2889,9 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/suggest/setup") return out({ ok: true, ...(await suggestSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/trap") {
         if (body.setup) { const c = await trapSetup(env, L, staffSig(admin)); return out({ ok: true, trap: c }); }
-        const c = await kget(env, "trap:cfg");
+        const c = await trapCfg(env);
         if (body.test && c?.ch) { const m = await discord(env, "POST", `/channels/${c.ch}/messages`, { content: "🧪 trap self-test (bot message, ignored)" }); await new Promise((r) => setTimeout(r, 4000)); await discord(env, "DELETE", `/channels/${c.ch}/messages/${m.id}`).catch(() => {}); return out({ ok: true }); }
-        if (body.mode && c) { c.mode = body.mode === "softban" ? "softban" : "ban"; await kput(env, "trap:cfg", c, 3650 * 86400); }
+        if (body.mode && c) { c.mode = body.mode === "softban" ? "softban" : "ban"; await kput(env, "trap:cfg2", c, 3650 * 86400); }
         return out({ trap: c || null });
       }
       if (p === "/api/admin/recruit/setup") return out({ ok: true, ...(await recruitSetup(env, L, staffSig(admin))) });
