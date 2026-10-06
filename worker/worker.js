@@ -288,7 +288,8 @@ function frozen(L) {
 // =====================================================================================================
 // transactions core (shared by slash commands, buttons and the website)
 // =====================================================================================================
-async function makeOffer(env, L, actor, uid) {
+async function makeOffer(env, L, actor, uid, days) {
+  days = Math.max(0, Math.min(90, Math.round(Number(days) || 0)));
   if (!can(actor, "offer")) throw UE("Only franchise owners, GMs and head coaches can send offers.");
   const f = frozen(L); if (f) throw UE(f);
   const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
@@ -299,12 +300,12 @@ async function makeOffer(env, L, actor, uid) {
   if (n >= cap(L)) throw UE(`Your roster is full (${n}/${cap(L)}).`);
   const open = (await klist(env, "offer:")).filter((k) => k.metadata?.uid === uid && k.metadata?.team === actor.team && k.metadata?.status === "pending" && k.metadata.exp > Date.now());
   if (open.length) throw UE(`You already have a pending offer out to **${t.name}**.`);
-  const o = { id: rid(), team: actor.team, uid, name: t.name, by: actor.id, byName: actor.name, byRank: actor.rank, ts: Date.now(), exp: Date.now() + DAY, status: "pending" };
+  const o = { id: rid(), team: actor.team, uid, name: t.name, by: actor.id, byName: actor.name, byRank: actor.rank, ts: Date.now(), exp: Date.now() + DAY, status: "pending", days };
   await saveOffer(env, o);
   const sent = await dm(env, uid, { embeds: [{ title: `📝 Contract offer — ${team.name}`, color: colorInt(team.color),
-      description: `${who(actor)} (${RANK[actor.rank] || "front office"}) wants to sign you to the **${team.name}**.\nRoster: ${n}/${cap(L)}\n\nThis offer expires <t:${Math.floor(o.exp / 1000)}:R>.` }],
+      description: `${who(actor)} (${RANK[actor.rank] || "front office"}) wants to sign you to the **${team.name}**.\nRoster: ${n}/${cap(L)}${days ? `\n\n📜 **Contract: you must stay ${dayTxt(days)}** after accepting (no demands until it's up). Staff review the contract after you sign.` : ""}\n\nThis offer expires <t:${Math.floor(o.exp / 1000)}:R>.` }],
     components: [row(btn("✅ Accept", 3, `oa:${o.id}`), btn("❌ Decline", 4, `od:${o.id}`))] });
-  return { offer: o, text: `📨 Offer sent to **${t.name}** for the ${team.name}. They have 24 hours to accept.` + (sent ? "" : "\n⚠️ Their DMs are closed — they can accept with **/offers** in the server.") };
+  return { offer: o, text: `📨 Offer sent to **${t.name}** for the ${team.name}${days ? ` with a ${dayTxt(days)} contract` : ""}. They have 24 hours to accept.` + (sent ? "" : "\n⚠️ Their DMs are closed — they can accept with **/offers** in the server.") };
 }
 const saveOffer = (env, o) => kput(env, `offer:${o.id}`, o, 3 * 86400, { team: o.team, uid: o.uid, status: o.status, exp: o.exp });
 
@@ -337,8 +338,90 @@ async function answerOffer(env, id, uid, accept) {
   bust("members");
   await logTx(env, L, { title: "Offer Accepted", teams: [o.team], desc: `<@${uid}> has accepted the offer to the **${team.name}**`,
     lines: [`👤 ${o.byRank === "hc" ? "Coach" : o.byRank === "gm" ? "General Manager" : "Franchise Owner"} · ${ref(o.by, o.byName)}`, capLine(L, n + 1)] });
-  await notify(env, L, o.by, o.team, `✅ **${o.name}** accepted and is now on the ${team.name}! Roster ${n + 1}/${cap(L)}.`);
-  return `🎉 Welcome to the **${team.name}**!`;
+  await notify(env, L, o.by, o.team, `✅ **${o.name}** accepted and is now on the ${team.name}! Roster ${n + 1}/${cap(L)}.${o.days ? ` The ${dayTxt(o.days)} contract went to staff for approval.` : ""}`);
+  if (o.days) await contractStart(env, L, o).catch((e) => console.log("contract:", e.message));
+  return `🎉 Welcome to the **${team.name}**!${o.days ? `\n📜 Your ${dayTxt(o.days)} contract is with staff for approval — you're on the team either way.` : ""}`;
+}
+
+// ---------- contracts: FO picks a minimum stay; staff approve / decline / adjust ----------
+const dayTxt = (d) => d === 1 ? "1 day" : d % 7 === 0 && d >= 7 ? (d === 7 ? "1 week" : `${d / 7} weeks`) : `${d} days`;
+const ctLive = (c) => c && ["pending", "active", "adjusting"].includes(c.status) && c.until > Date.now();
+function ctEmbed(L, c) {
+  const t = teamOf(L, c.team) || {};
+  const st = { pending: "⏳ Waiting for staff", active: "✅ Approved", declined: "❌ Declined", adjusting: "✏️ Staff proposed a new length", void: "🚫 Void" }[c.status] || c.status;
+  const fields = [{ name: "Status", value: `${st}${c.decidedByName ? ` · ${c.decidedByName}` : ""}${c.reason ? `\n${c.reason}` : ""}`.slice(0, 1000) }];
+  if (c.proposed) fields.push({ name: "Proposed by staff", value: `${dayTxt(c.proposed)}${c.foOk ? " · FO accepted, waiting on player" : " · waiting on FO"}` });
+  return { title: `📜 Contract — ${t.name || c.team}`, color: c.status === "active" ? 0x4fd18b : c.status === "declined" || c.status === "void" ? 0xe8424a : colorInt(t.color),
+    description: `<@${c.uid}> signed with the **${t.name}** (offer from ${ref(c.by, c.byName)}).\n**Must stay ${dayTxt(c.days)}** — until <t:${Math.floor(c.until / 1000)}:f>.`, fields, timestamp: new Date(c.signedAt).toISOString() };
+}
+const ctButtons = (c) => c.status === "pending" ? [row(btn("✅ Accept", 3, `cta:${c.uid}:${c.id}`), btn("❌ Decline", 4, `ctd:${c.uid}:${c.id}`), btn("✏️ Adjust time", 2, `ctj:${c.uid}:${c.id}`))] : [];
+async function ctUpdateMsg(env, L, c) { if (c.msg) await discord(env, "PATCH", `/channels/${c.msg.ch}/messages/${c.msg.id}`, { embeds: [ctEmbed(L, c)], components: ctButtons(c) }).catch(() => {}); }
+const ctSave = (env, c) => kput(env, `contract:${c.uid}`, c, 120 * 86400, { team: c.team, status: c.status, until: c.until });
+async function contractStart(env, L, o) {
+  const c = { id: o.id, uid: o.uid, name: o.name, team: o.team, by: o.by, byName: o.byName, days: o.days, signedAt: Date.now(), until: Date.now() + o.days * DAY, status: "pending" };
+  if (L.C.approvals) { const m = await discord(env, "POST", `/channels/${L.C.approvals}/messages`, { embeds: [ctEmbed(L, c)], components: ctButtons(c), allowed_mentions: { parse: [] } }).catch(() => null); if (m) c.msg = { ch: L.C.approvals, id: m.id }; }
+  await ctSave(env, c);
+  return c;
+}
+async function contractComponent(i, env, ctx, kind, uid, cid) {
+  const L = await league(env), c = await kget(env, `contract:${uid}`);
+  if (!c || c.id !== cid) return json({ type: 7, data: { components: [] } });
+  const me = uidOf(i), who = i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || i.user?.global_name || i.user?.username || "Staff";
+  if (["cta", "ctd", "ctj"].includes(kind)) {
+    if (!isStaff(env, L, me, i.member?.roles || [], i.member?.permissions)) return reply("Only staff can decide contracts.", true);
+    if (c.status !== "pending") return reply("This contract was already handled.", true);
+    if (kind === "ctd") return json({ type: 9, data: { custom_id: `ctdm:${uid}:${cid}`, title: "Decline contract", components: [row({ type: 4, custom_id: "reason", style: 2, label: "Reason (sent to the FO and player)", min_length: 2, max_length: 500, required: true })] } });
+    if (kind === "ctj") return json({ type: 9, data: { custom_id: `ctjm:${uid}:${cid}`, title: "Adjust contract length", components: [
+      row({ type: 4, custom_id: "days", style: 1, label: `New length in days (now ${c.days})`, min_length: 1, max_length: 2, required: true, placeholder: "e.g. 7" }),
+      row({ type: 4, custom_id: "note", style: 2, label: "Note for the FO (optional)", max_length: 300, required: false })] } });
+    Object.assign(c, { status: "active", decidedBy: me, decidedByName: who }); await ctSave(env, c);
+    ctx.waitUntil((async () => {
+      const t = teamOf(L, c.team)?.name || c.team;
+      await dm(env, c.uid, `📜 Staff approved your contract with the **${t}** — you're locked in until <t:${Math.floor(c.until / 1000)}:f>.`).catch(() => {});
+      await notify(env, L, c.by, c.team, `📜 Staff approved **${c.name}**'s ${dayTxt(c.days)} contract.`).catch(() => {});
+    })());
+    return json({ type: 7, data: { embeds: [ctEmbed(L, c)], components: [] } });
+  }
+  // FO answers a staff adjustment
+  if (kind === "cfa" || kind === "cfd") {
+    if (c.status !== "adjusting" || c.foOk) return json({ type: 7, data: { components: [], content: "This was already answered." } });
+    if (kind === "cfd") { Object.assign(c, { status: "void", reason: `FO turned down the ${dayTxt(c.proposed)} length — no contract.` }); await ctSave(env, c); ctx.waitUntil(ctUpdateMsg(env, L, c));
+      return json({ type: 7, data: { components: [], content: `Declined. ${c.name} stays on your team with **no contract**.` } }); }
+    c.foOk = Date.now(); await ctSave(env, c); ctx.waitUntil(ctUpdateMsg(env, L, c));
+    ctx.waitUntil(dm(env, c.uid, { embeds: [{ title: "📜 Contract change", color: 0xffc62f, description: `Staff adjusted your contract with the **${teamOf(L, c.team)?.name}** to **${dayTxt(c.proposed)}** (from when you signed), and your FO agreed.\n\nDo you accept?` }],
+      components: [row(btn(`✅ Accept ${dayTxt(c.proposed)}`, 3, `cpa:${c.uid}:${c.id}`), btn("❌ Decline", 4, `cpd:${c.uid}:${c.id}`))] }));
+    return json({ type: 7, data: { components: [], content: `✅ Accepted — sent to ${c.name} to confirm.` } });
+  }
+  // player answers
+  if (kind === "cpa" || kind === "cpd") {
+    if (me !== c.uid || c.status !== "adjusting" || !c.foOk) return json({ type: 7, data: { components: [], content: "This was already answered." } });
+    if (kind === "cpd") Object.assign(c, { status: "void", reason: `Player turned down the ${dayTxt(c.proposed)} length — no contract.` });
+    else Object.assign(c, { status: "active", days: c.proposed, until: c.signedAt + c.proposed * DAY, reason: `Adjusted to ${dayTxt(c.proposed)} — FO and player accepted.` });
+    delete c.proposed; await ctSave(env, c); ctx.waitUntil(ctUpdateMsg(env, L, c));
+    ctx.waitUntil(notify(env, L, c.by, c.team, kind === "cpa" ? `📜 **${c.name}** accepted the adjusted ${dayTxt(c.days)} contract.` : `📜 **${c.name}** declined the adjusted contract — they're on your team with no contract.`).catch(() => {}));
+    return json({ type: 7, data: { components: [], content: kind === "cpa" ? `✅ Contract set: you're locked in until <t:${Math.floor(c.until / 1000)}:f>.` : "Declined — you're still on the team, with no contract." } });
+  }
+  return reply("Unknown contract action.", true);
+}
+async function contractModal(i, env, ctx, kind, uid, cid) {
+  const L = await league(env), c = await kget(env, `contract:${uid}`);
+  if (!c || c.id !== cid || c.status !== "pending") return reply("This contract was already handled.", true);
+  if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can decide contracts.", true);
+  const who = i.member?.nick || i.member?.user?.global_name || i.member?.user?.username || "Staff", val = (id) => i.data.components.flatMap((r) => r.components).find((x) => x.custom_id === id)?.value || "";
+  const t = teamOf(L, c.team)?.name || c.team;
+  if (kind === "ctdm") {
+    Object.assign(c, { status: "declined", reason: val("reason"), decidedBy: uidOf(i), decidedByName: who }); await ctSave(env, c);
+    ctx.waitUntil(Promise.all([dm(env, c.uid, `📜 Staff declined the contract with the **${t}** — you're still on the team, just with no contract.\nReason: ${c.reason}`).catch(() => {}),
+      notify(env, L, c.by, c.team, `📜 Staff declined **${c.name}**'s contract — they're still on your team, with no contract.\nReason: ${c.reason}`).catch(() => {})]));
+    return json({ type: 7, data: { embeds: [ctEmbed(L, c)], components: [] } });
+  }
+  const d = Math.round(Number(val("days")));
+  if (!(d >= 1 && d <= 90)) return reply("Pick a length between 1 and 90 days.", true);
+  Object.assign(c, { status: "adjusting", proposed: d, decidedBy: uidOf(i), decidedByName: who, foOk: 0 }); await ctSave(env, c);
+  const note = val("note");
+  ctx.waitUntil(dm(env, c.by, { embeds: [{ title: "📜 Staff adjusted a contract", color: 0xffc62f, description: `Staff (${who}) changed **${c.name}**'s contract with the **${t}** from **${dayTxt(c.days)}** to **${dayTxt(d)}** (counted from when they signed).${note ? `\nNote: ${note}` : ""}\n\nIf you accept, it goes to ${c.name} to confirm. If you decline, they stay on your team with no contract.` }],
+    components: [row(btn(`✅ Accept ${dayTxt(d)}`, 3, `cfa:${c.uid}:${c.id}`), btn("❌ Decline", 4, `cfd:${c.uid}:${c.id}`))] }).catch(() => {}));
+  return json({ type: 7, data: { embeds: [ctEmbed(L, c)], components: [] } });
 }
 
 async function releasePlayer(env, L, actor, uid) {
@@ -352,6 +435,7 @@ async function releasePlayer(env, L, actor, uid) {
   const team = teamOf(L, t.team), n = rosterOf(L, M, t.team).length - 1;
   await stripTeam(env, L, uid, t.team, `Released by ${actor.name}`);
   await toFA(env, L, uid, "Released — free agent");
+  { const ct = await kget(env, `contract:${uid}`); if (ctLive(ct) && ct.team === t.team) { Object.assign(ct, { status: "void", reason: `Released by ${actor.name}` }); await ctSave(env, ct); await ctUpdateMsg(env, L, ct); } }
   bust("members");
   await logTx(env, L, { title: "Player Released", teams: [t.team], desc: `<@${uid}> has been released from the **${team.name}**`,
     lines: [`👤 Released by · ${actor.id ? `<@${actor.id}>` : `**${actor.name}**`}${actor.staff && !actor.team ? " (staff)" : ""}`, capLine(L, n)] });
@@ -362,6 +446,8 @@ async function releasePlayer(env, L, actor, uid) {
 async function demand(env, L, actor, reason) {
   if (!actor.team) throw UE("You're not on a team.");
   if (actor.rank === "fo") throw UE("Franchise owners can't demand — talk to staff.");
+  const ct = await kget(env, `contract:${actor.id}`);
+  if (ctLive(ct) && ct.team === actor.team) throw UE(`📜 You're under contract with the ${teamOf(L, actor.team)?.name} until <t:${Math.floor(ct.until / 1000)}:f> — you can't demand until then. If something's seriously wrong, open a ticket with staff.`);
   const open = await kget(env, `dem:${actor.id}`);
   if (open && (await kget(env, `req:${open}`))?.status === "staff") throw UE("You already have a demand waiting for staff.");
   const r = { id: rid(), type: "demand", status: "staff", uid: actor.id, name: actor.name, team: actor.team, reason: reason || "", ts: Date.now() };
@@ -1942,7 +2028,7 @@ async function command(i, env, ctx) {
       if (sub?.name === "leave") return later(i, ctx, () => faLeave(i, env));
       break;
     case "vote": if (sub?.name === "create") return await voteCreate(i, sub, env); break;
-    case "offer": return later(i, ctx, async () => { const L = await league(env); return (await makeOffer(env, L, await actorFromInteraction(env, L, i), opt(o, "player"))).text; });
+    case "offer": return later(i, ctx, async () => { const L = await league(env); return (await makeOffer(env, L, await actorFromInteraction(env, L, i), opt(o, "player"), opt(o, "contract_days"))).text; });
     case "offers": return later(i, ctx, () => myOffers(i, env));
     case "release": return later(i, ctx, async () => { const L = await league(env); return releasePlayer(env, L, await actorFromInteraction(env, L, i), opt(o, "player")); });
     case "demand": return later(i, ctx, async () => { const L = await league(env); return demand(env, L, await actorFromInteraction(env, L, i), opt(o, "reason")); });
@@ -1983,6 +2069,7 @@ async function component(i, env, ctx) {
     return json({ type: 7, data: { components: [], embeds: [{ ...(i.message?.embeds?.[0] || {}), color: kind === "sc" ? 0x2ecc71 : 0x8a8f98,
       fields: [{ name: kind === "sc" ? "✅ You're staying on staff" : "👋 You stepped down", value: kind === "sc" ? "Thanks! Nothing else to do." : "Your staff roles are being removed. Thanks for your time!" }] }] } });
   }
+  if (["cta", "ctd", "ctj", "cfa", "cfd", "cpa", "cpd"].includes(kind)) return contractComponent(i, env, ctx, kind, id, k);
   if (kind === "trapub") {
     const L = await league(env);
     if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
@@ -2020,6 +2107,7 @@ async function component(i, env, ctx) {
 }
 async function modalSubmit(i, env, ctx) {
   const [kind, id, ad] = String(i.data.custom_id || "").split(":");
+  if (kind === "ctdm" || kind === "ctjm") return contractModal(i, env, ctx, kind, id, ad);
   if (kind === "rpm") return later(i, ctx, async () => {
     const text = i.data.components?.[0]?.components?.[0]?.value || "", log = id ? await kget(env, `dmlog:${id}`) : null;
     await fileTicket(env, uidOf(i), text, { about: log?.title || "", user: i.user || i.member?.user, viaButton: true });
@@ -2666,7 +2754,7 @@ async function web(req, url, env, ctx) {
       return out({ tx: (await Promise.all(ks.map((k) => kget(env, k.name)))).filter(Boolean).map((t) => ({ ...t, text: mentionsToNames(M, L, t.desc) })) });
     }
     if (req.method !== "POST") return out({ error: "Unknown route." }, 404);
-    if (p === "/api/offer") return out({ ok: true, ...(await makeOffer(env, L, actor, body.uid)) });
+    if (p === "/api/offer") return out({ ok: true, ...(await makeOffer(env, L, actor, body.uid, body.days)) });
     if (p === "/api/offer/cancel") {
       const o = await kget(env, `offer:${body.id}`);
       if (!o || o.team !== actor.team || !can(actor, "offer")) return out({ error: "Can't cancel that offer." }, 400);
