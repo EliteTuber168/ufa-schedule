@@ -32,7 +32,7 @@ export default {
   async scheduled(event, env, ctx) {
     const m = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
     const jobs = [["autopick", () => autoPick(env)]];
-    if (env.GATEWAY) ctx.waitUntil(env.GATEWAY.get(env.GATEWAY.idFromName(GW_NAME)).fetch("https://gw/ping").catch((e) => console.log("gateway:", e.message)));
+    if (env.GATEWAY) ctx.waitUntil(gwStub(env).then(({ stub, n }) => stub.fetch("https://gw/ping?n=" + n)).catch((e) => console.log("gateway:", e.message)));
     if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
     if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
     if (m === 17) jobs.push(["autoclose", () => autoCloseTickets(env)]);
@@ -993,21 +993,33 @@ async function trapHit(env, msg) {
 }
 
 const GW_STATUS = "📩 DM me for help";
-const GW_NAME = "gw3";   // bump to force a fresh gateway instance (old ones shut themselves down)
+const GW_NAME = "gw3";   // fallback when the version binding is missing
+// each deploy gets its own gateway instance (a running Durable Object keeps its old code), older ones see "gw:current" change and shut down
+const gwName = (env) => env.CF_VERSION?.id ? "gw-" + env.CF_VERSION.id : GW_NAME;
+async function gwStub(env) {
+  const n = gwName(env);
+  if ((await kget(env, "gw:current").catch(() => null)) !== n) await kput(env, "gw:current", n, 3650 * 86400).catch(() => {});
+  return { stub: env.GATEWAY.get(env.GATEWAY.idFromName(n)), n };
+}
 /** one always-on Discord gateway connection: gives the bot its status and hears DMs (Workers can't do this on their own) */
 export class Gateway {
   constructor(state, env) { this.state = state; this.env = env; this.ws = null; this.hb = null; this.seq = null; this.ack = 0; this.events = 0; this.err = ""; }
   async fetch(req) {
     const u = new URL(req.url);
+    if (u.searchParams.get("n") && this.myName !== u.searchParams.get("n")) { this.myName = u.searchParams.get("n"); await this.state.storage.put("myName", this.myName); }
     if (u.pathname === "/restart") { this.close(); await this.state.storage.delete(["sid", "resume"]); }
     await this.ensure().catch((e) => { this.err = e.message; });
     return new Response(JSON.stringify({ connected: !!this.ws, lastAck: this.ack, events: this.events, guildMsgs: this.gmsg || 0, trapCh: this.trapCh || null, trapSeen: this.trapSeen || null, error: this.err, status: GW_STATUS }), { headers: { "Content-Type": "application/json" } });
   }
   async alarm() { await this.ensure().catch((e) => { this.err = e.message; }); }
-  stale() { return this.state.id.toString() !== this.env.GATEWAY.idFromName(GW_NAME).toString(); }
+  async stale() {
+    if (!this.myName) this.myName = await this.state.storage.get("myName");
+    if (this.myName) return (await kget(this.env, "gw:current").catch(() => this.myName)) !== this.myName;
+    return this.state.id.toString() !== this.env.GATEWAY.idFromName(GW_NAME).toString();
+  }
   close() { try { this.ws?.close(1000); } catch {} this.ws = null; clearInterval(this.hb); this.hb = null; }
   async ensure() {
-    if (this.stale()) { this.close(); await this.state.storage.deleteAlarm().catch(() => {}); this.err = "stale instance — shut down"; return; }
+    if (await this.stale()) { this.close(); await this.state.storage.deleteAlarm().catch(() => {}); this.err = "stale instance — shut down"; return; }
     await this.state.storage.setAlarm(Date.now() + 60000);
     if (this.ws && Date.now() - this.ack < 100000) return;
     this.close();
@@ -1046,9 +1058,11 @@ export class Gateway {
         if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200));
           const d = p.d, env = this.env;
           ((async () => {   // if an older gateway copy already filed it (ticket touched after the message), skip
-            await new Promise((r) => setTimeout(r, 6000));
+            await new Promise((r) => setTimeout(r, 6000 + Math.random() * 4000));
             const t = await kget(env, `ticket:${d.author.id}`).catch(() => null);
             if (t?.lastThem && t.lastThem >= Date.parse(d.timestamp) - 500) return;
+            if (await kget(env, `dml:${d.id}`).catch(() => null)) return;
+            await kput(env, `dml:${d.id}`, 1, 300).catch(() => {});
             await handleDM(env, d);
           })().catch((e) => { this.err = "dm: " + e.message; })); }
       }
@@ -2546,6 +2560,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/trap") {
         if (body.setup) { const c = await trapSetup(env, L, staffSig(admin)); return out({ ok: true, trap: c }); }
         const c = await kget(env, "trap:cfg");
+        if (body.test && c?.ch) { const m = await discord(env, "POST", `/channels/${c.ch}/messages`, { content: "🧪 trap self-test (bot message, ignored)" }); await new Promise((r) => setTimeout(r, 4000)); await discord(env, "DELETE", `/channels/${c.ch}/messages/${m.id}`).catch(() => {}); return out({ ok: true }); }
         if (body.mode && c) { c.mode = body.mode === "softban" ? "softban" : "ban"; await kput(env, "trap:cfg", c, 3650 * 86400); }
         return out({ trap: c || null });
       }
@@ -2558,7 +2573,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/tickets/dedupe") return out({ ok: true, ...(await ticketsDedupe(env, L)) });
       if (p === "/api/admin/tickets/forum") return out({ ok: true, ...(await ticketsForum(env, L)) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
-      if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName(GW_NAME)).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
+      if (p === "/api/admin/gateway") { if (!env.GATEWAY) return out({ error: "No GATEWAY binding." }); const { stub, n } = await gwStub(env); return out({ name: n, ...(await (await stub.fetch((body.restart ? "https://gw/restart" : "https://gw/ping") + "?n=" + n)).json()) }); }
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));

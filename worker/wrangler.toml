@@ -26,3 +26,7 @@ class_name = "Gateway"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Gateway"]
+
+# lets the bot know which deploy it's running (each deploy gets a fresh gateway connection)
+[version_metadata]
+binding = "CF_VERSION"
