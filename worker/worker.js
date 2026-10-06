@@ -984,7 +984,8 @@ async function trapHit(env, msg) {
   const cfg = await kget(env, "trap:cfg"); if (!cfg?.ch || msg.channel_id !== cfg.ch) return "not trap channel"; if (msg.author?.bot || msg.webhook_id) return "bot/webhook";
   const L = await league(env), uid = msg.author.id;
   const g = await cached("guild:owner", 3600000, () => discord(env, "GET", `/guilds/${L.guild}`)).catch(() => ({}));
-  if (uid === g.owner_id || isStaff(env, L, uid, msg.member?.roles || [])) {   // staff testing: just delete it
+  if (uid === g.owner_id || String(env.COMMISH_IDS || "").split(/[\s,]+/).includes(uid)) return "owner — allowed";   // you can post in there freely
+  if (isStaff(env, L, uid, msg.member?.roles || [])) {   // other staff testing: just delete it
     await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {}); return "staff — deleted only";
   }
   const name = msg.member?.nick || msg.author.global_name || msg.author.username;
