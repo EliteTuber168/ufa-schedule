@@ -492,19 +492,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1471674220176998430/a79cff99bc875a7bfd2830ceb7c6eb22.png?size=96"
   },
   {
-   "id": 37,
-   "name": "Alex",
-   "pos": [
-    "WR",
-    "CB"
-   ],
-   "discord": "1487908645344772126",
-   "avatar": "https://cdn.discordapp.com/avatars/1487908645344772126/af4bb831b95906d2a13219984dfdf2b7.png?size=96",
-   "locked": true,
-   "posAt": 1790977248642,
-   "posNotified": 1790977248642
-  },
-  {
    "id": 38,
    "name": "Blitz",
    "pos": [
@@ -603,13 +590,6 @@
    "pos": [],
    "discord": "1526262345280655420",
    "avatar": "https://cdn.discordapp.com/avatars/1526262345280655420/e2a56583f0b0b92117ef6d967a91ae61.png?size=96"
-  },
-  {
-   "id": 50,
-   "name": "Von Jarvis",
-   "pos": [],
-   "discord": "1527207086906282005",
-   "avatar": "https://cdn.discordapp.com/avatars/1527207086906282005/3a582478d0ffa14b752d3f8f8815458a.png?size=96"
   },
   {
    "id": 51,
@@ -1138,13 +1118,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1225168136345620540/9a8f44fc17f1914d5174872daa621cf3.png?size=96"
   },
   {
-   "id": 124,
-   "name": "xim",
-   "pos": [],
-   "discord": "1234229995522756724",
-   "avatar": "https://cdn.discordapp.com/avatars/1234229995522756724/bd93d72b8e9fc6303ead4498158d3dc6.png?size=96"
-  },
-  {
    "id": 126,
    "name": "King",
    "pos": [],
@@ -1220,20 +1193,6 @@
    "pos": [],
    "discord": "1312194020268707862",
    "avatar": "https://cdn.discordapp.com/avatars/1312194020268707862/f30aa28ff5a581295ba88590c85a6f6c.png?size=96"
-  },
-  {
-   "id": 138,
-   "name": "Hvhd9774",
-   "pos": [
-    "TE",
-    "DB",
-    "DE",
-    "LB"
-   ],
-   "discord": "1312654271715479617",
-   "avatar": "https://cdn.discordapp.com/avatars/1312654271715479617/e0a66e4515759edea4b2de68a8042fe3.png?size=96",
-   "locked": true,
-   "posNotified": 1790976595708
   },
   {
    "id": 139,
@@ -1365,13 +1324,6 @@
    "pos": [],
    "discord": "1359320607782867146",
    "avatar": "https://cdn.discordapp.com/avatars/1359320607782867146/f14fa7e6e800333ae448781fb1b908d4.png?size=96"
-  },
-  {
-   "id": 158,
-   "name": "350aj",
-   "pos": [],
-   "discord": "1361831799596122364",
-   "avatar": "https://cdn.discordapp.com/avatars/1361831799596122364/5fd0b8c461703863c653a546f3d1d771.png?size=96"
   },
   {
    "id": 159,
@@ -1651,7 +1603,7 @@
     "S"
    ],
    "discord": "1458997210254676130",
-   "avatar": "https://cdn.discordapp.com/avatars/1458997210254676130/8a979dd82576b80e5a38db6c9b01700d.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1458997210254676130/3d04b515a7c964057733aa04c9646bf9.png?size=96",
    "locked": true,
    "posAt": 1791070762184,
    "posNotified": 1791070762184
@@ -1772,7 +1724,7 @@
    "name": "b1wq",
    "pos": [],
    "discord": "1512939317604126903",
-   "avatar": "https://cdn.discordapp.com/avatars/1512939317604126903/e2a56907ca55f3dfff782f11ab96221f.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1512939317604126903/63987c7eb894730c5bd008237f98409b.png?size=96"
   },
   {
    "id": 217,
