@@ -154,9 +154,9 @@
    "name": "Las Vegas Raiders",
    "abbr": "LV",
    "color": "#A5ACAF",
-   "active": false,
+   "active": true,
    "role": "1548502288006389820",
-   "players": 4,
+   "players": 5,
    "fo": "ccrick1044"
   },
   {
@@ -219,8 +219,8 @@
    "color": "#0B2265",
    "active": false,
    "role": "1548502317035425966",
-   "players": 3,
-   "fo": "Dart"
+   "players": 2,
+   "fo": ""
   },
   {
    "name": "New York Jets",
@@ -264,7 +264,7 @@
    "color": "#69BE28",
    "active": true,
    "role": "1548502338170396802",
-   "players": 7,
+   "players": 6,
    "fo": "Big Booty Bennz"
   },
   {
@@ -282,8 +282,8 @@
    "color": "#4B92DB",
    "active": false,
    "role": "1548502346621915217",
-   "players": 0,
-   "fo": ""
+   "players": 1,
+   "fo": "greem"
   },
   {
    "name": "Washington Commanders",
