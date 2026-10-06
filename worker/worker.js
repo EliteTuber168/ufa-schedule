@@ -32,7 +32,7 @@ export default {
   async scheduled(event, env, ctx) {
     const m = new Date(event.scheduledTime || Date.now()).getUTCMinutes();
     const jobs = [["autopick", () => autoPick(env)]];
-    if (env.GATEWAY) ctx.waitUntil(env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch("https://gw/ping").catch((e) => console.log("gateway:", e.message)));
+    if (env.GATEWAY) ctx.waitUntil(env.GATEWAY.get(env.GATEWAY.idFromName(GW_NAME)).fetch("https://gw/ping").catch((e) => console.log("gateway:", e.message)));
     if (m % 2 === 0) jobs.push(["counters", () => tickCounter(env)]);
     if (m % 5 === 1) jobs.push(["board", () => refreshOwnersBoard(env)]);
     if (m === 17) jobs.push(["autoclose", () => autoCloseTickets(env)]);
@@ -993,6 +993,7 @@ async function trapHit(env, msg) {
 }
 
 const GW_STATUS = "📩 DM me for help";
+const GW_NAME = "gw3";   // bump to force a fresh gateway instance (old ones shut themselves down)
 /** one always-on Discord gateway connection: gives the bot its status and hears DMs (Workers can't do this on their own) */
 export class Gateway {
   constructor(state, env) { this.state = state; this.env = env; this.ws = null; this.hb = null; this.seq = null; this.ack = 0; this.events = 0; this.err = ""; }
@@ -1003,8 +1004,10 @@ export class Gateway {
     return new Response(JSON.stringify({ connected: !!this.ws, lastAck: this.ack, events: this.events, guildMsgs: this.gmsg || 0, trapCh: this.trapCh || null, trapSeen: this.trapSeen || null, error: this.err, status: GW_STATUS }), { headers: { "Content-Type": "application/json" } });
   }
   async alarm() { await this.ensure().catch((e) => { this.err = e.message; }); }
+  stale() { return this.state.id.toString() !== this.env.GATEWAY.idFromName(GW_NAME).toString(); }
   close() { try { this.ws?.close(1000); } catch {} this.ws = null; clearInterval(this.hb); this.hb = null; }
   async ensure() {
+    if (this.stale()) { this.close(); await this.state.storage.deleteAlarm().catch(() => {}); this.err = "stale instance — shut down"; return; }
     await this.state.storage.setAlarm(Date.now() + 60000);
     if (this.ws && Date.now() - this.ack < 100000) return;
     this.close();
@@ -1040,7 +1043,14 @@ export class Gateway {
           await trapHit(this.env, p.d).then((r) => { this.trapSeen.result = r || "done"; }, (e) => { this.err = "trap: " + e.message; this.trapSeen.result = "error: " + e.message; }); } }
       if (p.t === "MESSAGE_CREATE" && !p.d.guild_id && !p.d.author?.bot) {
         const seen = (await this.state.storage.get("seen")) || [];
-        if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200)); await handleDM(this.env, p.d).catch((e) => { this.err = "dm: " + e.message; }); }
+        if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200));
+          const d = p.d, env = this.env;
+          ((async () => {   // if an older gateway copy already filed it (ticket touched after the message), skip
+            await new Promise((r) => setTimeout(r, 6000));
+            const t = await kget(env, `ticket:${d.author.id}`).catch(() => null);
+            if (t?.lastThem && t.lastThem >= Date.parse(d.timestamp) - 500) return;
+            await handleDM(env, d);
+          })().catch((e) => { this.err = "dm: " + e.message; })); }
       }
       if (this.seq && (p.t !== "MESSAGE_CREATE" || this.seq % 25 === 0)) await this.state.storage.put("seq", this.seq);
     }
@@ -2548,7 +2558,7 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/tickets/dedupe") return out({ ok: true, ...(await ticketsDedupe(env, L)) });
       if (p === "/api/admin/tickets/forum") return out({ ok: true, ...(await ticketsForum(env, L)) });
       if (p === "/api/admin/tickets/channel") return out({ ok: true, channel: await ticketsChannel(env, L) });
-      if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName("main")).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
+      if (p === "/api/admin/gateway") return out(env.GATEWAY ? await (await env.GATEWAY.get(env.GATEWAY.idFromName(GW_NAME)).fetch(body.restart ? "https://gw/restart" : "https://gw/ping")).json() : { error: "No GATEWAY binding." });
       if (p === "/api/admin/diag") return out({ cron: (await kget(env, "cron:diag")) || {}, now: Date.now() });
       if (p === "/api/admin/econ") return out(await econAdmin(env, L, body, staffSig(admin)));
       if (p === "/api/admin/counter") return out(await counterAdmin(env, L, body));
