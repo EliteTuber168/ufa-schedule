@@ -118,9 +118,9 @@
    "name": "Houston Texans",
    "abbr": "HOU",
    "color": "#A71930",
-   "active": false,
+   "active": true,
    "role": "1548502272600842341",
-   "players": 3,
+   "players": 5,
    "fo": "KA1♠️"
   },
   {
