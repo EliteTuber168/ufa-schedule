@@ -2527,6 +2527,11 @@ async function web(req, url, env, ctx) {
         if (body.recruitTags) { const cfg = await kget(env, "recruit:cfg");
           if (cfg?.ch) await discord(env, "PATCH", `/channels/${cfg.ch}`, { available_tags: RC_TAGS.map((name) => ({ name, moderated: false })) }, `Raid cleanup by ${by}`).then(() => done.push("restored recruitment tags"), (e) => errs.push("tags: " + e.message)); }
         const created = {};
+        for (const c of (body.create || []).slice(0, 10)) {   // {name, type, parent, topic, readOnly}
+          const ow = c.readOnly ? [{ id: L.guild, type: 0, deny: "2048" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "2048" }] : [])] : undefined;
+          await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: c.name, type: c.type || 0, ...(c.parent ? { parent_id: c.parent } : {}), ...(c.topic ? { topic: c.topic } : {}), ...(ow ? { permission_overwrites: ow } : {}) }, `Created by ${by}`)
+            .then((x) => { done.push("created #" + x.name); created["new:" + c.name] = x.id; }, (e) => errs.push(c.name + ": " + e.message));
+        }
         for (const op of (body.ops || []).slice(0, 45)) {   // {id, name?, parent?}
           const patch = {}; if (op.name) patch.name = op.name; if (op.parent) patch.parent_id = created[op.parent] || op.parent;
           await discord(env, "PATCH", `/channels/${op.id}`, patch, `Server cleanup by ${by}`).then(() => done.push(op.id), (e) => errs.push(`${op.label || op.id}: ${e.message}`));
@@ -2545,7 +2550,7 @@ async function web(req, url, env, ctx) {
           const np = BigInt(r.permissions) & ~BigInt(rp.remove);
           await discord(env, "PATCH", `/guilds/${L.guild}/roles/${r.id}`, { permissions: String(np) }, `Lockdown after raid (${by})`).then(() => done.push(`trimmed ${r.name} perms`), (e) => errs.push(r.name + ": " + e.message));
         }
-        return out({ ok: true, done, errs, created: Object.fromEntries((body.categories || []).filter((c) => c.newId).map((c) => [c.key, c.newId])) });
+        return out({ ok: true, done, errs, created: { ...created, ...Object.fromEntries((body.categories || []).filter((c) => c.newId).map((c) => [c.key, c.newId])) } });
       }
       if (p === "/api/admin/auditlog") {
         const AN = {1:"server update",10:"channel create",11:"channel update",12:"channel delete",13:"perm overwrite create",14:"perm overwrite update",15:"perm overwrite delete",20:"kick",21:"prune",22:"ban",23:"unban",24:"member update",25:"member roles update",26:"member move",27:"member disconnect",28:"bot add",30:"role create",31:"role update",32:"role delete",40:"invite create",41:"invite update",42:"invite delete",50:"webhook create",51:"webhook update",52:"webhook delete",60:"emoji create",61:"emoji update",62:"emoji delete",72:"message delete",73:"message bulk delete",74:"message pin",75:"message unpin",80:"integration create",82:"integration delete",110:"thread create",111:"thread update",112:"thread delete",140:"automod rule create",141:"automod rule update",142:"automod rule delete",143:"automod block",144:"automod flag",145:"automod timeout"};
