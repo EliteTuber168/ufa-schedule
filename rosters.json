@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-06T03:05:05+00:00",
+ "updated": "2026-10-06T10:28:26+00:00",
  "teams": {
   "ARI": [
    {
@@ -11,7 +11,14 @@
   ],
   "ATL": [],
   "BAL": [],
-  "BUF": [],
+  "BUF": [
+   {
+    "id": "1533619202144079967",
+    "name": "IMLIKETHT",
+    "avatar": "https://cdn.discordapp.com/avatars/1533619202144079967/7c7eeb60297634477e3de47b9436c661.png?size=96",
+    "fo": true
+   }
+  ],
   "CAR": [],
   "CHI": [],
   "CIN": [],
@@ -117,6 +124,11 @@
     "id": "824080057097125928",
     "name": "Fw_chase98",
     "avatar": "https://cdn.discordapp.com/avatars/824080057097125928/5eafa70ca9544246122e0bce7807e94f.png?size=96"
+   },
+   {
+    "id": "1539093971236683820",
+    "name": "llen_its",
+    "avatar": "https://cdn.discordapp.com/avatars/1539093971236683820/1e4106babcd1e9aa802c7742266b36bd.png?size=96"
    }
   ],
   "SEA": [
@@ -159,11 +171,6 @@
     "name": "mookie",
     "avatar": "https://cdn.discordapp.com/avatars/1524230783903203459/f21de7c49fc71d4666f50561a75b47b2.png?size=96",
     "fo": true
-   },
-   {
-    "id": "1539093971236683820",
-    "name": "llen_its",
-    "avatar": "https://cdn.discordapp.com/avatars/1539093971236683820/1e4106babcd1e9aa802c7742266b36bd.png?size=96"
    }
   ],
   "WAS": [
