@@ -136,6 +136,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 <dialog id="dlg"><form method="dialog" style="display:flex;flex-direction:column;gap:12px">
   <h2 id="dtitle"></h2><div class="note" id="dbody"></div>
   <select id="drole" class="hide"><option value="gm">General Manager — can sign, release and trade</option><option value="hc">Head Coach — can send offers</option></select>
+  <select id="dctr" class="hide" aria-label="Contract length"><option value="0">No contract</option><option value="3">Contract: 3 days</option><option value="7">Contract: 1 week</option><option value="14">Contract: 2 weeks</option><option value="21">Contract: 3 weeks</option><option value="30">Contract: 30 days</option><option value="60">Contract: 60 days</option></select>
   <textarea id="dtext" rows="3" class="hide"></textarea>
   <div class="row" style="justify-content:flex-end"><button class="btn" value="cancel">Cancel</button><button class="btn red" value="ok" id="dok">Confirm</button></div>
 </form></dialog>
@@ -164,11 +165,11 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     if (!r.ok || j.error) throw new Error(j.error || ("Error " + r.status));
     return j;
   }
-  function ask({title, body, role=false, text=null, ok="Confirm", required=false}){
+  function ask({title, body, role=false, text=null, ok="Confirm", required=false, contract=false}){
     return new Promise(res => {
       const d = $("#dlg"); $("#dtitle").textContent = title; $("#dbody").textContent = body || ""; $("#dok").textContent = ok;
-      $("#drole").classList.toggle("hide", !role); $("#dtext").classList.toggle("hide", text === null); $("#dtext").value = ""; $("#dtext").placeholder = text || "";
-      d.onclose = () => { if (d.returnValue !== "ok") return res(null); const v = $("#dtext").value.trim(); if (required && !v){ toast("Please add a reason."); return res(null); } res({role: $("#drole").value, text: v}); };
+      $("#drole").classList.toggle("hide", !role); $("#dctr").classList.toggle("hide", !contract); $("#dctr").value = "0"; $("#dtext").classList.toggle("hide", text === null); $("#dtext").value = ""; $("#dtext").placeholder = text || "";
+      d.onclose = () => { if (d.returnValue !== "ok") return res(null); const v = $("#dtext").value.trim(); if (required && !v){ toast("Please add a reason."); return res(null); } res({role: $("#drole").value, text: v, days: $("#dctr").value}); };
       d.returnValue = ""; d.showModal();
     });
   }
@@ -252,7 +253,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   document.addEventListener("click", async e => {
     const b = e.target.closest("button"); if (!b || !ME) return;
     const name = id => (TEAM.roster.find(p => p.id === id) || PLAYERS.find(p => p.id === id) || {}).name || "this player";
-    if (b.dataset.off){ if (await ask({title:"Send offer", body:`Offer ${name(b.dataset.off)} a spot on the ${TEAM.team.name}?`, ok:"Send offer"})) act(() => call("/api/offer", {uid: b.dataset.off})); }
+    if (b.dataset.off){ const r = await ask({title:"Send offer", body:`Offer ${name(b.dataset.off)} a spot on the ${TEAM.team.name}? You can add a contract: they must stay that long after signing (no demands). Staff approve contracts.`, ok:"Send offer", contract:true}); if (r) act(() => call("/api/offer", {uid: b.dataset.off, days: Number(r.days) || 0})); }
     else if (b.dataset.rel){ if (await ask({title:"Release player", body:`Release ${name(b.dataset.rel)}? They become a free agent right away.`, ok:"Release"})) act(() => call("/api/release", {uid: b.dataset.rel})); }
     else if (b.dataset.pro){ const r = await ask({title:"Promote", body:`New title for ${name(b.dataset.pro)}. Staff approve promotions.`, role:true, text:"Why? Staff will see this.", ok:"Send to staff", required:true}); if (r) act(() => call("/api/promote", {uid: b.dataset.pro, role: r.role, reason: r.text})); }
     else if (b.dataset.dem){ if (await ask({title:"Demote", body:`Remove ${name(b.dataset.dem)}'s title? They stay on the roster.`, ok:"Demote"})) act(() => call("/api/demote", {uid: b.dataset.dem})); }
