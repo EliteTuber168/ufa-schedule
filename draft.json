@@ -1679,13 +1679,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1487272432371765288/a3c534cb6e9fd13657a13b239e4ec575.png?size=96"
   },
   {
-   "id": 210,
-   "name": "Lustjngreed",
-   "pos": [],
-   "discord": "1495268401910644817",
-   "avatar": "https://cdn.discordapp.com/avatars/1495268401910644817/10dbdf126902a5713acbc310655a04ba.png?size=96"
-  },
-  {
    "id": 211,
    "name": "The fourth  hokage jalen",
    "pos": [
@@ -1836,20 +1829,7 @@
    "name": "Nbdyknowsme9",
    "pos": [],
    "discord": "1542364794504486937",
-   "avatar": "https://cdn.discordapp.com/avatars/1542364794504486937/2e5eef8185fc272727b548aceac25f38.png?size=96"
-  },
-  {
-   "id": 232,
-   "name": "ZB7 Gen",
-   "pos": [
-    "WR",
-    "S"
-   ],
-   "discord": "1543662516868218992",
-   "avatar": "https://cdn.discordapp.com/avatars/1543662516868218992/bc7a923b89f994e24f6e4d2a9bb52cb1.png?size=96",
-   "locked": true,
-   "posNotified": 1790977317216,
-   "posAt": 1790976914333
+   "avatar": "https://cdn.discordapp.com/avatars/1542364794504486937/4af42f36998c0f3e7099eeea4f94367e.png?size=96"
   },
   {
    "id": 233,
@@ -2048,6 +2028,13 @@
    "pos": [],
    "discord": "1518898694513102917",
    "avatar": "https://cdn.discordapp.com/avatars/1518898694513102917/8bbe524c18b6b9348085238397683148.png?size=96"
+  },
+  {
+   "id": 257,
+   "name": "Rat",
+   "pos": [],
+   "discord": "1487908645344772126",
+   "avatar": "https://cdn.discordapp.com/avatars/1487908645344772126/5d67491d9af26c9e98bc898aa9d26c27.png?size=96"
   }
  ],
  "picks": [],
