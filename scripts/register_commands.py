@@ -27,6 +27,13 @@ cmds = [
         {"type": SUB, "name": "leave", "description": "Take yourself out of the player pool"}]},
     {"name": "franchises", "description": "Every franchise, its roster count and owner"},
     {"name": "setownerchannel", "description": "Post the franchise owner list in this channel and keep it updated automatically (staff)"},
+    {"name": "gametime", "description": "Set (or check) your team's game time this week (FO / GM / HC)", "options": [
+        {"type": STR, "name": "when", "description": "e.g. sat 8pm est, tomorrow 7:30pm ct, 10/12 9pm — leave empty to see the current time", "required": False}]},
+    {"name": "warn", "description": "Staff: warn someone (3 active warnings = 24h timeout)", "options": [user("user", "Who to warn"),
+        {"type": STR, "name": "reason", "description": "Why (they get this in a DM)", "required": True}]},
+    {"name": "warnings", "description": "Staff: see someone's warnings", "options": [user("user", "Who")]},
+    {"name": "unwarn", "description": "Staff: remove a warning (latest by default)", "options": [user("user", "Who"),
+        {"type": INT, "name": "number", "description": "Warning # to remove (see /warnings)", "required": False, "min_value": 1}]},
     {"name": "offer", "description": "Offer a free agent a spot on your team (FO / GM / HC)", "options": [user("player", "The free agent to sign"),
         {"type": INT, "name": "contract_days", "description": "Optional: days they must stay after signing (staff approve it)", "required": False, "min_value": 1, "max_value": 90}]},
     {"name": "offers", "description": "See and answer contract offers sent to you"},
