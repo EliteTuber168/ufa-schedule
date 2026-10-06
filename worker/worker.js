@@ -826,7 +826,7 @@ async function recruitSetup(env, L, by) {
     ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: String(BigInt(fo) | P.MANAGE_MSG | P.MANAGE_THREADS) }] : [])];
   const topic = "📣 Franchise owners: make ONE post for your team and keep adding new ads inside it (the bot removes extra posts). Links are allowed here. Players: reply in a team's post if you're interested.";
   if (!f) {
-    const cat = chans.find((c) => c.type === 4 && /member/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
+    const cat = chans.find((c) => c.type === 4 && /member|community/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
     f = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "📣│fo-recruitment", type: 15, topic, ...(cat ? { parent_id: cat.id } : {}),
       permission_overwrites: overwrites, available_tags: RC_TAGS.map((name) => ({ name, moderated: false })), default_reaction_emoji: { emoji_name: "🔥" },
       default_sort_order: 0, default_forum_layout: 1, rate_limit_per_user: 21600 }, `FO recruitment forum by ${by}`)
@@ -1030,7 +1030,7 @@ async function ticketsChannel(env, L) {
   const cfg = (await kget(env, "tickets:cfg")) || {};
   if (cfg.ch) return cfg.ch;
   const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
-  let ch = chans.find((c) => c.type === 0 && c.name === "tickets" && (!L.C.staffCategory || c.parent_id === L.C.staffCategory))?.id;
+  let ch = chans.find((c) => c.type === 0 && bare(c.name) === "tickets" && (!L.C.staffCategory || c.parent_id === L.C.staffCategory))?.id;
   if (!ch) {
     const c = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "tickets", type: 0, topic: "Replies people send to UFA Staff. Hit Reply to answer them (it DMs them from the bot).",
       ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
@@ -1046,9 +1046,9 @@ async function ticketsForum(env, L) {
   const cfg = await kget(env, "tickets:forum");
   if (cfg?.ch && cfg.tags?.need && cfg.tags?.wait && cfg.tags?.closed) return cfg;
   const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
-  let f = chans.find((c) => c.type === 15 && c.name === "tickets");
+  let f = chans.find((c) => c.type === 15 && bare(c.name) === "tickets");
   if (!f) {
-    const old = chans.find((c) => c.type === 0 && c.name === "tickets");
+    const old = chans.find((c) => c.type === 0 && bare(c.name) === "tickets");
     if (old) await discord(env, "PATCH", `/channels/${old.id}`, { name: "tickets-old" }, "Tickets moved to a forum").catch(() => {});
     f = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "tickets", type: 15, default_sort_order: 0,
       topic: "One post per ticket. 🟡 Needs reply · 🔵 Waiting on them · ✅ Closed. Use the buttons on each post: Reply (DMs them from the bot), Claim, Close.",
@@ -1133,6 +1133,7 @@ async function ticketsBackfillRun(env, L) {
   }
   return { done, left: list.length - done };
 }
+const bare = (n) => String(n || "").replace(/^[^│|]*[│|]\s*/, "");   // "🎫│tickets" -> "tickets"
 const firstCommish = (env) => String(env.REPLY_TO || env.COMMISH_IDS || "").split(/[\s,]+/).filter(Boolean)[0] || null;
 
 // ---------- staff cleanup: audit staff roles, DM a check-in, strip roles from no-shows ----------
@@ -1331,7 +1332,7 @@ async function counterAdmin(env, L, b) {
 // hidden staff-only log channel for flag-only rules (AutoMod has to post its alerts somewhere)
 async function hiddenLogChannel(env, L, by, name = "excuse-log", topic = "AutoMod log for the excuse counter — staff only, mute it.") {
   const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`).catch(() => []);
-  const ex = chans.find((c) => c.type === 0 && c.name === name); if (ex) return ex.id;
+  const ex = chans.find((c) => c.type === 0 && bare(c.name) === bare(name)); if (ex) return ex.id;
   const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name, type: 0, topic,
     ...(L.C.staffCategory ? { parent_id: L.C.staffCategory } : {}),
     permission_overwrites: [{ id: L.guild, type: 0, deny: "1024" }, ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: "1024" }] : [])] }, `Excuse counter log by ${by}`)
@@ -1666,7 +1667,7 @@ async function econAdmin(env, L, b, by) {
   if (b.cfg) { const c = { ...(await econCfg(env)), ...b.cfg }; c.daily = Math.max(0, +c.daily || 0); c.start = Math.max(0, +c.start || 0); await kput(env, "econ:cfg", c, 3650 * 86400); return { cfg: c }; }
   if (b.createChannel) {
     const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
-    const cat = chans.find((c) => c.type === 4 && /member/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
+    const cat = chans.find((c) => c.type === 4 && /member|community/i.test(c.name)) || chans.find((c) => c.type === 4 && /general|text|chat/i.test(c.name));
     const ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "🪙│ufa-coins", type: 0, ...(cat ? { parent_id: cat.id } : {}),
       topic: "UFA Coins — /daily /work /balance /leaderboard · casino: /blackjack /slots /roulette /coinflip /dice /crash · football: /drive /simgame /bet · /coinhelp", rate_limit_per_user: 2 }, `UFA Coins channel by ${by}`)
       .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels to create the channel.") : e; });
@@ -2364,11 +2365,16 @@ async function web(req, url, env, ctx) {
         for (const uid of body.untimeout || []) await discord(env, "PATCH", `/guilds/${L.guild}/members/${uid}`, { communication_disabled_until: null }, `Raid cleanup by ${by}`).then(() => done.push("untimed-out " + uid), (e) => errs.push(uid + ": " + e.message));
         if (body.recruitTags) { const cfg = await kget(env, "recruit:cfg");
           if (cfg?.ch) await discord(env, "PATCH", `/channels/${cfg.ch}`, { available_tags: RC_TAGS.map((name) => ({ name, moderated: false })) }, `Raid cleanup by ${by}`).then(() => done.push("restored recruitment tags"), (e) => errs.push("tags: " + e.message)); }
+        const created = {};
+        for (const op of (body.ops || []).slice(0, 45)) {   // {id, name?, parent?}
+          const patch = {}; if (op.name) patch.name = op.name; if (op.parent) patch.parent_id = created[op.parent] || op.parent;
+          await discord(env, "PATCH", `/channels/${op.id}`, patch, `Server cleanup by ${by}`).then(() => done.push(op.id), (e) => errs.push(`${op.label || op.id}: ${e.message}`));
+        }
         for (const cat of body.categories || []) {   // {name, position, overwrites, channels:[ids]}
           const nc = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: cat.name, type: 4, position: cat.position, permission_overwrites: (cat.overwrites || []).map((o) => ({ id: o.id, type: o.type, allow: String(o.allow), deny: String(o.deny) })) }, `Raid restore by ${by}`).catch((e) => { errs.push(cat.name + ": " + e.message); return null; });
           if (!nc) continue; done.push("recreated category " + cat.name);
           for (const id of cat.channels || []) await discord(env, "PATCH", `/channels/${id}`, { parent_id: nc.id }, `Raid restore by ${by}`).catch((e) => errs.push(id + ": " + e.message));
-          cat.newId = nc.id;
+          cat.newId = nc.id; created[cat.key] = nc.id;
           if (cat.oldId === L.C.staffCategory || cat.staff) { try { const { D, sha } = await getJSON(env, "config.json"); D.channels = { ...(D.channels || {}), staffCategory: nc.id }; await putJSON(env, "config.json", D, sha, `Staff category recreated after raid (${by})`); done.push("updated staff category in config"); } catch (e) { errs.push("config: " + e.message); } }
         }
         if (body.catOrder) { const ids = body.catOrder.map((x) => (body.categories || []).find((c) => c.key === x)?.newId || x).filter(Boolean);
@@ -2378,7 +2384,7 @@ async function web(req, url, env, ctx) {
           const np = BigInt(r.permissions) & ~BigInt(rp.remove);
           await discord(env, "PATCH", `/guilds/${L.guild}/roles/${r.id}`, { permissions: String(np) }, `Lockdown after raid (${by})`).then(() => done.push(`trimmed ${r.name} perms`), (e) => errs.push(r.name + ": " + e.message));
         }
-        return out({ ok: true, done, errs });
+        return out({ ok: true, done, errs, created: Object.fromEntries((body.categories || []).filter((c) => c.newId).map((c) => [c.key, c.newId])) });
       }
       if (p === "/api/admin/auditlog") {
         const AN = {1:"server update",10:"channel create",11:"channel update",12:"channel delete",13:"perm overwrite create",14:"perm overwrite update",15:"perm overwrite delete",20:"kick",21:"prune",22:"ban",23:"unban",24:"member update",25:"member roles update",26:"member move",27:"member disconnect",28:"bot add",30:"role create",31:"role update",32:"role delete",40:"invite create",41:"invite update",42:"invite delete",50:"webhook create",51:"webhook update",52:"webhook delete",60:"emoji create",61:"emoji update",62:"emoji delete",72:"message delete",73:"message bulk delete",74:"message pin",75:"message unpin",80:"integration create",82:"integration delete",110:"thread create",111:"thread update",112:"thread delete",140:"automod rule create",141:"automod rule update",142:"automod rule delete",143:"automod block",144:"automod flag",145:"automod timeout"};
