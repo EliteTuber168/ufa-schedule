@@ -867,6 +867,45 @@ async function recruitThread(env, t) {
   if (tn && !t.name.toLowerCase().includes(tn.toLowerCase())) await discord(env, "PATCH", `/channels/${t.id}`, { name: `${tn} — ${t.name}`.slice(0, 100) }).catch(() => {});
 }
 
+// ---------- scam trap: anyone (non-staff) who posts in the honeypot channel gets banned ----------
+async function trapSetup(env, L, by) {
+  const cfg = (await kget(env, "trap:cfg")) || { mode: "ban", hits: [] };
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+  let ch = cfg.ch && chans.find((c) => c.id === cfg.ch);
+  if (!ch) {
+    const cat = chans.find((c) => c.type === 4 && /important/i.test(c.name)) || chans.find((c) => c.type === 4 && /welcome/i.test(c.name));
+    const allow = String(1024n | 2048n | 32768n | 16384n | 65536n);
+    ch = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "🚫│mrbeast", type: 0, ...(cat ? { parent_id: cat.id } : {}),
+      topic: "⛔ DO NOT SEND ANYTHING HERE. Any message in this channel = instant ban. This is a trap for hacked accounts spamming scams.",
+      permission_overwrites: [{ id: L.guild, type: 0, allow }] }, `Scam trap by ${by}`).catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels.") : e; });
+    await discord(env, "POST", `/channels/${ch.id}/messages`, { embeds: [{ title: "⛔ DO NOT TYPE IN THIS CHANNEL", color: 0xe8424a,
+      description: "**Anything sent here gets you instantly banned.**\n\nThis channel is a trap for hacked accounts that spam fake MrBeast / crypto / Nitro giveaways in every channel.\n\nIf your account got hacked and banned: change your password, turn on 2FA, then contact staff to get unbanned." }] })
+      .then((m) => discord(env, "PUT", `/channels/${ch.id}/pins/${m.id}`).catch(() => {})).catch(() => {});
+  }
+  const log = await hiddenLogChannel(env, L, by, "📕│trap-log", "Scam trap bans — use Unban if it was a real person who got hacked.").catch(() => null);
+  Object.assign(cfg, { ch: ch.id, log });
+  await kput(env, "trap:cfg", cfg, 3650 * 86400);
+  return cfg;
+}
+async function trapHit(env, msg) {
+  const cfg = await kget(env, "trap:cfg"); if (!cfg?.ch || msg.channel_id !== cfg.ch || msg.author?.bot || msg.webhook_id) return;
+  const L = await league(env), uid = msg.author.id;
+  const g = await cached("guild:owner", 3600000, () => discord(env, "GET", `/guilds/${L.guild}`)).catch(() => ({}));
+  if (uid === g.owner_id || isStaff(env, L, uid, msg.member?.roles || [])) {   // staff testing: just delete it
+    await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {}); return;
+  }
+  const name = msg.member?.nick || msg.author.global_name || msg.author.username;
+  await dm(env, uid, { embeds: [{ title: "You were removed from UFA", color: 0xe8424a, description: `Your account posted in our scam-trap channel, which usually means **your account was hacked** and is spamming scams.\n\nChange your Discord password, turn on 2FA, and log out of all devices. Then message a UFA staff member to get back in.` }] }).catch(() => {});
+  const ok = await discord(env, "PUT", `/guilds/${L.guild}/bans/${uid}`, { delete_message_seconds: 86400 }, "Scam trap: posted in the honeypot channel").then(() => true, () => false);
+  if (ok && cfg.mode === "softban") await discord(env, "DELETE", `/guilds/${L.guild}/bans/${uid}`, null, "Scam trap: softban (kick + clean messages)").catch(() => {});
+  if (!ok) await discord(env, "DELETE", `/channels/${msg.channel_id}/messages/${msg.id}`).catch(() => {});
+  cfg.hits = [{ uid, name, ts: Date.now(), ok, mode: cfg.mode }, ...(cfg.hits || [])].slice(0, 50); cfg.count = (cfg.count || 0) + (ok ? 1 : 0);
+  await kput(env, "trap:cfg", cfg, 3650 * 86400);
+  if (cfg.log) await discord(env, "POST", `/channels/${cfg.log}/messages`, { allowed_mentions: { parse: [] }, embeds: [{ author: { name: `🪤 ${ok ? (cfg.mode === "softban" ? "Kicked (softban)" : "Banned") : "Couldn't ban"} ${name}` },
+    description: `<@${uid}> (${msg.author.username}) posted in the scam trap.${ok ? " Their messages from the last 24h were deleted." : " The bot couldn't ban them (their role is probably above the bot) — the message was deleted."}`, color: ok ? 0xe8424a : 0xffa24a,
+    footer: { text: uid }, timestamp: new Date().toISOString() }], components: ok && cfg.mode !== "softban" ? [row(btn("Unban (they were hacked)", 2, `trapub:${uid}`))] : [] }).catch(() => {});
+}
+
 const GW_STATUS = "📩 DM me for help";
 /** one always-on Discord gateway connection: gives the bot its status and hears DMs (Workers can't do this on their own) */
 export class Gateway {
@@ -899,7 +938,7 @@ export class Gateway {
       const sid = await this.state.storage.get("sid"), seq = this.seq ?? await this.state.storage.get("seq");
       const presence = { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] };
       if (sid && seq) this.send(ws, 6, { token: this.env.DISCORD_BOT_TOKEN, session_id: sid, seq });
-      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: (1 << 12) | 1, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
+      else this.send(ws, 2, { token: this.env.DISCORD_BOT_TOKEN, intents: (1 << 12) | (1 << 9) | 1, properties: { os: "linux", browser: "ufa", device: "ufa" }, presence });
     } else if (p.op === 11) this.ack = Date.now();
     else if (p.op === 1) this.send(ws, 1, this.seq);
     else if (p.op === 7) { this.close(); }
@@ -909,11 +948,13 @@ export class Gateway {
       if (p.t === "READY") await this.state.storage.put({ sid: p.d.session_id, resume: p.d.resume_gateway_url });
       if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
       if (p.t === "THREAD_CREATE" && p.d.newly_created) await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; });
+      if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await kget(this.env, "trap:cfg").catch(() => null))?.ch || null; this.trapAt = Date.now(); }
+        if (this.trapCh && p.d.channel_id === this.trapCh) await trapHit(this.env, p.d).catch((e) => { this.err = "trap: " + e.message; }); }
       if (p.t === "MESSAGE_CREATE" && !p.d.guild_id && !p.d.author?.bot) {
         const seen = (await this.state.storage.get("seen")) || [];
         if (!seen.includes(p.d.id)) { await this.state.storage.put("seen", [...seen, p.d.id].slice(-200)); await handleDM(this.env, p.d).catch((e) => { this.err = "dm: " + e.message; }); }
       }
-      if (this.seq) await this.state.storage.put("seq", this.seq);
+      if (this.seq && (p.t !== "MESSAGE_CREATE" || this.seq % 25 === 0)) await this.state.storage.put("seq", this.seq);
     }
   }
 }
@@ -1942,6 +1983,12 @@ async function component(i, env, ctx) {
     return json({ type: 7, data: { components: [], embeds: [{ ...(i.message?.embeds?.[0] || {}), color: kind === "sc" ? 0x2ecc71 : 0x8a8f98,
       fields: [{ name: kind === "sc" ? "✅ You're staying on staff" : "👋 You stepped down", value: kind === "sc" ? "Thanks! Nothing else to do." : "Your staff roles are being removed. Thanks for your time!" }] }] } });
   }
+  if (kind === "trapub") {
+    const L = await league(env);
+    if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
+    await discord(env, "DELETE", `/guilds/${L.guild}/bans/${id}`, null, `Scam trap unban by ${i.member?.user?.username || "staff"}`).catch(() => {});
+    return json({ type: 7, data: { components: [], embeds: [{ ...(i.message?.embeds?.[0] || {}), color: 0x2ecc71, fields: [{ name: "✅ Unbanned", value: `by <@${uidOf(i)}> — send them a new invite.` }] }] } });
+  }
   if (kind === "tcl" || kind === "tcx") {
     const L = await league(env);
     if (!isStaff(env, L, uidOf(i), i.member?.roles || [], i.member?.permissions)) return reply("Only staff can do that.", true);
@@ -2395,6 +2442,12 @@ async function web(req, url, env, ctx) {
         const M = await members(env, L, true).catch(() => []);
         const joins = M.filter((m) => Date.parse(m.joined_at) > Date.now() - 6 * 3600000).map((m) => ({ id: m.user.id, name: display(m), joined: Date.parse(m.joined_at), created: Number((BigInt(m.user.id) >> 22n) + 1420070400000n), roles: (m.roles || []).length })).sort((a, b) => b.joined - a.joined);
         return out({ entries, joins });
+      }
+      if (p === "/api/admin/trap") {
+        if (body.setup) { const c = await trapSetup(env, L, staffSig(admin)); return out({ ok: true, trap: c }); }
+        const c = await kget(env, "trap:cfg");
+        if (body.mode && c) { c.mode = body.mode === "softban" ? "softban" : "ban"; await kput(env, "trap:cfg", c, 3650 * 86400); }
+        return out({ trap: c || null });
       }
       if (p === "/api/admin/recruit/setup") return out({ ok: true, ...(await recruitSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/staff/audit") return out(await staffAudit(env, L));
