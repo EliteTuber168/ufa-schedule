@@ -2347,6 +2347,16 @@ async function web(req, url, env, ctx) {
       if (p === "/api/admin/readiness") return out(await readiness(env, L));
       if (p === "/api/admin/replacefo") return out({ ok: true, ...(await replaceFO(env, L, body, staffSig(admin))) });
       if (p === "/api/admin/tickets/backfill") return out({ ok: true, ...(await ticketsBackfill(env, L)) });
+      if (p === "/api/admin/auditlog") {
+        const AN = {1:"server update",10:"channel create",11:"channel update",12:"channel delete",13:"perm overwrite create",14:"perm overwrite update",15:"perm overwrite delete",20:"kick",21:"prune",22:"ban",23:"unban",24:"member update",25:"member roles update",26:"member move",27:"member disconnect",28:"bot add",30:"role create",31:"role update",32:"role delete",40:"invite create",41:"invite update",42:"invite delete",50:"webhook create",51:"webhook update",52:"webhook delete",60:"emoji create",61:"emoji update",62:"emoji delete",72:"message delete",73:"message bulk delete",74:"message pin",75:"message unpin",80:"integration create",82:"integration delete",110:"thread create",111:"thread update",112:"thread delete",140:"automod rule create",141:"automod rule update",142:"automod rule delete",143:"automod block",144:"automod flag",145:"automod timeout"};
+        const al = await discord(env, "GET", `/guilds/${L.guild}/audit-logs?limit=100${body.before ? "&before=" + body.before : ""}`);
+        const U = Object.fromEntries((al.users || []).map((u) => [u.id, u.global_name || u.username]));
+        const entries = (al.audit_log_entries || []).map((e) => ({ id: e.id, ts: Number((BigInt(e.id) >> 22n) + 1420070400000n), action: AN[e.action_type] || "type " + e.action_type, by: U[e.user_id] || e.user_id, byId: e.user_id,
+          target: U[e.target_id] || e.target_id, reason: e.reason || "", changes: (e.changes || []).map((c) => `${c.key}: ${JSON.stringify(c.old_value ?? "").slice(0, 60)} -> ${JSON.stringify(c.new_value ?? "").slice(0, 80)}`).join("; ").slice(0, 300), extra: e.options ? JSON.stringify(e.options).slice(0, 120) : "" }));
+        const M = await members(env, L, true).catch(() => []);
+        const joins = M.filter((m) => Date.parse(m.joined_at) > Date.now() - 6 * 3600000).map((m) => ({ id: m.user.id, name: display(m), joined: Date.parse(m.joined_at), created: Number((BigInt(m.user.id) >> 22n) + 1420070400000n), roles: (m.roles || []).length })).sort((a, b) => b.joined - a.joined);
+        return out({ entries, joins });
+      }
       if (p === "/api/admin/recruit/setup") return out({ ok: true, ...(await recruitSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/staff/audit") return out(await staffAudit(env, L));
       if (p === "/api/admin/staff/check") return out({ ok: true, ...(await staffCheckStart(env, L, body, staffSig(admin))) });
