@@ -228,6 +228,8 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
         if (canDo("promote") && p.rank === "player") a.push(`<button class="btn sm" data-pro="${p.id}">Promote</button>`);
         if (canDo("promote") && ["gm","hc"].includes(p.rank)) a.push(`<button class="btn sm" data-pro="${p.id}">Change title</button><button class="btn sm" data-dem="${p.id}">Demote</button>`);
       }
+      const ct = (TEAM.contracts || {})[p.id];
+      if (ct) a.unshift(`<span class="note" title="${ct.status === "active" ? "Contract approved" : "Contract waiting on staff"}">📜 until ${new Date(ct.until).toLocaleDateString([], {month:"short", day:"numeric"})}${ct.status === "active" ? "" : " (pending)"}</span>`);
       return card(p, a.join(""));
     }).join("") || `<div class="note">No players yet.</div>`;
     renderFA(); renderOffers(); renderReqs(); tabs();

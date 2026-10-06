@@ -525,6 +525,10 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
         <div class="row">
           <label class="f" style="flex:0 1 220px">Max roster size (FO counts)<input type="number" min="5" max="60" id="sCap"></label>
           <label class="c" style="margin-bottom:10px"><input type="checkbox" id="sFreeze"> Freeze signings &amp; trades</label>
+          <label class="f">Trade deadline <input type="datetime-local" id="sTradeDl"></label>
+          <label class="f">Signing window opens <input type="datetime-local" id="sSignOpen"></label>
+          <label class="f">Signing window closes <input type="datetime-local" id="sSignClose"></label>
+          <div class="note" style="margin-bottom:8px">Leave empty for none. Uses your computer's time zone. The bot blocks trades after the deadline and signings outside the window, and announces it in #transactions 24 hours before and when it happens. Remember to hit Save.</div>
         </div>
         <div class="note">Signings and trades also pause automatically while the draft is live.</div>
       </section>
@@ -1048,6 +1052,8 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     const s = D.settings;
     $("#sMin").value = s.minPlayers; $("#sFO").checked = s.requireFO; $("#sDays").value = s.deadlineDays; $("#sCu").value = String(s.maxCatchup); $("#sRm").value = s.rematch;
     $("#sEvery").checked = s.pingEveryone; $("#sAnn").value = s.announcement || ""; $("#sCap").value = s.rosterCap; $("#sFreeze").checked = !!s.signingFreeze;
+    const dl = v => { if (!v) return ""; const d = new Date(v); return isNaN(d) ? "" : new Date(d - d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
+    $("#sTradeDl").value = dl(s.tradeDeadline); $("#sSignOpen").value = dl(s.signingOpen); $("#sSignClose").value = dl(s.signingClose);
     $("#lname").value = D.league || ""; $("#lseason").value = D.season || ""; $("#lowners").value = D.roles?.owners || "";
     renderPrev();
   }
@@ -1065,6 +1071,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
   $("#sAnn").oninput = e => setS("announcement", e.target.value);
   $("#sCap").oninput = e => { const v = parseInt(e.target.value); if (v >= 5) setS("rosterCap", v); };
   $("#sFreeze").onchange = e => setS("signingFreeze", e.target.checked);
+  for (const [id, k] of [["sTradeDl","tradeDeadline"],["sSignOpen","signingOpen"],["sSignClose","signingClose"]]) $("#"+id).onchange = e => setS(k, e.target.value ? new Date(e.target.value).toISOString() : "");
   $("#lname").oninput = e => { D.league = e.target.value; setDirty(true); };
   $("#lseason").oninput = e => { D.season = e.target.value; setDirty(true); };
   $("#lowners").oninput = e => { (D.roles ||= {}).owners = e.target.value; setDirty(true); };
