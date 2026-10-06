@@ -992,6 +992,39 @@ async function trapHit(env, msg) {
     footer: { text: uid }, timestamp: new Date().toISOString() }], components: ok && cfg.mode !== "softban" ? [row(btn("Unban (they were hacked)", 2, `trapub:${uid}`))] : [] }).catch(() => {});
 }
 
+// ---------- suggestions forum: every new post gets ⬆️ / ⬇️ ----------
+async function suggestSetup(env, L, by) {
+  const chans = await discord(env, "GET", `/guilds/${L.guild}/channels`);
+  let f = chans.find((c) => c.type === 15 && /suggest/i.test(c.name));
+  if (!f) {
+    const cat = chans.find((c) => c.type === 4 && /member|community/i.test(c.name));
+    const P = { SEND: 2048n, THREAD_SEND: 1n << 38n, REACT: 64n, ATTACH: 32768n, EMBED: 16384n, MANAGE_THREADS: 1n << 34n, MANAGE_MSG: 8192n };
+    f = await discord(env, "POST", `/guilds/${L.guild}/channels`, { name: "💡│suggestions", type: 15, ...(cat ? { parent_id: cat.id } : {}),
+      topic: "💡 Got an idea for UFA? Make a post — one idea per post, give it a clear title. Vote ⬆️ / ⬇️ on other people's ideas. Staff tag posts when they're reviewed.",
+      permission_overwrites: [{ id: L.guild, type: 0, allow: String(P.SEND | P.THREAD_SEND | P.REACT | P.ATTACH | P.EMBED) },
+        ...(L.R.staff ? [{ id: L.R.staff, type: 0, allow: String(P.MANAGE_THREADS | P.MANAGE_MSG) }] : [])],
+      available_tags: [["💭", "Open"], ["👀", "Under review"], ["✅", "Approved"], ["🚀", "Added"], ["❌", "Denied"]].map(([emoji_name, name], k) => ({ name, emoji_name, moderated: k > 0 })),
+      default_sort_order: 0, default_forum_layout: 1, rate_limit_per_user: 1800 }, `Suggestions forum by ${by}`)
+      .catch((e) => { throw e.status === 403 ? UE("The bot needs Manage Channels.") : e; });
+    const th = await discord(env, "POST", `/channels/${f.id}/threads`, { name: "📌 How suggestions work — read first", message: { embeds: [{ title: "💡 Suggestions", color: 0xffc62f, description: [
+      "• **One idea per post** with a clear title (e.g. \"Add a trade deadline\").", "• Explain what it is and why it'd make UFA better.", "• The bot adds ⬆️ and ⬇️ to every post — **vote on ideas you like or don't**.", "• Search first so you don't repost an idea that's already up.",
+      "", "Staff check the top-voted ideas and tag them **👀 Under review**, **✅ Approved**, **🚀 Added** or **❌ Denied**.", "Keep it respectful — trolling or spam posts get removed."].join("\n") }] } }).catch(() => null);
+    if (th) await discord(env, "PATCH", `/channels/${th.id}`, { flags: 2, locked: true }).catch(() => {});
+  }
+  const open = (f.available_tags || []).find((t) => t.name === "Open")?.id || null;
+  await kput(env, "suggest:cfg", { ch: f.id, open }, 3650 * 86400);
+  return { channel: f.id, name: f.name };
+}
+async function suggestThread(env, t) {
+  const cfg = await kget(env, "suggest:cfg"); if (!cfg?.ch || t.parent_id !== cfg.ch) return;
+  const me = await cached("me", 3600000, () => discord(env, "GET", "/users/@me")).catch(() => ({}));
+  if (t.owner_id === me.id) return;
+  for (const e of ["⬆️", "⬇️"]) {   // the starter message has the same id as the post; it can lag a moment behind the thread
+    for (let k = 0; k < 4; k++) { const ok = await discord(env, "PUT", `/channels/${t.id}/messages/${t.id}/reactions/${encodeURIComponent(e)}/@me`).then(() => true, () => false); if (ok) break; await new Promise((r) => setTimeout(r, 1500)); }
+  }
+  if (cfg.open && !(t.applied_tags || []).length) await discord(env, "PATCH", `/channels/${t.id}`, { applied_tags: [cfg.open] }).catch(() => {});
+}
+
 const GW_STATUS = "📩 DM me for help";
 const GW_NAME = "gw3";   // fallback when the version binding is missing
 // each deploy gets its own gateway instance (a running Durable Object keeps its old code), older ones see "gw:current" change and shut down
@@ -1048,7 +1081,7 @@ export class Gateway {
       this.ack = Date.now(); this.events++;
       if (p.t === "READY") await this.state.storage.put({ sid: p.d.session_id, resume: p.d.resume_gateway_url });
       if (p.t === "RESUMED" || p.t === "READY") this.send(ws, 3, { since: null, afk: false, status: "online", activities: [{ type: 4, name: "Custom Status", state: GW_STATUS }] });
-      if (p.t === "THREAD_CREATE" && p.d.newly_created) await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; });
+      if (p.t === "THREAD_CREATE" && p.d.newly_created) { await recruitThread(this.env, p.d).catch((e) => { this.err = "recruit: " + e.message; }); await suggestThread(this.env, p.d).catch((e) => { this.err = "suggest: " + e.message; }); }
       if (p.t === "MESSAGE_CREATE" && p.d.guild_id) { if (!this.trapAt || Date.now() - this.trapAt > 300000) { this.trapCh = (await kget(this.env, "trap:cfg").catch(() => null))?.ch || null; this.trapAt = Date.now(); }
         this.gmsg = (this.gmsg || 0) + 1;
         if (this.trapCh && p.d.channel_id === this.trapCh) { this.trapSeen = { ts: Date.now(), author: p.d.author?.username, bot: !!p.d.author?.bot };
@@ -2562,6 +2595,7 @@ async function web(req, url, env, ctx) {
         const joins = M.filter((m) => Date.parse(m.joined_at) > Date.now() - 6 * 3600000).map((m) => ({ id: m.user.id, name: display(m), joined: Date.parse(m.joined_at), created: Number((BigInt(m.user.id) >> 22n) + 1420070400000n), roles: (m.roles || []).length })).sort((a, b) => b.joined - a.joined);
         return out({ entries, joins });
       }
+      if (p === "/api/admin/suggest/setup") return out({ ok: true, ...(await suggestSetup(env, L, staffSig(admin))) });
       if (p === "/api/admin/trap") {
         if (body.setup) { const c = await trapSetup(env, L, staffSig(admin)); return out({ ok: true, trap: c }); }
         const c = await kget(env, "trap:cfg");
