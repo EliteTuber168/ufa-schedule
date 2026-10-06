@@ -28,10 +28,10 @@
   },
   {
    "abbr": "LV",
-   "fo": "KA1",
+   "fo": "ccrick1044",
    "in": true,
    "roleId": "1548502288006389820",
-   "foId": "1552716188461834264"
+   "foId": "1191466907354796213"
   },
   {
    "abbr": "CLE",
@@ -156,9 +156,10 @@
   },
   {
    "abbr": "TEN",
-   "fo": "",
+   "fo": "mookie",
    "in": false,
-   "roleId": "1548502346621915217"
+   "roleId": "1548502346621915217",
+   "foId": "1524230783903203459"
   },
   {
    "abbr": "MIA",
@@ -213,10 +214,10 @@
   },
   {
    "abbr": "HOU",
-   "fo": "sh8dow",
+   "fo": "KA1",
    "in": false,
    "roleId": "1548502272600842341",
-   "foId": "1432252161688997978"
+   "foId": "1552716188461834264"
   }
  ],
  "positions": [
@@ -302,7 +303,7 @@
    "name": "w03n",
    "pos": [],
    "discord": "1222546735474151435",
-   "avatar": "https://cdn.discordapp.com/avatars/1222546735474151435/0e7c69566f7b07e0697661ccbb4ce8d9.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1222546735474151435/f4f32116e431c87bcb79847cfdca087c.png?size=96"
   },
   {
    "id": 14,
@@ -347,7 +348,7 @@
    "name": "QRE_HO",
    "pos": [],
    "discord": "1362998405151854712",
-   "avatar": "https://cdn.discordapp.com/avatars/1362998405151854712/2db3b92eedc3f659fc36129ef342ed31.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1362998405151854712/8ff404c8869700b6df3de55a696d83d0.png?size=96"
   },
   {
    "id": 19,
@@ -765,7 +766,7 @@
    "name": "SensicJ",
    "pos": [],
    "discord": "793678114600517662",
-   "avatar": "https://cdn.discordapp.com/avatars/793678114600517662/368cad0c3a8be15d8968b1c81323806b.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/793678114600517662/2f0b64cc14cef56afe775446f6c3bf54.png?size=96"
   },
   {
    "id": 75,
@@ -1729,7 +1730,7 @@
   },
   {
    "id": 210,
-   "name": "Hurdzz",
+   "name": "Lustjngreed",
    "pos": [],
    "discord": "1495268401910644817",
    "avatar": "https://cdn.discordapp.com/avatars/1495268401910644817/10dbdf126902a5713acbc310655a04ba.png?size=96"
@@ -1752,7 +1753,7 @@
    "name": "ihaveabluebeam",
    "pos": [],
    "discord": "1498156915958485018",
-   "avatar": "https://cdn.discordapp.com/avatars/1498156915958485018/5fc57baa5da818442d57b85121f10279.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1498156915958485018/fbcfced98235806f9b838d3cb3aa61d0.png?size=96"
   },
   {
    "id": 213,
@@ -1868,7 +1869,7 @@
   },
   {
    "id": 229,
-   "name": "Globalgodd",
+   "name": "Jmonuf",
    "pos": [],
    "discord": "1539444661482164245",
    "avatar": "https://cdn.discordapp.com/avatars/1539444661482164245/463d4527d9899c18150d3e5558e02423.png?size=96"
