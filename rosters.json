@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-06T17:16:04+00:00",
+ "updated": "2026-10-07T01:37:44+00:00",
  "teams": {
   "ARI": [
    {
@@ -33,6 +33,16 @@
     "name": "KA1",
     "avatar": "https://cdn.discordapp.com/avatars/1552716188461834264/3f58b1d726037d278ac8c55ce25b60e2.png?size=96",
     "fo": true
+   },
+   {
+    "id": "1402518232639995934",
+    "name": "Frank",
+    "avatar": "https://cdn.discordapp.com/avatars/1402518232639995934/53fd67378cedb5c39dbafa5d97fc5e78.png?size=96"
+   },
+   {
+    "id": "1147357659100627086",
+    "name": "Frenchfries",
+    "avatar": "https://cdn.discordapp.com/avatars/1147357659100627086/1a5ca22afec71e7cd58d6b44767e0bec.png?size=96"
    },
    {
     "id": "1302825050780598316",
@@ -94,6 +104,21 @@
     "name": "MYMY022509",
     "avatar": "https://cdn.discordapp.com/avatars/957403759896576040/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96",
     "fo": true
+   },
+   {
+    "id": "718607233738342422",
+    "name": "14shockers",
+    "avatar": "https://cdn.discordapp.com/avatars/718607233738342422/2c62f40387fe50b67959968bb9b68b51.png?size=96"
+   },
+   {
+    "id": "1457464951781327096",
+    "name": "Jaythegoat",
+    "avatar": "https://cdn.discordapp.com/avatars/1457464951781327096/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96"
+   },
+   {
+    "id": "815382771056377896",
+    "name": "xpyzz",
+    "avatar": "https://cdn.discordapp.com/avatars/815382771056377896/2bb7f69ce1cdeea7ad53454cd5d0362f.png?size=96"
    }
   ],
   "NYG": [

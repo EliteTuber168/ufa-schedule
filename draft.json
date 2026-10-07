@@ -788,20 +788,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/912496347607883818/8e22ff8c2880160a2c9f7af59152410c.png?size=96"
   },
   {
-   "id": 80,
-   "name": "Imhimggggg",
-   "pos": [
-    "WR",
-    "TE",
-    "DE",
-    "DB"
-   ],
-   "discord": "925450917170532382",
-   "avatar": "https://cdn.discordapp.com/avatars/925450917170532382/c6fab1c2a8dd30dec7d357e48edc3d71.png?size=96",
-   "locked": true,
-   "posNotified": 1790976589373
-  },
-  {
    "id": 81,
    "name": "Robloxianp8t3e6b4y",
    "pos": [],
@@ -2038,6 +2024,13 @@
    "pos": [],
    "discord": "1487908645344772126",
    "avatar": "https://cdn.discordapp.com/avatars/1487908645344772126/5d67491d9af26c9e98bc898aa9d26c27.png?size=96"
+  },
+  {
+   "id": 258,
+   "name": "Firereaper11",
+   "pos": [],
+   "discord": "1543286704868167712",
+   "avatar": "https://cdn.discordapp.com/avatars/1543286704868167712/b01ef0b93a742d627e3752a8f9025d50.png?size=96"
   }
  ],
  "picks": [],
