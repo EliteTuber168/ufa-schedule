@@ -507,6 +507,9 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     <div id="tab-settings" class="hide" style="display:flex;flex-direction:column;gap:16px">
       <div class="sub" id="setsub" role="tablist"><button data-sub="general" aria-selected="true">League settings</button><button class="dz" data-sub="danger" aria-selected="false">⚠️ Danger Zone</button></div>
       <div id="set-danger" class="hide" style="display:flex;flex-direction:column;gap:16px">
+        <section class="panel" id="bkpanel" style="border-color:var(--good)"><div class="row between"><h2>🗄️ Server backup</h2><div class="row"><button class="btn sm" id="bkrun">Back up now</button><button class="btn sm" id="bkdl">Download</button></div></div>
+          <div class="note" id="bknote">Loading…</div>
+          <div class="note">A full blueprint of the Discord server — every role and its permissions, every category, channel, forum, permission override, AutoMod rule, emoji, and who has which role. Saved automatically every day. If the server ever gets nuked or taken from you, this is what we rebuild from. Download a copy now and then to keep one yourself.</div></section>
         <div class="dzbanner"><b>Danger Zone</b><span class="note">These change a lot of people at once. Every roster wipe saves a backup first, so you can press <b>Undo last wipe</b> if you make a mistake. Each action asks you to type a phrase to confirm.</span></div>
         <div id="dzjob"></div>
         <h2>Rosters</h2>
@@ -679,7 +682,7 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
     TAB = tab;
     $$("#tabs button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab));
     ["dash","assign","dm","teams","players","queues","ready","scl","act","spin","mod","econ","approvals","week","tx","settings"].forEach(k => $("#tab-"+k).classList.toggle("hide", k !== tab));
-    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, ready: loadReady, scl: loadScl, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger") loadDanger(); }})[tab]();
+    ({dash: renderDash, assign: renderStaff, dm: renderDM, teams: renderCards, players: loadPlayers, queues: loadQueues, ready: loadReady, scl: loadScl, act: loadAct, spin: renderSpin, mod: loadMod, econ: loadEcon, approvals: loadReqs, week: renderWeek, tx: loadTx, settings: () => { renderSettings(); if (SUB === "danger"){ loadDanger(); loadBackup(); } }})[tab]();
   }
 
   // ---------- dashboard ----------
@@ -907,6 +910,12 @@ th{font-size:12px;letter-spacing:.14em;color:var(--mute);font-weight:700;text-tr
       };
     }catch(err){ wz.innerHTML = `<h2>Couldn't check</h2><div class="note">${esc(err.message)}</div><div class="row" style="justify-content:flex-end"><button class="btn" data-close>Close</button></div>`; }
   };
+  async function loadBackup(){
+    try{ const b = (await bot("/api/admin/backup", {})).last; $("#bknote").innerHTML = b ? `Last backup: <b>${new Date(b.ts).toLocaleString()}</b> — ${b.roles} roles, ${b.channels} channels, ${b.members} members, ${b.automod} AutoMod rules, ${b.emojis} emojis.` : "No backup yet — hit <b>Back up now</b>."; }catch(e){ $("#bknote").textContent = e.message; }
+  }
+  $("#bkrun").onclick = async e => { e.target.disabled = true; try{ await bot("/api/admin/backup", {run: true}); toast("Backed up."); }catch(err){ toast(err.message, false); } e.target.disabled = false; loadBackup(); };
+  $("#bkdl").onclick = async () => { try{ const j = await bot("/api/admin/backup", {download: true}); if (!j.backup) return toast("No backup yet.", false);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(j.backup, null, 1)], {type: "application/json"})); a.download = `ufa-server-backup-${new Date(j.backup.ts).toISOString().slice(0,10)}.json`; a.click(); }catch(e){ toast(e.message, false); } };
   async function afterChange(){ await loadLive(); ({dash: renderDash, assign: renderStaff, teams: renderCards})[TAB]?.(); }
   const words = ["blitz","huddle","endzone","redzone","audible","gridiron","snap","punt","sack","spiral","tackle","pylon","hailmary","shotgun","pocket","flag"];
   const genPw = () => { const r = crypto.getRandomValues(new Uint32Array(3)); return `${words[r[0]%words.length]}-${words[r[1]%words.length]}-${1000 + r[2]%9000}`; };
@@ -2303,7 +2312,7 @@ This is what franchise owners see when they draft. If it's wrong, hit <b>Reply t
   let DZ = null, SUB = "general";
   $("#setsub").onclick = e => { const b = e.target.closest("button[data-sub]"); if (!b) return; SUB = b.dataset.sub;
     $$("#setsub button").forEach(x => x.setAttribute("aria-selected", x === b)); $("#set-general").classList.toggle("hide", SUB !== "general"); $("#set-danger").classList.toggle("hide", SUB !== "danger");
-    if (SUB === "danger") loadDanger(); };
+    if (SUB === "danger"){ loadDanger(); loadBackup(); } };
   const ROSTER_DZ = [
     ["wipe_all", "🧹 Wipe all teams", "Takes every team role off everyone — players, GMs, head coaches <b>and franchise owners</b>. Also removes all FO / GM / HC roles. Every team ends up empty."],
     ["wipe_keep_fo", "🧹 Wipe players, keep FOs", "Takes everyone off their team except franchise owners, and removes all GM / HC titles. Perfect for a league restart before a draft."],
