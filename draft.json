@@ -442,7 +442,7 @@
    "name": "おはようございます",
    "pos": [],
    "discord": "1452945406408527912",
-   "avatar": "https://cdn.discordapp.com/avatars/1452945406408527912/ad50c85a255699147d1134536fe7c772.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1452945406408527912/53cc34d243040e90c8d7e61032cba488.png?size=96"
   },
   {
    "id": 31,
@@ -523,7 +523,7 @@
    "name": "Ocean",
    "pos": [],
    "discord": "1499192685343539382",
-   "avatar": "https://cdn.discordapp.com/avatars/1499192685343539382/694aaed3881055415d7b3863b123cc7b.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1499192685343539382/e06f99529ca946e27a5356a4c96dc517.png?size=96"
   },
   {
    "id": 41,
@@ -539,7 +539,7 @@
     "OS/Short"
    ],
    "discord": "1511918194607001691",
-   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/1ba029e546d47776989a51fa8d8ca902.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/eea23029d414e20fbd428bda8bcea542.png?size=96",
    "locked": true,
    "posNotified": 1790976589373
   },
@@ -1081,7 +1081,7 @@
    "name": "Mr serious",
    "pos": [],
    "discord": "1218445447278886983",
-   "avatar": "https://cdn.discordapp.com/avatars/1218445447278886983/9aaff3e1f5793a4113001174e4d69205.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1218445447278886983/1aba12540adb9938e7160ade02ad12e8.png?size=96"
   },
   {
    "id": 120,
@@ -1325,13 +1325,6 @@
    "pos": [],
    "discord": "1363366815757107421",
    "avatar": "https://cdn.discordapp.com/avatars/1363366815757107421/c6dcbaab515b024afe082d859f61fbb9.png?size=96"
-  },
-  {
-   "id": 161,
-   "name": "D1ngakoop",
-   "pos": [],
-   "discord": "1365921717402472460",
-   "avatar": "https://cdn.discordapp.com/avatars/1365921717402472460/5d0be39d1a762d388f6c025f346b2eed.png?size=96"
   },
   {
    "id": 162,
@@ -2032,6 +2025,13 @@
    "pos": [],
    "discord": "1543286704868167712",
    "avatar": "https://cdn.discordapp.com/avatars/1543286704868167712/b01ef0b93a742d627e3752a8f9025d50.png?size=96"
+  },
+  {
+   "id": 259,
+   "name": "CamyUF",
+   "pos": [],
+   "discord": "1557148907329421386",
+   "avatar": "https://cdn.discordapp.com/avatars/1557148907329421386/8ea808943a6def79d6e0d5279af8b93e.png?size=96"
   }
  ],
  "picks": [],

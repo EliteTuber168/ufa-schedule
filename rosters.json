@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-07T01:37:44+00:00",
+ "updated": "2026-10-07T08:47:41+00:00",
  "teams": {
   "ARI": [
    {
@@ -132,7 +132,7 @@
    {
     "id": "1530311998997266583",
     "name": "Skib",
-    "avatar": "https://cdn.discordapp.com/avatars/1530311998997266583/791f225946a3e161c59ed677a8d3017a.png?size=96",
+    "avatar": "https://cdn.discordapp.com/avatars/1530311998997266583/e8a4360d04ea6aa7e204b6e736c286cd.png?size=96",
     "fo": true
    }
   ],
@@ -177,11 +177,6 @@
     "id": "1369399693175427166",
     "name": "Juju",
     "avatar": "https://cdn.discordapp.com/avatars/1369399693175427166/bb55f9234bbd4a1f78d3f7ab6bba1e47.png?size=96"
-   },
-   {
-    "id": "1552786787175370833",
-    "name": "Ziondagoat",
-    "avatar": "https://cdn.discordapp.com/avatars/1552786787175370833/6c5996770c985bcd6e5b68131ff2ba04.png?size=96"
    }
   ],
   "TB": [],
