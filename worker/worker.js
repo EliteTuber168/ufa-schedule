@@ -38,6 +38,7 @@ export default {
     if (m === 17) jobs.push(["autoclose", () => autoCloseTickets(env)]);
     if (m % 5 === 3) jobs.push(["league", () => leagueTick(env)]);
     if (m === 41) jobs.push(["contracts", () => contractTick(env)]);
+    if (m === 29 && new Date(event.scheduledTime || Date.now()).getUTCHours() === 9) jobs.push(["backup", async () => backupNow(env, await league(env))]);
     for (const [job, fn] of jobs) {
       const t0 = Date.now();
       ctx.waitUntil(Promise.resolve().then(fn).then(() => cronDiag(env, job, Date.now() - t0, null), (e) => { console.log(job + ":", e.message); return cronDiag(env, job, Date.now() - t0, e.message); }));
@@ -177,6 +178,7 @@ async function league(env, fresh = false) {
       const d = D.teams.find((x) => x.abbr === t.abbr) || {};
       return { abbr: t.abbr, name: t.name, color: t.color, roleId: d.roleId || (/^\d{6,}$/.test(t.role || "") ? t.role : "") };
     });
+    R.staffExtra = (await kget(env, "staffroles").catch(() => null)) || [];
     const settings = { rosterCap: 25, signingFreeze: false, minPlayers: 5, requireFO: true, ...(S.settings || {}) };
     return { guild, R, C, teams, settings, draftStatus: D.status };
   });
@@ -213,6 +215,7 @@ const foOf = (L, M, abbr) => rosterOf(L, M, abbr).find((p) => p.rank === "fo");
 function isStaff(env, L, uid, roles = [], perms) {
   if (String(env.COMMISH_IDS || "").split(/[\s,]+/).includes(uid)) return true;
   if (L?.R?.staff && roles.includes(L.R.staff)) return true;
+  if (L?.R?.staffExtra?.length && roles.some((r) => L.R.staffExtra.includes(r))) return true;
   if (env.COMMISH_ROLE_ID && roles.includes(env.COMMISH_ROLE_ID)) return true;
   try { return perms != null && (BigInt(perms) & 0x28n) !== 0n; } catch { return false; }
 }
@@ -1289,6 +1292,27 @@ async function joinWelcome(env, d) {
   const cfg = await kget(env, "join:cfg"); if (!cfg?.on || d.user?.bot) return;
   const L = await league(env);
   await dm(env, d.user.id, { embeds: [{ title: "👋 Welcome to UFA!", color: 0xffc62f, description: `Glad you're here, **${d.user.global_name || d.user.username}**.\n\nWant to play? **Pick your positions below** to become a free agent — franchise owners will see you in the player pool and can send you offers.\n\nQuestions? Just DM me and staff will help.` }], components: [joinSelect()] }).catch(() => {});
+}
+
+// ---------- server backup: full blueprint (roles, channels, permissions, forums, automod, emojis, member roles) kept in KV ----------
+async function serverSnapshot(env, L) {
+  const [g, roles, chans, M, rules, emojis] = await Promise.all([discord(env, "GET", `/guilds/${L.guild}`), discord(env, "GET", `/guilds/${L.guild}/roles`), discord(env, "GET", `/guilds/${L.guild}/channels`),
+    members(env, L, true).catch(() => []), discord(env, "GET", `/guilds/${L.guild}/auto-moderation/rules`).catch(() => []), discord(env, "GET", `/guilds/${L.guild}/emojis`).catch(() => [])]);
+  const pick = (o, ks) => Object.fromEntries(ks.filter((k) => o[k] !== undefined && o[k] !== null).map((k) => [k, o[k]]));
+  return { ts: Date.now(), version: 1,
+    guild: pick(g, ["id", "name", "icon", "banner", "description", "owner_id", "verification_level", "default_message_notifications", "explicit_content_filter", "system_channel_id", "rules_channel_id", "public_updates_channel_id", "afk_channel_id", "afk_timeout", "preferred_locale", "features"]),
+    roles: roles.map((r) => pick(r, ["id", "name", "color", "hoist", "mentionable", "permissions", "position", "managed", "icon", "unicode_emoji"])).sort((a, b) => b.position - a.position),
+    channels: chans.map((c) => pick(c, ["id", "name", "type", "parent_id", "position", "topic", "nsfw", "rate_limit_per_user", "bitrate", "user_limit", "rtc_region", "default_auto_archive_duration", "available_tags", "default_reaction_emoji", "default_sort_order", "default_forum_layout", "default_thread_rate_limit_per_user", "flags", "permission_overwrites"])),
+    automod: rules.map((r) => pick(r, ["name", "event_type", "trigger_type", "trigger_metadata", "actions", "enabled", "exempt_roles", "exempt_channels"])),
+    emojis: emojis.map((e) => ({ name: e.name, id: e.id, animated: !!e.animated, url: `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? "gif" : "png"}` })),
+    members: M.map((m) => ({ id: m.user.id, name: display(m), roles: m.roles || [] })),
+    league: { R: L.R, C: L.C } };
+}
+async function backupNow(env, L) {
+  const snap = await serverSnapshot(env, L), prev = await kget(env, "backup:latest");
+  if (prev) await kput(env, "backup:prev", prev, 60 * 86400);
+  await kput(env, "backup:latest", snap, 365 * 86400);
+  return { ts: snap.ts, roles: snap.roles.length, channels: snap.channels.length, members: snap.members.length, emojis: snap.emojis.length, automod: snap.automod.length };
 }
 
 const GW_STATUS = "📩 DM me for help";
@@ -2866,6 +2890,8 @@ async function web(req, url, env, ctx) {
         }
         if (body.catOrder) { const ids = body.catOrder.map((x) => (body.categories || []).find((c) => c.key === x)?.newId || x).filter(Boolean);
           await discord(env, "PATCH", `/guilds/${L.guild}/channels`, ids.map((id, k) => ({ id, position: k })), `Raid restore by ${by}`).then(() => done.push("ordered categories"), (e) => errs.push("order: " + e.message)); }
+        for (const rp of body.rolePermsSet || []) await discord(env, "PATCH", `/guilds/${L.guild}/roles/${rp.id}`, { permissions: String(rp.permissions) }, `Permission lockdown (${by})`).then(() => done.push("set perms " + (rp.name || rp.id)), (e) => errs.push((rp.name || rp.id) + ": " + e.message));
+        for (const ow of (body.overwrites || []).slice(0, 40)) await discord(env, "PUT", `/channels/${ow.channel}/permissions/${ow.id}`, { type: ow.type ?? 0, allow: String(ow.allow || 0), deny: String(ow.deny || 0) }, `Permission lockdown (${by})`).then(() => done.push("overwrite " + ow.channel), (e) => errs.push("ow " + ow.channel + ": " + e.message));
         for (const rp of body.rolePerms || []) {   // {id, remove: "bits"}
           const r = (await discord(env, "GET", `/guilds/${L.guild}/roles`)).find((x) => x.id === rp.id); if (!r) { errs.push("no role " + rp.id); continue; }
           const np = BigInt(r.permissions) & ~BigInt(rp.remove);
@@ -2883,6 +2909,13 @@ async function web(req, url, env, ctx) {
         const joins = M.filter((m) => Date.parse(m.joined_at) > Date.now() - 6 * 3600000).map((m) => ({ id: m.user.id, name: display(m), joined: Date.parse(m.joined_at), created: Number((BigInt(m.user.id) >> 22n) + 1420070400000n), roles: (m.roles || []).length })).sort((a, b) => b.joined - a.joined);
         return out({ entries, joins });
       }
+      if (p === "/api/admin/backup") {
+        if (body.run) return out({ ok: true, ...(await backupNow(env, L)) });
+        const b = await kget(env, body.prev ? "backup:prev" : "backup:latest");
+        if (body.download) return out({ backup: b });
+        return out({ last: b ? { ts: b.ts, roles: b.roles.length, channels: b.channels.length, members: b.members.length, emojis: b.emojis.length, automod: b.automod.length } : null });
+      }
+      if (p === "/api/admin/staffroles") { if (Array.isArray(body.set)) await kput(env, "staffroles", body.set.map(String), 3650 * 86400); bust("league"); return out({ staffroles: (await kget(env, "staffroles")) || [] }); }
       if (p === "/api/admin/join/setup") return out({ ok: true, ...(await joinPanel(env, L)) });
       if (p === "/api/admin/modlog/setup") return out({ ok: true, channel: await modLogCh(env, L) });
       if (p === "/api/admin/gametimes") return out({ games: await gtLoad(env) });
