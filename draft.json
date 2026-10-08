@@ -1985,6 +1985,19 @@
    "pos": [],
    "discord": "1557148907329421386",
    "avatar": "https://cdn.discordapp.com/avatars/1557148907329421386/8ea808943a6def79d6e0d5279af8b93e.png?size=96"
+  },
+  {
+   "id": 260,
+   "name": "SoCee",
+   "pos": [
+    "WR",
+    "TE",
+    "DE",
+    "CB"
+   ],
+   "discord": "738840782093680675",
+   "avatar": "https://cdn.discordapp.com/avatars/738840782093680675/a9e1cde4dd9eaf8f2c3dc67c3bbe1808.png?size=96",
+   "locked": true
   }
  ],
  "picks": [],
