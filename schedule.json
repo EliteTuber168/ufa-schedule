@@ -118,9 +118,9 @@
    "name": "Houston Texans",
    "abbr": "HOU",
    "color": "#A71930",
-   "active": true,
+   "active": false,
    "role": "1548502272600842341",
-   "players": 5,
+   "players": 4,
    "fo": "KA1♠️"
   },
   {
@@ -208,9 +208,9 @@
    "name": "New Orleans Saints",
    "abbr": "NO",
    "color": "#D3BC8D",
-   "active": false,
+   "active": true,
    "role": "1548502313004699758",
-   "players": 4,
+   "players": 5,
    "fo": "MYMY022509"
   },
   {
@@ -262,9 +262,9 @@
    "name": "Seattle Seahawks",
    "abbr": "SEA",
    "color": "#69BE28",
-   "active": true,
+   "active": false,
    "role": "1548502338170396802",
-   "players": 5,
+   "players": 4,
    "fo": "Big Booty Bennz"
   },
   {
@@ -291,8 +291,8 @@
    "color": "#5A1414",
    "active": false,
    "role": "1548502350828806214",
-   "players": 1,
-   "fo": "Just_benn10"
+   "players": 0,
+   "fo": ""
   }
  ],
  "weeks": [],
