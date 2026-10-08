@@ -529,7 +529,7 @@
    "name": "Shinebeforeglory",
    "pos": [],
    "discord": "1512522656124113038",
-   "avatar": "https://cdn.discordapp.com/avatars/1512522656124113038/f2485c3d8581677bfa51a375cf2f9050.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1512522656124113038/21156e9f0fbc2bd5e40769691f1984f6.png?size=96"
   },
   {
    "id": 45,
@@ -1464,7 +1464,7 @@
    "name": "testmyconfigs  Moneybag",
    "pos": [],
    "discord": "1424020206291910697",
-   "avatar": "https://cdn.discordapp.com/avatars/1424020206291910697/306bf35f3beb0fed2518650215e6bf35.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1424020206291910697/727b247116a2ae798d27dd33b8ab4c90.png?size=96"
   },
   {
    "id": 185,
@@ -1870,21 +1870,6 @@
    "discord": "1058190575188324434",
    "avatar": "https://cdn.discordapp.com/avatars/1058190575188324434/75de402d6b4db47166400a6f26408860.png?size=96",
    "posNotified": 1790977318476
-  },
-  {
-   "id": 246,
-   "name": "PRIME",
-   "pos": [
-    "QB",
-    "WR",
-    "CB",
-    "K/P"
-   ],
-   "discord": "1384410671625539634",
-   "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/650c014f981a5a0802435a05f6623728.png?size=96",
-   "locked": true,
-   "posAt": 1791084678791,
-   "posNotified": 1791084678791
   },
   {
    "id": 247,

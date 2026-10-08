@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-07T22:03:19+00:00",
+ "updated": "2026-10-08T22:09:45+00:00",
  "teams": {
   "ARI": [
    {
@@ -116,6 +116,11 @@
     "avatar": "https://cdn.discordapp.com/avatars/1457464951781327096/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96"
    },
    {
+    "id": "1518109677077004378",
+    "name": "SOSA",
+    "avatar": "https://cdn.discordapp.com/embed/avatars/1.png"
+   },
+   {
     "id": "815382771056377896",
     "name": "xpyzz",
     "avatar": "https://cdn.discordapp.com/avatars/815382771056377896/2bb7f69ce1cdeea7ad53454cd5d0362f.png?size=96"
@@ -188,13 +193,6 @@
     "fo": true
    }
   ],
-  "WAS": [
-   {
-    "id": "1005679375225720882",
-    "name": "Just_benn10",
-    "avatar": "https://cdn.discordapp.com/avatars/1005679375225720882/ec0dbcc5de8296d6d91f13db2c6ca65c.png?size=96",
-    "fo": true
-   }
-  ]
+  "WAS": []
  }
 }
