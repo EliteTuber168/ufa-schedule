@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-10T23:37:51+00:00",
+ "updated": "2026-10-11T05:57:03+00:00",
  "teams": {
   "ARI": [
    {
@@ -162,6 +162,11 @@
     "name": "Big Booty Bennz",
     "avatar": "https://cdn.discordapp.com/avatars/1437892983901917295/0fa483e48c9621f018552d8fd799eb54.png?size=96",
     "fo": true
+   },
+   {
+    "id": "1488385577261863035",
+    "name": "Blitz",
+    "avatar": "https://cdn.discordapp.com/avatars/1488385577261863035/938c560bf03a8aad213aba82fd0aa878.png?size=96"
    },
    {
     "id": "1363366815757107421",

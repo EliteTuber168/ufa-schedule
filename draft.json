@@ -595,14 +595,14 @@
     "Short"
    ],
    "discord": "1530752930586820750",
-   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/8476e9d1fe94049227e242bf5e056eb7.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1530752930586820750/9d5a618a3fa7842822ebd2a2db704785.png?size=96",
    "locked": true,
    "posAt": 1790995781118,
    "posNotified": 1790995781118
   },
   {
    "id": 56,
-   "name": "madridd",
+   "name": "madrid",
    "pos": [],
    "discord": "1535900506080411728",
    "avatar": "https://cdn.discordapp.com/avatars/1535900506080411728/90c63daf2422b1c61a19fc5a2d617acb.png?size=96"
@@ -684,7 +684,7 @@
    "name": "邪悪な",
    "pos": [],
    "discord": "533143786428039181",
-   "avatar": "https://cdn.discordapp.com/avatars/533143786428039181/6cb62111b85b129370b31daefb132580.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/533143786428039181/a_8c3c438b8b3a74d43dfb65cf56ca257c.png?size=96"
   },
   {
    "id": 68,
@@ -950,7 +950,7 @@
    "name": "uzi",
    "pos": [],
    "discord": "1120859657766969375",
-   "avatar": "https://cdn.discordapp.com/avatars/1120859657766969375/f9dbe832a227f362bd32a5579dae51dd.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1120859657766969375/916c43e13ce9dba7481de8f009871481.png?size=96"
   },
   {
    "id": 104,
@@ -1162,7 +1162,7 @@
    "name": "wovifa",
    "pos": [],
    "discord": "1314545290539433984",
-   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/55833a38045602efdfe67a79e7a6d9e7.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/6018543a12778563fb1a1961d61d5b02.png?size=96"
   },
   {
    "id": 141,
@@ -1891,7 +1891,7 @@
     "QB"
    ],
    "discord": "1280377167565422604",
-   "avatar": "https://cdn.discordapp.com/avatars/1280377167565422604/d2e4a7f7e18c46ed8e80dd87a3423f01.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1280377167565422604/6c9b6d70b4273631329612a38619949d.png?size=96",
    "locked": true
   },
   {
@@ -1956,19 +1956,6 @@
    "pos": [],
    "discord": "1557148907329421386",
    "avatar": "https://cdn.discordapp.com/avatars/1557148907329421386/8ea808943a6def79d6e0d5279af8b93e.png?size=96"
-  },
-  {
-   "id": 260,
-   "name": "SoCee",
-   "pos": [
-    "WR",
-    "TE",
-    "DE",
-    "CB"
-   ],
-   "discord": "738840782093680675",
-   "avatar": "https://cdn.discordapp.com/avatars/738840782093680675/a9e1cde4dd9eaf8f2c3dc67c3bbe1808.png?size=96",
-   "locked": true
   }
  ],
  "picks": [],
