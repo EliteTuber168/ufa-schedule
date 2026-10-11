@@ -865,7 +865,7 @@
     "DB"
    ],
    "discord": "1035388077188849684",
-   "avatar": "https://cdn.discordapp.com/avatars/1035388077188849684/02e6ab171bc8f69b75a22016a49323cb.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1035388077188849684/3a353a16774617ba8760e95716dd409f.png?size=96",
    "locked": true,
    "posAt": 1790995794552,
    "posNotified": 1790995794552
@@ -1155,7 +1155,7 @@
    "name": "wovifa",
    "pos": [],
    "discord": "1314545290539433984",
-   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/6018543a12778563fb1a1961d61d5b02.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1314545290539433984/b3f27957bfe753c0c77bc7f5a8f7c2d4.png?size=96"
   },
   {
    "id": 141,
@@ -1398,7 +1398,7 @@
    "name": "JUP1T3R",
    "pos": [],
    "discord": "1404621360382345308",
-   "avatar": "https://cdn.discordapp.com/avatars/1404621360382345308/e566ae6fcbb9b1493c104b59e0743b3d.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1404621360382345308/6afdd236321633597710329884132ee8.png?size=96"
   },
   {
    "id": 179,
@@ -1949,6 +1949,13 @@
    "pos": [],
    "discord": "1557148907329421386",
    "avatar": "https://cdn.discordapp.com/avatars/1557148907329421386/8ea808943a6def79d6e0d5279af8b93e.png?size=96"
+  },
+  {
+   "id": 260,
+   "name": "Jugalator",
+   "pos": [],
+   "discord": "1283288365864718377",
+   "avatar": "https://cdn.discordapp.com/avatars/1283288365864718377/f477c0a77de53a4a3b42ec2f570c8e50.png?size=96"
   }
  ],
  "picks": [],
