@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-11T05:57:03+00:00",
+ "updated": "2026-10-11T18:08:38+00:00",
  "teams": {
   "ARI": [
    {
@@ -146,14 +146,14 @@
     "fo": true
    },
    {
+    "id": "1539093971236683820",
+    "name": "catchingdaopp",
+    "avatar": "https://cdn.discordapp.com/avatars/1539093971236683820/1e4106babcd1e9aa802c7742266b36bd.png?size=96"
+   },
+   {
     "id": "824080057097125928",
     "name": "Fw_chase98",
     "avatar": "https://cdn.discordapp.com/avatars/824080057097125928/5eafa70ca9544246122e0bce7807e94f.png?size=96"
-   },
-   {
-    "id": "1539093971236683820",
-    "name": "llen_its",
-    "avatar": "https://cdn.discordapp.com/avatars/1539093971236683820/1e4106babcd1e9aa802c7742266b36bd.png?size=96"
    }
   ],
   "SEA": [
