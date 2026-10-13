@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-13T09:31:27+00:00",
+ "updated": "2026-10-13T22:52:41+00:00",
  "teams": {
   "ARI": [
    {
@@ -177,6 +177,11 @@
     "id": "1369399693175427166",
     "name": "Juju",
     "avatar": "https://cdn.discordapp.com/avatars/1369399693175427166/bb55f9234bbd4a1f78d3f7ab6bba1e47.png?size=96"
+   },
+   {
+    "id": "1554639809190830152",
+    "name": "Theyluh_jay",
+    "avatar": "https://cdn.discordapp.com/avatars/1554639809190830152/e243707dac831be2d93a3de0e76b7ea1.png?size=96"
    }
   ],
   "TB": [],
