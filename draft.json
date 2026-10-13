@@ -520,7 +520,7 @@
     "OS/Short"
    ],
    "discord": "1511918194607001691",
-   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/e98aa76ab73571d55af6a226593309ae.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1511918194607001691/dfeded96083a2b883369de130630d6b0.png?size=96",
    "locked": true,
    "posNotified": 1790976589373
   },
@@ -619,7 +619,7 @@
    "name": "XUKV",
    "pos": [],
    "discord": "1547583409646207040",
-   "avatar": "https://cdn.discordapp.com/avatars/1547583409646207040/88f4cf224ef457e7acd565c57eed375c.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1547583409646207040/5631134dd701e2ac7b0a2b12290c3ca3.png?size=96"
   },
   {
    "id": 60,
@@ -878,7 +878,7 @@
     "DB"
    ],
    "discord": "1036314757864632401",
-   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/a_8d8e2a369f6bc1bfe5a9e7536c2ac8b6.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/3bd0da36e18e2161f407d27314fcad0f.png?size=96",
    "locked": true,
    "posNotified": 1790976595708
   },
@@ -1142,15 +1142,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1312194020268707862/f30aa28ff5a581295ba88590c85a6f6c.png?size=96"
   },
   {
-   "id": 139,
-   "name": "VK1",
-   "pos": [
-    "K/P"
-   ],
-   "discord": "1314475659006967848",
-   "avatar": "https://cdn.discordapp.com/avatars/1314475659006967848/95b91af482446975e630077533da0f4b.png?size=96"
-  },
-  {
    "id": 140,
    "name": "wovifa",
    "pos": [],
@@ -1398,7 +1389,7 @@
    "name": "JUP1T3R",
    "pos": [],
    "discord": "1404621360382345308",
-   "avatar": "https://cdn.discordapp.com/avatars/1404621360382345308/6afdd236321633597710329884132ee8.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1404621360382345308/5eef5466f98e80dd0600d850277a32b4.png?size=96"
   },
   {
    "id": 179,
@@ -1949,6 +1940,13 @@
    "pos": [],
    "discord": "1283288365864718377",
    "avatar": "https://cdn.discordapp.com/avatars/1283288365864718377/f477c0a77de53a4a3b42ec2f570c8e50.png?size=96"
+  },
+  {
+   "id": 261,
+   "name": "Hyren5678",
+   "pos": [],
+   "discord": "1305001762822029343",
+   "avatar": "https://cdn.discordapp.com/avatars/1305001762822029343/90636582ced7960107ba5e4af642fac2.png?size=96"
   }
  ],
  "picks": [],
