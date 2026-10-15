@@ -27,6 +27,8 @@ cmds = [
         {"type": SUB, "name": "leave", "description": "Take yourself out of the player pool"}]},
     {"name": "franchises", "description": "Every franchise, its roster count and owner"},
     {"name": "setownerchannel", "description": "Post the franchise owner list in this channel and keep it updated automatically (staff)"},
+    {"name": "request", "description": "Free agents: ask a team to sign you (or leave team empty to post in #free-agents)", "options": [team(False),
+        {"type": STR, "name": "message", "description": "Optional: why they should sign you", "required": False}]},
     {"name": "gametime", "description": "Set (or check) your team's game time this week (FO / GM / HC)", "options": [
         {"type": STR, "name": "when", "description": "e.g. sat 8pm est, tomorrow 7:30pm ct, 10/12 9pm — leave empty to see the current time", "required": False}]},
     {"name": "warn", "description": "Staff: warn someone (3 active warnings = 24h timeout)", "options": [user("user", "Who to warn"),
