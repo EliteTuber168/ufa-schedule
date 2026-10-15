@@ -433,6 +433,46 @@ async function contractModal(i, env, ctx, kind, uid, cid) {
   return json({ type: 7, data: { embeds: [ctEmbed(L, c)], components: [] } });
 }
 
+// ---------- /request: free agents ask teams to sign them ----------
+async function requestCmd(env, L, i, teamQ, note) {
+  const uid = uidOf(i), M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
+  if (!m) throw UE("You need to be in the server.");
+  const me = info(L, m);
+  if (me.team) throw UE(`You're already on the ${teamOf(L, me.team)?.name}.`);
+  const { D } = await loadDraft(env), pool = D.pool.find((p) => p.discord === uid), pos = pool?.pos?.length ? pool.pos.join("/") : "";
+  note = String(note || "").slice(0, 300);
+  const card = (title) => ({ author: { name: title, icon_url: avatarUrl(L.guild, m) }, color: 0xffc62f,
+    description: `<@${uid}> **${me.name}**${pos ? ` · ${pos}` : " · *no positions set*"}${note ? `\n> ${note.replace(/\n/g, "\n> ")}` : ""}`, footer: { text: pos ? "Free agent" : "Free agent — tip: pick positions in #free-agents" }, timestamp: new Date().toISOString() });
+  const lim = (await kget(env, `rq:${uid}`)) || { n: 0, day: "", teams: {}, lft: 0 }, today = todayISO();
+  if (lim.day !== today) Object.assign(lim, { day: today, n: 0 });
+  if (!teamQ) {
+    if (Date.now() - (lim.lft || 0) < 12 * 3600000) throw UE("You already posted a looking-for-team card in the last 12 hours.");
+    const ch = (await discord(env, "GET", `/guilds/${L.guild}/channels`)).find((c) => c.type === 0 && /^free-agents?$/.test(bare(c.name)));
+    if (!ch) throw UE("Couldn't find #free-agents.");
+    await discord(env, "POST", `/channels/${ch.id}/messages`, { allowed_mentions: { parse: [] }, embeds: [card("🆓 Looking for a team")], components: [row(btn("📨 Send offer", 3, `rqo:${uid}:any`), btn("📜 Offer with contract", 2, `rqc:${uid}:any`))] });
+    lim.lft = Date.now(); await kput(env, `rq:${uid}`, lim, 7 * 86400);
+    return `📣 Posted your looking-for-team card in <#${ch.id}>. FOs can send you an offer straight from it — watch your DMs!`;
+  }
+  const t = findTeamL(L, teamQ); if (!t) throw UE("No team by that name.");
+  if (lim.n >= 5) throw UE("You've sent 5 requests today — give teams a chance to answer.");
+  if (lim.teams[t.abbr] && Date.now() - lim.teams[t.abbr] < 86400000) throw UE(`You already asked the ${t.name} today.`);
+  const staff = rosterOf(L, M, t.abbr).filter((p) => ["fo", "gm", "hc"].includes(p.rank));
+  if (!staff.length) throw UE(`The ${t.name} don't have a front office right now.`);
+  let sent = 0;
+  for (const p of staff) if (await dm(env, p.id, { embeds: [card(`📩 Wants to join the ${t.name}`)], components: [row(btn("📨 Send offer", 3, `rqo:${uid}:${t.abbr}`), btn("📜 Offer with contract", 2, `rqc:${uid}:${t.abbr}`), btn("Pass", 4, `rqx:${uid}:${t.abbr}`))] }).catch(() => false)) sent++;
+  lim.n++; lim.teams[t.abbr] = Date.now(); await kput(env, `rq:${uid}`, lim, 7 * 86400);
+  return sent ? `📩 Sent your request to the **${t.name}** front office (${sent} ${sent === 1 ? "person" : "people"}). You'll get a DM if they send an offer.` : `⚠️ Couldn't DM anyone on the ${t.name} front office (DMs closed). Try another team or post with **/request** (no team).`;
+}
+async function requestComponent(i, env, ctx, kind, uid, team) {
+  const L = await league(env), a = await actorFromInteraction(env, L, i);
+  if (!can(a, "offer")) return reply("Only franchise owners, GMs and head coaches can answer this.", true);
+  if (team !== "any" && a.team !== team) return reply(`This request was for the ${teamOf(L, team)?.name}.`, true);
+  if (kind === "rqx") { ctx.waitUntil(dm(env, uid, `The **${teamOf(L, team)?.name}** passed on your request this time. Keep trying other teams, or post with **/request** (no team) so every FO sees you.`).catch(() => {}));
+    return json({ type: 7, data: { components: [], content: "Passed — they've been told." } }); }
+  if (kind === "rqc") return json({ type: 9, data: { custom_id: `rqcm:${uid}:${team}`, title: "Offer with contract", components: [row({ type: 4, custom_id: "days", style: 1, label: "Contract length in days (1–90)", min_length: 1, max_length: 2, required: true, placeholder: "e.g. 7" })] } });
+  return later(i, ctx, async () => (await makeOffer(env, L, a, uid, 0)).text, true);
+}
+
 async function releasePlayer(env, L, actor, uid) {
   if (!can(actor, "release") && !actor.staff) throw UE("Only franchise owners and GMs can release players.");
   const M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
@@ -2387,6 +2427,7 @@ async function command(i, env, ctx) {
     case "vote": if (sub?.name === "create") return await voteCreate(i, sub, env); break;
     case "offer": return later(i, ctx, async () => { const L = await league(env); return (await makeOffer(env, L, await actorFromInteraction(env, L, i), opt(o, "player"), opt(o, "contract_days"))).text; });
     case "offers": return later(i, ctx, () => myOffers(i, env));
+    case "request": return later(i, ctx, async () => requestCmd(env, await league(env), i, opt(o, "team"), opt(o, "message")));
     case "gametime": return later(i, ctx, async () => { const L = await league(env); return gameTimeCmd(env, L, await actorFromInteraction(env, L, i), opt(o, "when")); });
     case "warn": case "warnings": case "unwarn": return later(i, ctx, () => warnCommand(i, env, cmd));
     case "release": return later(i, ctx, async () => { const L = await league(env); return releasePlayer(env, L, await actorFromInteraction(env, L, i), opt(o, "player")); });
@@ -2430,6 +2471,7 @@ async function component(i, env, ctx) {
   }
   if (["cta", "ctd", "ctj", "cfa", "cfd", "cpa", "cpd"].includes(kind)) return contractComponent(i, env, ctx, kind, id, k);
   if (kind === "gta" || kind === "gtp") return gtComponent(i, env, ctx, kind, id);
+  if (["rqo", "rqc", "rqx"].includes(kind)) return requestComponent(i, env, ctx, kind, id, k);
   if (kind === "joinpos") return later(i, ctx, async () => {
     const L = await league(env), uid = uidOf(i);
     const m = i.member || await discord(env, "GET", `/guilds/${L.guild}/members/${uid}`).catch(() => null);
@@ -2475,6 +2517,12 @@ async function modalSubmit(i, env, ctx) {
   const [kind, id, ad] = String(i.data.custom_id || "").split(":");
   if (kind === "ctdm" || kind === "ctjm") return contractModal(i, env, ctx, kind, id, ad);
   if (kind === "gtpm") return gtModal(i, env, ctx, id);
+  if (kind === "rqcm") return later(i, ctx, async () => {
+    const L = await league(env), a = await actorFromInteraction(env, L, i);
+    if (!can(a, "offer") || (ad !== "any" && a.team !== ad)) return "You can't answer this request.";
+    const d = Math.round(Number(i.data.components[0].components[0].value)); if (!(d >= 1 && d <= 90)) return "Pick 1–90 days.";
+    return (await makeOffer(env, L, a, id, d)).text;
+  }, true);
   if (kind === "rpm") return later(i, ctx, async () => {
     const text = i.data.components?.[0]?.components?.[0]?.value || "", log = id ? await kget(env, `dmlog:${id}`) : null;
     await fileTicket(env, uidOf(i), text, { about: log?.title || "", user: i.user || i.member?.user, viaButton: true });
