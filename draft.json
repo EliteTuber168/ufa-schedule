@@ -1897,6 +1897,19 @@
    "pos": [],
    "discord": "1455465653761736930",
    "avatar": "https://cdn.discordapp.com/avatars/1455465653761736930/0b8ee258017879d243a0db795877eb15.png?size=96"
+  },
+  {
+   "id": 264,
+   "name": "clamped up",
+   "pos": [
+    "TE",
+    "K/P",
+    "DE",
+    "RB"
+   ],
+   "discord": "1384410671625539634",
+   "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/5a7838cc276ff0ae1e77afd8bb1dbe2f.png?size=96",
+   "locked": true
   }
  ],
  "picks": [],
