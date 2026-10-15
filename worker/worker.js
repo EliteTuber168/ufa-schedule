@@ -349,6 +349,7 @@ async function answerOffer(env, id, uid, accept) {
     lines: [`👤 ${o.byRank === "hc" ? "Coach" : o.byRank === "gm" ? "General Manager" : "Franchise Owner"} · ${ref(o.by, o.byName)}`, capLine(L, n + 1)] });
   await notify(env, L, o.by, o.team, `✅ **${o.name}** accepted and is now on the ${team.name}! Roster ${n + 1}/${cap(L)}.${o.days ? ` The ${dayTxt(o.days)} contract went to staff for approval.` : ""}`);
   if (o.days) await contractStart(env, L, o).catch((e) => console.log("contract:", e.message));
+  for (const t of [o.team, "any"]) { const x = await kget(env, `rqlog:${uid}:${t}`).catch(() => null); if (x && x.status !== "signed" && (t === o.team || x.byTeam === o.team)) await rqLog(env, L, { uid, team: t, status: "signed", by: x.by || o.by, byTeam: o.team }).catch(() => {}); }
   return `🎉 Welcome to the **${team.name}**!${o.days ? `\n📜 Your ${dayTxt(o.days)} contract is with staff for approval — you're on the team either way.` : ""}`;
 }
 
@@ -434,6 +435,25 @@ async function contractModal(i, env, ctx, kind, uid, cid) {
 }
 
 // ---------- /request: free agents ask teams to sign them ----------
+async function rqLogCh(env, L) {
+  const c = await kget(env, "rqlog:cfg"); if (c?.ch) return c.ch;
+  const ch = await hiddenLogChannel(env, L, "bot", "📕│request-logs", "Every /request to join a team, and whether the FO sent an offer or passed.");
+  await kput(env, "rqlog:cfg", { ch }, 3650 * 86400); return ch;
+}
+const RQS = { pending: ["⏳ Waiting on the FO", 0xffc62f], offer: ["📨 FO sent an offer", 0x3d7bff], pass: ["❌ FO passed", 0xe8424a], signed: ["✅ Signed", 0x4fd18b] };
+function rqLogEmbed(L, x) {
+  const [st, color] = RQS[x.status] || RQS.pending;
+  return { author: { name: x.team === "any" ? "🆓 Looking for a team" : `📩 Request → ${teamOf(L, x.team)?.name || x.team}` }, color,
+    description: `<@${x.uid}> **${x.name}**${x.pos ? ` · ${x.pos}` : ""}${x.note ? `\n> ${x.note}` : ""}`,
+    fields: [{ name: "Status", value: `${st}${x.by ? ` — by <@${x.by}>${x.byTeam && x.team === "any" ? ` (${teamOf(L, x.byTeam)?.name})` : ""}` : ""}${x.days ? ` · ${x.days}-day contract` : ""}` }], timestamp: new Date(x.ts).toISOString() };
+}
+async function rqLog(env, L, x) {   // create or update the log line for uid+team
+  const key = `rqlog:${x.uid}:${x.team}`, prev = await kget(env, key);
+  const rec = { ...(prev || {}), ...x }, ch = await rqLogCh(env, L).catch(() => null); if (!ch) return;
+  if (prev?.msg) await discord(env, "PATCH", `/channels/${ch}/messages/${prev.msg}`, { embeds: [rqLogEmbed(L, rec)], allowed_mentions: { parse: [] } }).catch(() => {});
+  else { const m = await discord(env, "POST", `/channels/${ch}/messages`, { embeds: [rqLogEmbed(L, rec)], allowed_mentions: { parse: [] } }).catch(() => null); if (m) rec.msg = m.id; }
+  await kput(env, key, rec, 14 * 86400);
+}
 async function requestCmd(env, L, i, teamQ, note) {
   const uid = uidOf(i), M = await members(env, L, true), m = M.find((x) => x.user.id === uid);
   if (!m) throw UE("You need to be in the server.");
@@ -451,6 +471,7 @@ async function requestCmd(env, L, i, teamQ, note) {
     if (!ch) throw UE("Couldn't find #free-agents.");
     await discord(env, "POST", `/channels/${ch.id}/messages`, { allowed_mentions: { parse: [] }, embeds: [card("🆓 Looking for a team")], components: [row(btn("📨 Send offer", 3, `rqo:${uid}:any`), btn("📜 Offer with contract", 2, `rqc:${uid}:any`))] });
     lim.lft = Date.now(); await kput(env, `rq:${uid}`, lim, 7 * 86400);
+    await kv0del(env, `rqlog:${uid}:any`); await rqLog(env, L, { uid, team: "any", name: me.name, pos, note, ts: Date.now(), status: "pending" }).catch(() => {});
     return `📣 Posted your looking-for-team card in <#${ch.id}>. FOs can send you an offer straight from it — watch your DMs!`;
   }
   const t = findTeamL(L, teamQ); if (!t) throw UE("No team by that name.");
@@ -461,16 +482,18 @@ async function requestCmd(env, L, i, teamQ, note) {
   let sent = 0;
   for (const p of staff) if (await dm(env, p.id, { embeds: [card(`📩 Wants to join the ${t.name}`)], components: [row(btn("📨 Send offer", 3, `rqo:${uid}:${t.abbr}`), btn("📜 Offer with contract", 2, `rqc:${uid}:${t.abbr}`), btn("Pass", 4, `rqx:${uid}:${t.abbr}`))] }).catch(() => false)) sent++;
   lim.n++; lim.teams[t.abbr] = Date.now(); await kput(env, `rq:${uid}`, lim, 7 * 86400);
+  await kv0del(env, `rqlog:${uid}:${t.abbr}`); await rqLog(env, L, { uid, team: t.abbr, name: me.name, pos, note: note + (sent ? "" : " (couldn't DM the FO)"), ts: Date.now(), status: "pending" }).catch(() => {});
   return sent ? `📩 Sent your request to the **${t.name}** front office (${sent} ${sent === 1 ? "person" : "people"}). You'll get a DM if they send an offer.` : `⚠️ Couldn't DM anyone on the ${t.name} front office (DMs closed). Try another team or post with **/request** (no team).`;
 }
+const kv0del = (env, k) => KV(env).delete(k).catch(() => {});
 async function requestComponent(i, env, ctx, kind, uid, team) {
   const L = await league(env), a = await actorFromInteraction(env, L, i);
   if (!can(a, "offer")) return reply("Only franchise owners, GMs and head coaches can answer this.", true);
   if (team !== "any" && a.team !== team) return reply(`This request was for the ${teamOf(L, team)?.name}.`, true);
-  if (kind === "rqx") { ctx.waitUntil(dm(env, uid, `The **${teamOf(L, team)?.name}** passed on your request this time. Keep trying other teams, or post with **/request** (no team) so every FO sees you.`).catch(() => {}));
+  if (kind === "rqx") { ctx.waitUntil(rqLog(env, L, { uid, team, status: "pass", by: a.id, byTeam: a.team }).catch(() => {})); ctx.waitUntil(dm(env, uid, `The **${teamOf(L, team)?.name}** passed on your request this time. Keep trying other teams, or post with **/request** (no team) so every FO sees you.`).catch(() => {}));
     return json({ type: 7, data: { components: [], content: "Passed — they've been told." } }); }
   if (kind === "rqc") return json({ type: 9, data: { custom_id: `rqcm:${uid}:${team}`, title: "Offer with contract", components: [row({ type: 4, custom_id: "days", style: 1, label: "Contract length in days (1–90)", min_length: 1, max_length: 2, required: true, placeholder: "e.g. 7" })] } });
-  return later(i, ctx, async () => (await makeOffer(env, L, a, uid, 0)).text, true);
+  return later(i, ctx, async () => { const r = await makeOffer(env, L, a, uid, 0); await rqLog(env, L, { uid, team, status: "offer", by: a.id, byTeam: a.team, offerId: r.offer?.id }).catch(() => {}); return r.text; }, true);
 }
 
 async function releasePlayer(env, L, actor, uid) {
@@ -2521,7 +2544,7 @@ async function modalSubmit(i, env, ctx) {
     const L = await league(env), a = await actorFromInteraction(env, L, i);
     if (!can(a, "offer") || (ad !== "any" && a.team !== ad)) return "You can't answer this request.";
     const d = Math.round(Number(i.data.components[0].components[0].value)); if (!(d >= 1 && d <= 90)) return "Pick 1–90 days.";
-    return (await makeOffer(env, L, a, id, d)).text;
+    const r = await makeOffer(env, L, a, id, d); await rqLog(env, L, { uid: id, team: ad, status: "offer", by: a.id, byTeam: a.team, days: d, offerId: r.offer?.id }).catch(() => {}); return r.text;
   }, true);
   if (kind === "rpm") return later(i, ctx, async () => {
     const text = i.data.components?.[0]?.components?.[0]?.value || "", log = id ? await kget(env, `dmlog:${id}`) : null;
