@@ -361,7 +361,7 @@
    "name": "Kaden",
    "pos": [],
    "discord": "1402098695704543392",
-   "avatar": "https://cdn.discordapp.com/avatars/1402098695704543392/a_93e833bea421f59b7057427679cbeb0b.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1402098695704543392/07b38becc8fcec2fe14364628a57db63.png?size=96"
   },
   {
    "id": 24,
@@ -847,7 +847,7 @@
     "DB"
    ],
    "discord": "1036314757864632401",
-   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/1442e7fbbe97ad601f53408d7bcff155.png?size=96",
+   "avatar": "https://cdn.discordapp.com/avatars/1036314757864632401/112d9e2b01b77cddb7342c225deb742e.png?size=96",
    "locked": true,
    "posNotified": 1790976595708
   },
@@ -1217,13 +1217,6 @@
    "locked": true,
    "posAt": 1791165638533,
    "posNotified": 1791165638533
-  },
-  {
-   "id": 156,
-   "name": "Lostyourlove",
-   "pos": [],
-   "discord": "1359320607782867146",
-   "avatar": "https://cdn.discordapp.com/avatars/1359320607782867146/f14fa7e6e800333ae448781fb1b908d4.png?size=96"
   },
   {
    "id": 159,
@@ -1902,6 +1895,20 @@
    "pos": [],
    "discord": "1305001762822029343",
    "avatar": "https://cdn.discordapp.com/avatars/1305001762822029343/90636582ced7960107ba5e4af642fac2.png?size=96"
+  },
+  {
+   "id": 262,
+   "name": "Scare",
+   "pos": [],
+   "discord": "910199909435736075",
+   "avatar": "https://cdn.discordapp.com/avatars/910199909435736075/6cb48b4fe721ec6557bd48529a83b3ef.png?size=96"
+  },
+  {
+   "id": 263,
+   "name": "𝑉𝑜𝗇",
+   "pos": [],
+   "discord": "1455465653761736930",
+   "avatar": "https://cdn.discordapp.com/avatars/1455465653761736930/0b8ee258017879d243a0db795877eb15.png?size=96"
   }
  ],
  "picks": [],

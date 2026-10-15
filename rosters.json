@@ -1,14 +1,7 @@
 {
- "updated": "2026-10-13T22:52:41+00:00",
+ "updated": "2026-10-15T07:32:20+00:00",
  "teams": {
-  "ARI": [
-   {
-    "id": "910199909435736075",
-    "name": "Scare",
-    "avatar": "https://cdn.discordapp.com/avatars/910199909435736075/6cb48b4fe721ec6557bd48529a83b3ef.png?size=96",
-    "fo": true
-   }
-  ],
+  "ARI": [],
   "ATL": [],
   "BAL": [],
   "BUF": [
@@ -40,24 +33,12 @@
     "avatar": "https://cdn.discordapp.com/avatars/1147357659100627086/1a5ca22afec71e7cd58d6b44767e0bec.png?size=96"
    },
    {
-    "id": "1302825050780598316",
-    "name": "S1arzz",
-    "avatar": "https://cdn.discordapp.com/avatars/1302825050780598316/5e7784bf528b6842d1a16332a2d9f2e0.png?size=96"
-   },
-   {
     "id": "1432252161688997978",
     "name": "sh8dow",
     "avatar": "https://cdn.discordapp.com/avatars/1432252161688997978/d7911ae4e863b2a02b1d8dacb257f73d.png?size=96"
    }
   ],
-  "IND": [
-   {
-    "id": "1455465653761736930",
-    "name": "𝑉𝑜𝗇",
-    "avatar": "https://cdn.discordapp.com/avatars/1455465653761736930/0b8ee258017879d243a0db795877eb15.png?size=96",
-    "fo": true
-   }
-  ],
+  "IND": [],
   "JAX": [],
   "KC": [],
   "LV": [
