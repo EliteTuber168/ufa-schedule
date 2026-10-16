@@ -1910,6 +1910,19 @@
    "discord": "1384410671625539634",
    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/5a7838cc276ff0ae1e77afd8bb1dbe2f.png?size=96",
    "locked": true
+  },
+  {
+   "id": 265,
+   "name": "Landon",
+   "pos": [
+    "WR",
+    "S",
+    "QB",
+    "DE"
+   ],
+   "discord": "1559572911612895348",
+   "avatar": "https://cdn.discordapp.com/avatars/1559572911612895348/2cadd2a974a81ba50fa6260543f242f9.png?size=96",
+   "locked": true
   }
  ],
  "picks": [],
