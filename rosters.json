@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-17T14:14:57+00:00",
+ "updated": "2026-10-17T20:41:57+00:00",
  "teams": {
   "ARI": [],
   "ATL": [],
@@ -114,14 +114,7 @@
     "avatar": "https://cdn.discordapp.com/avatars/1444694412759138424/02bac92644feb8a4348920e0cdc8cf96.png?size=96"
    }
   ],
-  "NYJ": [
-   {
-    "id": "1530311998997266583",
-    "name": "Skib",
-    "avatar": "https://cdn.discordapp.com/avatars/1530311998997266583/e8a4360d04ea6aa7e204b6e736c286cd.png?size=96",
-    "fo": true
-   }
-  ],
+  "NYJ": [],
   "PHI": [],
   "PIT": [],
   "SF": [
