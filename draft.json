@@ -361,7 +361,7 @@
    "name": "Kaden",
    "pos": [],
    "discord": "1402098695704543392",
-   "avatar": "https://cdn.discordapp.com/avatars/1402098695704543392/aa4b68ddb85bb67589d2cd9603894ca6.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1402098695704543392/1134505a6f109c0dd97e2909df7bccaa.png?size=96"
   },
   {
    "id": 24,
@@ -794,7 +794,7 @@
    "name": "Trellski",
    "pos": [],
    "discord": "1000563656368586762",
-   "avatar": "https://cdn.discordapp.com/avatars/1000563656368586762/2206ae86713bce3f147fb87012fa5202.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1000563656368586762/d65b81bc6738e23a9dc86c5ee0ad8c6d.png?size=96"
   },
   {
    "id": 92,
@@ -1516,7 +1516,7 @@
    "name": "3B_Knzxo",
    "pos": [],
    "discord": "1482161722788941906",
-   "avatar": "https://cdn.discordapp.com/avatars/1482161722788941906/580b255dda51afe459c33925c5e75eb9.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1482161722788941906/35d8a104d20d7c5bd3ee0a7f2f8ca292.png?size=96"
   },
   {
    "id": 207,
@@ -1884,6 +1884,13 @@
    "discord": "1559572911612895348",
    "avatar": "https://cdn.discordapp.com/avatars/1559572911612895348/2cadd2a974a81ba50fa6260543f242f9.png?size=96",
    "locked": true
+  },
+  {
+   "id": 266,
+   "name": "Dart6",
+   "pos": [],
+   "discord": "1514016653569163416",
+   "avatar": "https://cdn.discordapp.com/avatars/1514016653569163416/8c8ed965290650edd683b38bbe68adf8.png?size=96"
   }
  ],
  "picks": [],
