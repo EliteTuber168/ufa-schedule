@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-19T19:53:17+00:00",
+ "updated": "2026-10-19T22:26:35+00:00",
  "teams": {
   "ARI": [],
   "ATL": [],
@@ -87,11 +87,6 @@
     "avatar": "https://cdn.discordapp.com/avatars/718607233738342422/2c62f40387fe50b67959968bb9b68b51.png?size=96"
    },
    {
-    "id": "1384410671625539634",
-    "name": "Bad boy",
-    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/5a7838cc276ff0ae1e77afd8bb1dbe2f.png?size=96"
-   },
-   {
     "id": "1457464951781327096",
     "name": "Jaythegoat",
     "avatar": "https://cdn.discordapp.com/avatars/1457464951781327096/f7f2e9361e8a54ce6e72580ac7b967af.png?size=96"
@@ -136,6 +131,11 @@
     "name": "Big Booty Bennz",
     "avatar": "https://cdn.discordapp.com/avatars/1437892983901917295/0fa483e48c9621f018552d8fd799eb54.png?size=96",
     "fo": true
+   },
+   {
+    "id": "1384410671625539634",
+    "name": "Bad boy",
+    "avatar": "https://cdn.discordapp.com/avatars/1384410671625539634/5a7838cc276ff0ae1e77afd8bb1dbe2f.png?size=96"
    },
    {
     "id": "1488385577261863035",
