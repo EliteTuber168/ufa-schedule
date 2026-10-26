@@ -273,13 +273,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/913869310211006484/8c8493c579f7c94bd28a5e756bd241ec.png?size=96"
   },
   {
-   "id": 9,
-   "name": "Elijah",
-   "pos": [],
-   "discord": "929556590971998260",
-   "avatar": "https://cdn.discordapp.com/avatars/929556590971998260/d5b2e82ee6d50a8943873afdb6e09331.png?size=96"
-  },
-  {
    "id": 11,
    "name": "Arsenic",
    "pos": [],
@@ -380,20 +373,6 @@
    "avatar": "https://cdn.discordapp.com/avatars/1406119787360161895/02467bb6fd4599297b000b67a89a0318.png?size=96",
    "locked": true,
    "posNotified": 1790976589373
-  },
-  {
-   "id": 26,
-   "name": "Sequnse",
-   "pos": [
-    "QB",
-    "WR",
-    "Deep"
-   ],
-   "discord": "1406497927894929450",
-   "avatar": "https://cdn.discordapp.com/avatars/1406497927894929450/0458a771f180ab91b34f88ec0e1039ed.png?size=96",
-   "locked": true,
-   "posAt": 1790995688725,
-   "posNotified": 1790995688725
   },
   {
    "id": 27,
@@ -1498,7 +1477,7 @@
    "name": "Pony",
    "pos": [],
    "discord": "1505245418056056872",
-   "avatar": "https://cdn.discordapp.com/avatars/1505245418056056872/fe5397c491fbc7e499f3fdc108f69bb9.png?size=96"
+   "avatar": "https://cdn.discordapp.com/avatars/1505245418056056872/93c3561dfe8ea6916f1fa127ef63a8e7.png?size=96"
   },
   {
    "id": 215,
