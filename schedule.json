@@ -154,9 +154,9 @@
    "name": "Las Vegas Raiders",
    "abbr": "LV",
    "color": "#A5ACAF",
-   "active": true,
+   "active": false,
    "role": "1548502288006389820",
-   "players": 5,
+   "players": 4,
    "fo": "ccrick1044"
   },
   {
